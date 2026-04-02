@@ -135,8 +135,8 @@ export default function Dashboard() {
         targetDate.setDate(startOfWeek.getDate() + i);
         const dateStr = targetDate.toISOString().split("T")[0];
 
-        const dayLogs = logs.filter(l => {
-          const logDate = l.date?.toDate ? l.date.toDate() : new Date(l.date?.seconds * 1000);
+        const dayLogs = logs.filter((l: any) => {
+          const logDate = l.date?.toDate ? l.date.toDate() : new Date((l.date?.seconds || 0) * 1000);
           return logDate.toISOString().split("T")[0] === dateStr;
         });
 
