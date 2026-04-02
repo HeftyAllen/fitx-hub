@@ -17,6 +17,7 @@ import CalendarView from "./pages/CalendarView";
 import Rewards from "./pages/Rewards";
 import Settings from "./pages/Settings";
 import WorkoutPlanner from "./pages/WorkoutPlanner";
+import WorkoutSession from "./pages/WorkoutSession";
 import MealPlanner from "./pages/MealPlanner";
 import NotFound from "./pages/NotFound";
 
