@@ -17,6 +17,7 @@ import CalendarView from "./pages/CalendarView";
 import Rewards from "./pages/Rewards";
 import Settings from "./pages/Settings";
 import WorkoutPlanner from "./pages/WorkoutPlanner";
+import WorkoutSession from "./pages/WorkoutSession";
 import MealPlanner from "./pages/MealPlanner";
 import NotFound from "./pages/NotFound";
 
@@ -39,6 +40,7 @@ function AppRoutes() {
         <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/workout-planner" element={<ProtectedRoute><WorkoutPlanner /></ProtectedRoute>} />
+        <Route path="/workout-session" element={<ProtectedRoute><WorkoutSession /></ProtectedRoute>} />
         <Route path="/exercise-library" element={<ProtectedRoute><ExerciseLibrary /></ProtectedRoute>} />
         <Route path="/nutrition" element={<ProtectedRoute><Nutrition /></ProtectedRoute>} />
         <Route path="/recipes" element={<ProtectedRoute><Recipes /></ProtectedRoute>} />
