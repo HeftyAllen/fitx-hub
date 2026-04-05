@@ -1,13 +1,14 @@
 import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/layout/AppLayout";
 import { motion } from "framer-motion";
-import { Plus, Dumbbell, UtensilsCrossed, Scale, Trophy, Droplets, TrendingUp, Flame, Calendar, Zap, Target, ChevronRight, Clock, BarChart3 } from "lucide-react";
+import { Plus, Dumbbell, UtensilsCrossed, Scale, Trophy, Droplets, TrendingUp, Flame, Calendar, Zap, Target, ChevronRight, Clock, BarChart3, Award } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useAuth as useAuthCtx } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, orderBy, limit, where, Timestamp } from "firebase/firestore";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, AreaChart, Area } from "recharts";
+import { useChallenges } from "@/hooks/useChallenges";
 
 const QUOTES = [
   "The only bad workout is the one that didn't happen.",
@@ -112,6 +113,8 @@ export default function Dashboard() {
   const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]);
   const [workoutLogs, setWorkoutLogs] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
+  const [recentPRs, setRecentPRs] = useState<any[]>([]);
+  const { challenges, loading: challengesLoading } = useChallenges();
   const [weeklyData, setWeeklyData] = useState<{ day: string; minutes: number; volume: number }[]>(
     WEEKDAYS.map(d => ({ day: d, minutes: 0, volume: 0 }))
   );
@@ -152,6 +155,13 @@ export default function Dashboard() {
     // Fetch plans
     getDocs(collection(db, "users", user.uid, "workoutPlans")).then(snap => {
       setPlans(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    // Fetch recent PRs
+    getDocs(collection(db, "users", user.uid, "personalRecords")).then(snap => {
+      const prs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      prs.sort((a: any, b: any) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+      setRecentPRs(prs.slice(0, 3));
     });
   }, [user]);
 
@@ -401,6 +411,85 @@ export default function Dashboard() {
               <Target size={14} className="text-primary" />
               <p className="text-xs text-muted-foreground">Stay consistent, results will follow</p>
             </div>
+          </motion.div>
+
+          {/* Active Challenges */}
+          <motion.div variants={fadeUp} className="lg:col-span-2 glass-card p-5 rounded-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground">Active Challenges</h3>
+              <Link to="/records" className="text-xs text-primary hover:underline flex items-center gap-1">
+                View All <ChevronRight size={12} />
+              </Link>
+            </div>
+            {challengesLoading ? (
+              <div className="space-y-2">
+                {[1, 2].map(i => <div key={i} className="h-12 rounded-xl bg-secondary/30 shimmer" />)}
+              </div>
+            ) : challenges.filter(c => c.joined && !c.completed).length === 0 ? (
+              <div className="text-center py-5">
+                <Zap size={24} className="mx-auto text-muted-foreground/30 mb-2" />
+                <p className="text-xs text-muted-foreground mb-2">No active challenges</p>
+                <Link to="/records" className="text-xs text-primary hover:underline font-medium">Join a Challenge →</Link>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {challenges.filter(c => c.joined && !c.completed).slice(0, 3).map(c => {
+                  const pct = Math.min((c.progress / c.target) * 100, 100);
+                  return (
+                    <div key={c.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-secondary/30 border border-white/[0.04]">
+                      <span className="text-lg flex-shrink-0">{c.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-medium truncate">{c.name}</p>
+                          <span className="text-xs text-primary font-medium ml-1 flex-shrink-0">{Math.round(pct)}%</span>
+                        </div>
+                        <div className="h-1.5 bg-secondary rounded-full overflow-hidden mt-1">
+                          <div className={`h-full bg-gradient-to-r ${c.color} rounded-full`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-0.5 text-xs text-muted-foreground flex-shrink-0">
+                        <Zap size={10} className="text-warning" />{c.xpReward}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </motion.div>
+
+          {/* Recent PRs */}
+          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground">Recent PRs</h3>
+              <Link to="/records" className="text-xs text-primary hover:underline flex items-center gap-1">
+                Add <ChevronRight size={12} />
+              </Link>
+            </div>
+            {recentPRs.length === 0 ? (
+              <div className="text-center py-5">
+                <Trophy size={24} className="mx-auto text-muted-foreground/30 mb-2" />
+                <p className="text-xs text-muted-foreground mb-2">No PRs yet</p>
+                <Link to="/records" className="text-xs text-primary hover:underline font-medium">Log your first PR →</Link>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {recentPRs.map((pr: any) => (
+                  <div key={pr.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-secondary/30 border border-white/[0.04]">
+                    <div className="p-1.5 rounded-lg bg-warning/10">
+                      <Award size={13} className="text-warning" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium capitalize truncate">{pr.exerciseName}</p>
+                      <p className="text-[10px] text-muted-foreground capitalize">{pr.category}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold gradient-text">{pr.value}</span>
+                      <span className="text-xs text-muted-foreground ml-0.5">{pr.unit}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </motion.div>
         </motion.div>
       </div>

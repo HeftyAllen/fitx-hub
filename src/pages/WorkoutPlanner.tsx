@@ -13,8 +13,9 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, Timestamp } from "firebase/firestore";
 import { searchExercises, getExercisesByBodyPart, getExercisesByEquipment } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
+import { useChallenges } from "@/hooks/useChallenges";
 
 interface ExerciseInPlan {
   id: string;
@@ -67,6 +68,7 @@ export default function WorkoutPlanner() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingPlan, setEditingPlan] = useState<WorkoutPlan | null>(null);
   const [activeTab, setActiveTab] = useState<"plans" | "library">("plans");
+  const { challenges } = useChallenges();
 
   useEffect(() => { if (user) fetchPlans(); }, [user]);
 
@@ -117,6 +119,30 @@ export default function WorkoutPlanner() {
             </Button>
           </div>
         </div>
+
+        {/* Active challenges mini-strip */}
+        {challenges.filter(c => c.joined && !c.completed && ["workouts", "streak"].includes(c.type)).length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {challenges.filter(c => c.joined && !c.completed && ["workouts", "streak"].includes(c.type)).map(c => {
+              const pct = Math.min((c.progress / c.target) * 100, 100);
+              return (
+                <Link key={c.id} to="/records"
+                  className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl glass-card border border-white/[0.08] hover:border-white/[0.15] transition-all flex-shrink-0 group">
+                  <span className="text-lg">{c.icon}</span>
+                  <div>
+                    <p className="text-xs font-medium whitespace-nowrap">{c.name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="w-20 h-1.5 bg-secondary rounded-full overflow-hidden">
+                        <div className={`h-full bg-gradient-to-r ${c.color} rounded-full`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">{Math.round(pct)}%</span>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 p-1 bg-secondary/40 rounded-2xl w-fit border border-white/[0.05]">

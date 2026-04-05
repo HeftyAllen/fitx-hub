@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+import { useChallenges } from "@/hooks/useChallenges";
 
 interface SetLog {
   weight: number;
@@ -155,6 +156,7 @@ export default function WorkoutSession() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const plan = location.state?.plan;
+  const { challenges, fetchChallenges, completeChallenge } = useChallenges();
 
   const [exercises, setExercises] = useState<ExerciseLog[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -289,6 +291,17 @@ export default function WorkoutSession() {
         totalVolume,
         notes: setNotes,
       });
+      // Re-fetch challenges and notify user of any newly completed ones
+      const prevCompleted = new Set(challenges.filter(c => c.completed).map(c => c.id));
+      await fetchChallenges();
+      const freshChallenges = challenges; // will reflect after re-render
+      setTimeout(async () => {
+        const newlyDone = freshChallenges.filter(c => !prevCompleted.has(c.id) && c.progress >= c.target && c.joined);
+        for (const ch of newlyDone) {
+          toast.success(`🏆 Challenge Complete: "${ch.name}"! +${ch.xpReward} XP`, { duration: 5000 });
+          await completeChallenge(ch.id);
+        }
+      }, 1500);
     } catch (e) { console.error(e); }
   };
 

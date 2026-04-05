@@ -3,7 +3,7 @@ import AppLayout from "@/components/layout/AppLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, Plus, X, Trash2, Play, Dumbbell,
-  Clock, Flame, CalendarDays, Edit2
+  Clock, Flame, CalendarDays, Edit2, Zap, Trophy
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,9 +11,10 @@ import { db } from "@/lib/firebase";
 import {
   collection, getDocs, addDoc, deleteDoc, doc, updateDoc, Timestamp, query as fbQuery, where
 } from "firebase/firestore";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isToday } from "date-fns";
+import { useChallenges } from "@/hooks/useChallenges";
 
 interface WorkoutPlan {
   id: string;
@@ -51,6 +52,7 @@ export default function CalendarView() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const { challenges } = useChallenges();
 
   useEffect(() => { if (user) fetchData(); }, [user]);
 
@@ -307,6 +309,41 @@ export default function CalendarView() {
                 <p className="text-[10px] text-muted-foreground">This Month</p>
               </div>
             </div>
+
+            {/* Challenges Progress */}
+            {challenges.filter(c => c.joined && !c.completed).length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                className="glass-card p-4 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground">Challenges</h3>
+                  <Link to="/records" className="text-xs text-primary hover:underline">View All</Link>
+                </div>
+                {challenges.filter(c => c.joined && !c.completed).slice(0, 3).map(c => {
+                  const pct = Math.min((c.progress / c.target) * 100, 100);
+                  return (
+                    <div key={c.id} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm">{c.icon}</span>
+                          <span className="text-xs font-medium truncate max-w-[110px]">{c.name}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{Math.round(pct)}%</span>
+                      </div>
+                      <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                        <div className={`h-full bg-gradient-to-r ${c.color} rounded-full transition-all`}
+                          style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="flex items-center gap-1.5 pt-1 border-t border-white/[0.05]">
+                  <Trophy size={12} className="text-warning" />
+                  <span className="text-xs text-muted-foreground">
+                    {challenges.filter(c => c.completed).length} completed · {challenges.filter(c => c.completed).reduce((s, c) => s + c.xpReward, 0)} XP
+                  </span>
+                </div>
+              </motion.div>
+            )}
           </div>
         </div>
 
