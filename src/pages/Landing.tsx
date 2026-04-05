@@ -9,19 +9,19 @@ import {
 } from "lucide-react";
 
 const FEATURES = [
-  { icon: Dumbbell, title: "Smart Workout Plans", desc: "AI-powered plans tailored to your fitness level, goals, and schedule — adjust on the fly.", color: "from-blue-500 to-cyan-500" },
-  { icon: Target, title: "Nutrition Tracking", desc: "Log meals, track macros, and discover recipes that fuel your performance.", color: "from-orange-500 to-red-500" },
-  { icon: BarChart3, title: "Progress Analytics", desc: "Detailed charts and insights to visualise every milestone in your fitness journey.", color: "from-purple-500 to-violet-600" },
-  { icon: Trophy, title: "Challenges & Rewards", desc: "Earn XP, badges and rewards as you crush goals and climb the leaderboards.", color: "from-amber-500 to-yellow-500" },
-  { icon: Calendar, title: "Workout Calendar", desc: "Schedule and track workouts across the month with streak tracking built in.", color: "from-green-500 to-emerald-500" },
-  { icon: Zap, title: "Live Session Tracker", desc: "Real-time set logging, rest timers and voice coaching during your workout.", color: "from-pink-500 to-rose-500" },
+  { icon: Dumbbell,  title: "Smart Workout Plans",  desc: "AI-powered plans tailored to your fitness level, goals, and schedule — adjust on the fly.",       color: "from-blue-600 to-cyan-500" },
+  { icon: Target,    title: "Nutrition Tracking",   desc: "Log meals, track macros, and discover recipes that fuel your performance.",                         color: "from-violet-600 to-blue-500" },
+  { icon: BarChart3, title: "Progress Analytics",   desc: "Detailed charts and insights to visualise every milestone in your fitness journey.",                color: "from-cyan-500 to-teal-500" },
+  { icon: Trophy,    title: "Challenges & Rewards", desc: "Earn XP, badges and rewards as you crush goals and climb the leaderboards.",                        color: "from-blue-500 to-indigo-600" },
+  { icon: Calendar,  title: "Workout Calendar",     desc: "Schedule and track workouts across the month with streak tracking built in.",                       color: "from-teal-500 to-cyan-400" },
+  { icon: Zap,       title: "Live Session Tracker", desc: "Real-time set logging, rest timers and voice coaching during your workout.",                        color: "from-indigo-500 to-violet-500" },
 ];
 
 const STATS = [
-  { value: "10K+", label: "Active Athletes" },
+  { value: "10K+",  label: "Active Athletes" },
   { value: "500K+", label: "Workouts Logged" },
-  { value: "98%", label: "Goal Achievement" },
-  { value: "4.9★", label: "App Rating" },
+  { value: "98%",   label: "Goal Achievement" },
+  { value: "4.9★",  label: "App Rating" },
 ];
 
 const TAGS = [
@@ -76,7 +76,6 @@ export default function Landing() {
             <img src={logo} alt="FitX Journey" className="h-9 w-auto" />
           </Link>
 
-          {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-6 text-sm text-white/60 font-medium">
             <a href="#features" className="hover:text-white transition-colors">Features</a>
             <a href="#stats" className="hover:text-white transition-colors">Results</a>
@@ -88,18 +87,16 @@ export default function Landing() {
               Sign In
             </Link>
             <Link to="/auth?signup=true"
-              className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-400 hover:to-red-500 transition-all shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-[1.02] active:scale-[0.98]">
+              className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 transition-all shadow-lg shadow-blue-600/30 hover:shadow-blue-600/50 hover:scale-[1.02] active:scale-[0.98]">
               Start Free
             </Link>
           </div>
 
-          {/* Mobile hamburger */}
           <button className="md:hidden p-2 text-white" onClick={() => setMenuOpen(!menuOpen)}>
             {menuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
         </div>
 
-        {/* Mobile menu */}
         <AnimatePresence>
           {menuOpen && (
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
@@ -113,7 +110,7 @@ export default function Landing() {
                     Sign In
                   </Link>
                   <Link to="/auth?signup=true"
-                    className="text-center py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-red-600">
+                    className="text-center py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-cyan-500">
                     Get Started Free
                   </Link>
                 </div>
@@ -125,44 +122,41 @@ export default function Landing() {
 
       {/* ===== HERO ===== */}
       <section className="relative min-h-screen flex items-center overflow-hidden">
-        {/* Background image */}
         <div className="absolute inset-0 z-0">
           <img src="/hero-athlete.jpg" alt="Athlete" className="w-full h-full object-cover object-top" />
           <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-black/20" />
           <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f] via-transparent to-black/40" />
-          {/* Accent glow */}
+          {/* Blue accent glow matching app theme */}
           <div className="absolute top-1/3 left-1/4 w-96 h-96 rounded-full opacity-20 blur-3xl"
-            style={{ background: "radial-gradient(circle, #ea580c, transparent 70%)" }} />
+            style={{ background: "radial-gradient(circle, #2563eb, transparent 70%)" }} />
+          <div className="absolute bottom-1/3 right-1/4 w-64 h-64 rounded-full opacity-15 blur-3xl"
+            style={{ background: "radial-gradient(circle, #06b6d4, transparent 70%)" }} />
         </div>
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 md:px-6 pt-24 pb-16 w-full">
           <div className="max-w-2xl">
-            {/* Badge */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-400 text-xs font-semibold uppercase tracking-wider mb-6">
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-600/15 border border-blue-500/30 text-blue-400 text-xs font-semibold uppercase tracking-wider mb-6">
               <Flame size={13} />
               The #1 Fitness Tracking App
             </motion.div>
 
-            {/* Headline */}
             <motion.h1 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
               className="text-5xl sm:text-6xl md:text-7xl font-black leading-[1.0] tracking-tight mb-6">
               <span className="block text-white">Push Your</span>
               <span className="block text-white">Limits</span>
-              <span className="block bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">With Us.</span>
+              <span className="block bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">With Us.</span>
             </motion.h1>
 
-            {/* Subtext */}
             <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
               className="text-white/60 text-base md:text-lg leading-relaxed mb-8 max-w-lg">
               From beginner to advanced — track workouts, nail your nutrition, set PRs and earn rewards as you become the best version of yourself.
             </motion.p>
 
-            {/* CTAs */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
               className="flex flex-wrap gap-3 mb-10">
               <Link to="/auth?signup=true"
-                className="flex items-center gap-2 px-7 py-3.5 rounded-2xl font-bold text-white bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-400 hover:to-red-500 shadow-xl shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-[1.03] active:scale-[0.98] transition-all text-sm">
+                className="flex items-center gap-2 px-7 py-3.5 rounded-2xl font-bold text-white bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-xl shadow-blue-600/30 hover:shadow-blue-600/50 hover:scale-[1.03] active:scale-[0.98] transition-all text-sm">
                 Join Now <ArrowRight size={16} />
               </Link>
               <a href="#features"
@@ -174,19 +168,18 @@ export default function Landing() {
               </a>
             </motion.div>
 
-            {/* Social proof */}
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
               className="flex items-center gap-3">
               <div className="flex -space-x-2">
                 {["M", "A", "J", "K"].map((l, i) => (
-                  <div key={i} className={`w-8 h-8 rounded-full border-2 border-black flex items-center justify-center text-xs font-bold text-white ${["bg-orange-500", "bg-blue-500", "bg-purple-500", "bg-green-500"][i]}`}>
+                  <div key={i} className={`w-8 h-8 rounded-full border-2 border-black flex items-center justify-center text-xs font-bold text-white ${["bg-blue-600", "bg-cyan-500", "bg-violet-500", "bg-teal-500"][i]}`}>
                     {l}
                   </div>
                 ))}
               </div>
               <div>
                 <div className="flex items-center gap-0.5 mb-0.5">
-                  {[1,2,3,4,5].map(i => <Star key={i} size={11} fill="#f97316" className="text-orange-400" />)}
+                  {[1,2,3,4,5].map(i => <Star key={i} size={11} fill="#38bdf8" className="text-sky-400" />)}
                 </div>
                 <p className="text-xs text-white/50"><span className="text-white font-semibold">10,000+</span> athletes crushing it daily</p>
               </div>
@@ -194,7 +187,6 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* Feature tags - bottom */}
         <div className="absolute bottom-8 left-0 right-0 z-10 overflow-hidden">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
             className="flex gap-2 px-4 md:px-6 overflow-x-auto scrollbar-hide pb-1">
@@ -210,14 +202,14 @@ export default function Landing() {
 
       {/* ===== STATS ===== */}
       <section id="stats" className="py-16 md:py-20 relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-orange-600/5 to-red-600/5" />
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/5 to-cyan-500/5" />
         <div className="max-w-7xl mx-auto px-4 md:px-6 relative">
           <motion.div variants={stagger} initial="hidden" whileInView="visible" viewport={{ once: true }}
             className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
             {STATS.map((stat, i) => (
               <motion.div key={stat.label} variants={fadeUp} transition={{ delay: i * 0.1 }}
                 className="text-center">
-                <p className="text-4xl md:text-5xl font-black bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent mb-1">{stat.value}</p>
+                <p className="text-4xl md:text-5xl font-black bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-1">{stat.value}</p>
                 <p className="text-sm text-white/50 font-medium">{stat.label}</p>
               </motion.div>
             ))}
@@ -232,7 +224,7 @@ export default function Landing() {
         <div className="absolute inset-0 flex items-center justify-center">
           <motion.p initial={{ opacity: 0, scale: 0.9 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }}
             className="text-4xl md:text-6xl font-black text-center tracking-tighter">
-            <span className="bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">STRONGER</span>
+            <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">STRONGER</span>
             <br />
             <span className="text-white">EVERY DAY</span>
           </motion.p>
@@ -244,12 +236,12 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
             className="text-center mb-14">
-            <span className="inline-block px-4 py-1.5 rounded-full bg-orange-500/15 border border-orange-500/25 text-orange-400 text-xs font-semibold uppercase tracking-wider mb-4">
+            <span className="inline-block px-4 py-1.5 rounded-full bg-blue-600/15 border border-blue-500/25 text-blue-400 text-xs font-semibold uppercase tracking-wider mb-4">
               Everything You Need
             </span>
             <h2 className="text-3xl md:text-5xl font-black tracking-tight mb-4">
               One App.<br />
-              <span className="bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">Infinite Results.</span>
+              <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Infinite Results.</span>
             </h2>
             <p className="text-white/50 text-base max-w-xl mx-auto">
               FitX Journey brings together every tool an athlete needs — beautifully designed and ridiculously easy to use.
@@ -260,14 +252,14 @@ export default function Landing() {
             className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
             {FEATURES.map((feature, i) => (
               <motion.div key={feature.title} variants={fadeUp} transition={{ delay: i * 0.08 }}
-                className="group relative p-6 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:border-white/[0.16] hover:bg-white/[0.07] transition-all duration-300">
+                className="group relative p-6 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:border-blue-500/30 hover:bg-white/[0.07] transition-all duration-300">
                 <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 transition-transform`}>
                   <feature.icon size={22} className="text-white" />
                 </div>
                 <h3 className="font-bold text-base text-white mb-2">{feature.title}</h3>
                 <p className="text-sm text-white/50 leading-relaxed">{feature.desc}</p>
                 <div className="absolute top-5 right-5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <ChevronRight size={16} className="text-white/30" />
+                  <ChevronRight size={16} className="text-blue-400/50" />
                 </div>
               </motion.div>
             ))}
@@ -281,26 +273,25 @@ export default function Landing() {
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
             className="text-center mb-14">
             <h2 className="text-3xl md:text-4xl font-black tracking-tight mb-4">
-              Get Started in <span className="bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">3 Steps</span>
+              Get Started in <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">3 Steps</span>
             </h2>
           </motion.div>
 
           <div className="grid md:grid-cols-3 gap-6 md:gap-10 relative">
-            {/* Connector line desktop */}
-            <div className="hidden md:block absolute top-8 left-1/6 right-1/6 h-px bg-gradient-to-r from-transparent via-orange-500/40 to-transparent" />
+            <div className="hidden md:block absolute top-8 left-1/6 right-1/6 h-px bg-gradient-to-r from-transparent via-blue-500/40 to-transparent" />
 
             {[
               { step: "01", title: "Create Your Profile", desc: "Sign up in seconds and tell us your goals, fitness level, and available equipment.", icon: "👤" },
-              { step: "02", title: "Build Your Plan", desc: "Get a personalised workout and nutrition plan — or design your own with our tools.", icon: "📋" },
-              { step: "03", title: "Track & Dominate", desc: "Log every session, earn XP, beat challenges, and watch your data prove your growth.", icon: "🏆" },
+              { step: "02", title: "Build Your Plan",     desc: "Get a personalised workout and nutrition plan — or design your own with our tools.", icon: "📋" },
+              { step: "03", title: "Track & Dominate",    desc: "Log every session, earn XP, beat challenges, and watch your data prove your growth.", icon: "🏆" },
             ].map((item, i) => (
               <motion.div key={item.step} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }} transition={{ delay: i * 0.15 }}
                 className="text-center relative">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-2xl mx-auto mb-4 shadow-xl shadow-orange-500/20">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-2xl mx-auto mb-4 shadow-xl shadow-blue-600/20">
                   {item.icon}
                 </div>
-                <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">{item.step}</p>
+                <p className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">{item.step}</p>
                 <h3 className="font-bold text-lg text-white mb-2">{item.title}</h3>
                 <p className="text-sm text-white/50 leading-relaxed">{item.desc}</p>
               </motion.div>
@@ -315,7 +306,7 @@ export default function Landing() {
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
             className="text-center mb-14">
             <h2 className="text-3xl md:text-4xl font-black tracking-tight mb-4">
-              Real Athletes. <span className="bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">Real Results.</span>
+              Real Athletes. <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Real Results.</span>
             </h2>
             <p className="text-white/50 text-base">Join thousands of people who transformed their lives with FitX Journey.</p>
           </motion.div>
@@ -324,15 +315,15 @@ export default function Landing() {
             className="grid md:grid-cols-3 gap-5">
             {TESTIMONIALS.map((t, i) => (
               <motion.div key={t.name} variants={fadeUp} transition={{ delay: i * 0.1 }}
-                className="p-6 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:border-white/[0.14] transition-all">
+                className="p-6 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:border-blue-500/25 transition-all">
                 <div className="flex items-center gap-1 mb-4">
                   {Array.from({ length: t.rating }).map((_, j) => (
-                    <Star key={j} size={14} fill="#f97316" className="text-orange-400" />
+                    <Star key={j} size={14} fill="#38bdf8" className="text-sky-400" />
                   ))}
                 </div>
                 <p className="text-white/70 text-sm leading-relaxed mb-5 italic">"{t.text}"</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-sm font-bold text-white">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-sm font-bold text-white">
                     {t.avatar}
                   </div>
                   <div>
@@ -351,7 +342,7 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto px-4 md:px-6 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
             className="mb-10">
-            <h2 className="text-2xl md:text-3xl font-black mb-3">Everything Included. <span className="text-orange-400">Free.</span></h2>
+            <h2 className="text-2xl md:text-3xl font-black mb-3">Everything Included. <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Free.</span></h2>
             <p className="text-white/50 text-sm">No hidden fees. No paywalls. Just results.</p>
           </motion.div>
           <motion.div variants={stagger} initial="hidden" whileInView="visible" viewport={{ once: true }}
@@ -365,7 +356,7 @@ export default function Landing() {
             ].map((item, i) => (
               <motion.div key={item} variants={fadeUp} transition={{ delay: i * 0.05 }}
                 className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                <CheckCircle2 size={16} className="text-orange-500 flex-shrink-0" />
+                <CheckCircle2 size={16} className="text-cyan-500 flex-shrink-0" />
                 <span className="text-sm text-white/80">{item}</span>
               </motion.div>
             ))}
@@ -378,23 +369,23 @@ export default function Landing() {
         <div className="absolute inset-0">
           <img src="/hero-athlete.jpg" alt="" className="w-full h-full object-cover object-top opacity-20" />
           <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f] via-[#0a0a0f]/80 to-[#0a0a0f]" />
-          <div className="absolute inset-0 bg-gradient-to-r from-orange-900/20 via-transparent to-red-900/20" />
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-900/20 via-transparent to-cyan-900/20" />
         </div>
         <div className="relative z-10 max-w-3xl mx-auto px-4 md:px-6 text-center">
           <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
-            <span className="inline-block px-4 py-1.5 rounded-full bg-orange-500/15 border border-orange-500/25 text-orange-400 text-xs font-semibold uppercase tracking-wider mb-6">
+            <span className="inline-block px-4 py-1.5 rounded-full bg-blue-600/15 border border-blue-500/25 text-blue-400 text-xs font-semibold uppercase tracking-wider mb-6">
               Start Today
             </span>
             <h2 className="text-4xl md:text-6xl font-black tracking-tight mb-6">
               Ready to Become<br />
-              <span className="bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">Unstoppable?</span>
+              <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Unstoppable?</span>
             </h2>
             <p className="text-white/50 text-base md:text-lg mb-10 max-w-xl mx-auto">
               Join thousands of athletes already tracking, improving and winning. Your best performance starts now.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/auth?signup=true"
-                className="flex items-center justify-center gap-2 px-8 py-4 rounded-2xl text-base font-bold text-white bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-400 hover:to-red-500 shadow-2xl shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-[1.03] active:scale-[0.98] transition-all">
+                className="flex items-center justify-center gap-2 px-8 py-4 rounded-2xl text-base font-bold text-white bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-2xl shadow-blue-600/30 hover:shadow-blue-600/50 hover:scale-[1.03] active:scale-[0.98] transition-all">
                 Get Started — It's Free <ArrowRight size={18} />
               </Link>
               <Link to="/auth"
@@ -402,7 +393,6 @@ export default function Landing() {
                 Already have an account?
               </Link>
             </div>
-            {/* App store badges - placeholder */}
             <div className="flex items-center justify-center gap-4 mt-8 opacity-40">
               <div className="flex items-center gap-2 text-xs text-white/60">
                 <Apple size={14} /> iOS App Coming Soon
