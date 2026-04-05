@@ -10,14 +10,25 @@ import { collection, getDocs, query, orderBy, limit, where, Timestamp } from "fi
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, AreaChart, Area } from "recharts";
 import { useChallenges } from "@/hooks/useChallenges";
 
-const QUOTES = [
-  "The only bad workout is the one that didn't happen.",
-  "Your body can stand almost anything. It's your mind you have to convince.",
-  "Success isn't always about greatness. It's about consistency.",
-  "The pain you feel today will be the strength you feel tomorrow.",
-  "Don't limit your challenges — challenge your limits.",
-  "The clock is ticking. Are you becoming the person you want to be?",
+const GREETINGS = [
+  { label: "Welcome back,",       sub: "Glad to see you again. Let's crush it today." },
+  { label: "Good to have you,",   sub: "Every rep counts. Let's make this session legendary." },
+  { label: "Ready to grind,",     sub: "Your future self is watching. Don't disappoint them." },
+  { label: "Look who's back,",    sub: "Consistency is your superpower. Keep showing up." },
+  { label: "Let's get after it,", sub: "The only workout you'll regret is the one you skip." },
+  { label: "Time to dominate,",   sub: "Pain is temporary. Progress is permanent." },
+  { label: "Rise and conquer,",   sub: "Champions are built in sessions exactly like this one." },
+  { label: "Back in the game,",   sub: "Your body is capable of more than you think. Prove it." },
+  { label: "Let's go,",           sub: "Sweat today, flex tomorrow. Time to earn it." },
+  { label: "Locked in,",          sub: "Focus. Breathe. Execute. You've got this." },
+  { label: "Here we go,",         sub: "Another day, another chance to be better than yesterday." },
+  { label: "Welcome back,",       sub: "Strength isn't given — it's built, one session at a time." },
 ];
+
+function getDynamicGreeting() {
+  const hourSlot = Math.floor(Date.now() / (1000 * 60 * 30));
+  return GREETINGS[hourSlot % GREETINGS.length];
+}
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -110,7 +121,7 @@ const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, tra
 export default function Dashboard() {
   const { user, userProfile } = useAuth();
   const name = userProfile?.name || user?.displayName || "Athlete";
-  const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]);
+  const [greeting] = useState(() => getDynamicGreeting());
   const [workoutLogs, setWorkoutLogs] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
   const [recentPRs, setRecentPRs] = useState<any[]>([]);
@@ -181,11 +192,27 @@ export default function Dashboard() {
         {/* Top greeting + stats row */}
         <motion.div variants={fadeUp} initial="hidden" animate="visible" className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <p className="text-sm text-muted-foreground">Welcome back,</p>
+            <motion.p
+              key={greeting.label}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="text-sm text-muted-foreground"
+            >
+              {greeting.label}
+            </motion.p>
             <h1 className="text-2xl md:text-3xl font-heading font-bold">
               <span className="gradient-text">{name}</span>
             </h1>
-            <p className="text-xs text-muted-foreground mt-1">Glad to see you again! Let's crush it today.</p>
+            <motion.p
+              key={greeting.sub}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.1 }}
+              className="text-xs text-muted-foreground mt-1 max-w-xs"
+            >
+              {greeting.sub}
+            </motion.p>
           </div>
           <div className="flex items-center gap-3">
             <div className="glass-card px-4 py-2.5 rounded-2xl flex items-center gap-2">
@@ -405,7 +432,7 @@ export default function Dashboard() {
           <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl flex flex-col justify-between">
             <div>
               <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground mb-3">Daily Motivation</h3>
-              <p className="text-foreground/80 italic text-sm leading-relaxed">"{quote}"</p>
+              <p className="text-foreground/80 italic text-sm leading-relaxed">"{greeting.sub}"</p>
             </div>
             <div className="flex items-center gap-2 mt-4 pt-3 border-t border-white/[0.06]">
               <Target size={14} className="text-primary" />
