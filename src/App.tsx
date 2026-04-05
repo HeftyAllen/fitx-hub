@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AnimatePresence } from "framer-motion";
+import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
@@ -36,7 +37,8 @@ function AppRoutes() {
   return (
     <AnimatePresence mode="wait">
       <Routes>
-        <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Auth />} />
+        <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Landing />} />
+        <Route path="/auth" element={user ? <Navigate to="/dashboard" replace /> : <Auth />} />
         <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/workout-planner" element={<ProtectedRoute><WorkoutPlanner /></ProtectedRoute>} />

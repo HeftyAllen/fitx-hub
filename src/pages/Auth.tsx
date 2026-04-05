@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
 import logo from "@/assets/logo.png";
+import { ArrowLeft } from "lucide-react";
 
 export default function Auth() {
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [isSignUp, setIsSignUp] = useState(searchParams.get("signup") === "true");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -43,7 +45,10 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative">
+      <Link to="/" className="absolute top-5 left-5 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <ArrowLeft size={16} /> Back to Home
+      </Link>
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
