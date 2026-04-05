@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -154,7 +154,7 @@ export default function WorkoutPlanner() {
             </motion.div>
           ) : (
             <motion.div key="library" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <ExerciseLibraryTab plans={plans} />
+              <ExerciseLibraryTab plans={plans} onRefreshPlans={fetchPlans} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -312,7 +312,7 @@ function PlansTab({ plans, loading, onEdit, onDelete, onDuplicate, onStart, onCr
 
 /* ============ EXERCISE LIBRARY TAB ============ */
 
-function ExerciseLibraryTab({ plans }: { plans: WorkoutPlan[] }) {
+function ExerciseLibraryTab({ plans, onRefreshPlans }: { plans: WorkoutPlan[]; onRefreshPlans: () => void }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [bodyPart, setBodyPart] = useState("");
@@ -481,10 +481,11 @@ function ExerciseLibraryTab({ plans }: { plans: WorkoutPlan[] }) {
       {/* Add to Plan Modal */}
       <AnimatePresence>
         {addToPlanExercise && (
-          <AddToPlanModal
+            <AddToPlanModal
             exercise={addToPlanExercise}
             plans={plans}
             onClose={() => setAddToPlanExercise(null)}
+            onRefresh={onRefreshPlans}
           />
         )}
       </AnimatePresence>
@@ -568,23 +569,32 @@ function ExerciseDetailModal({ exercise, onClose, onQuickStart, onAddToPlan }: {
 
 /* ============ ADD TO PLAN MODAL ============ */
 
-function AddToPlanModal({ exercise, plans, onClose }: { exercise: any; plans: WorkoutPlan[]; onClose: () => void }) {
+function AddToPlanModal({ exercise, plans, onClose, onRefresh }: { exercise: any; plans: WorkoutPlan[]; onClose: () => void; onRefresh?: () => void }) {
   const { user } = useAuth();
   const [sets, setSets] = useState(3);
   const [reps, setReps] = useState(10);
   const [rest, setRest] = useState(60);
+  const [adding, setAdding] = useState<string | null>(null);
 
   const addToPlan = async (plan: WorkoutPlan) => {
     if (!user) return;
-    const newExercise: ExerciseInPlan = {
-      id: exercise.id, name: exercise.name, gifUrl: exercise.gifUrl,
-      bodyPart: exercise.bodyPart, equipment: exercise.equipment,
-      target: exercise.target, sets, reps, restSeconds: rest,
-    };
-    const updatedExercises = [...(plan.exercises || []), newExercise];
-    await updateDoc(doc(db, "users", user.uid, "workoutPlans", plan.id), { exercises: updatedExercises });
-    toast.success(`Added to "${plan.name}"`);
-    onClose();
+    setAdding(plan.id);
+    try {
+      const newExercise: ExerciseInPlan = {
+        id: exercise.id, name: exercise.name, gifUrl: exercise.gifUrl,
+        bodyPart: exercise.bodyPart, equipment: exercise.equipment,
+        target: exercise.target, sets, reps, restSeconds: rest,
+      };
+      const updatedExercises = [...(plan.exercises || []), newExercise];
+      await updateDoc(doc(db, "users", user.uid, "workoutPlans", plan.id), { exercises: updatedExercises });
+      toast.success(`Added "${exercise.name}" to "${plan.name}"`);
+      onRefresh?.();
+      onClose();
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to add exercise");
+    }
+    setAdding(null);
   };
 
   return (
@@ -660,7 +670,7 @@ function CreatePlanModal({ existingPlan, onClose, onSave }: {
   const [showSearch, setShowSearch] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
 
-  const addExercise = (ex: ExerciseInPlan) => { setExercises(prev => [...prev, ex]); setShowSearch(false); };
+  const addExercise = (ex: ExerciseInPlan) => { setExercises(prev => [...prev, ex]); toast.success(`Added ${ex.name}`); };
   const removeExercise = (idx: number) => { setExercises(prev => prev.filter((_, i) => i !== idx)); };
   const updateExercise = (idx: number, field: string, value: number) => {
     setExercises(prev => prev.map((ex, i) => i === idx ? { ...ex, [field]: value } : ex));
@@ -778,27 +788,38 @@ function ExerciseSearchPanel({ onAdd, onClose }: { onAdd: (ex: ExerciseInPlan) =
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
+  const debounceRef = useRef<number | null>(null);
 
-  const doSearch = async () => {
-    if (!query.trim()) return;
+  const doSearch = async (q?: string) => {
+    const term = q ?? query;
+    if (!term.trim()) return;
     setSearching(true);
     try {
-      const data = await searchExercises(query);
+      const data = await searchExercises(term);
       setResults(Array.isArray(data) ? data : []);
     } catch { toast.error("Search failed"); }
     setSearching(false);
+  };
+
+  const handleChange = (val: string) => {
+    setQuery(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (val.length >= 3) {
+      debounceRef.current = window.setTimeout(() => doSearch(val), 400);
+    }
   };
 
   return (
     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
       <div className="glass-card p-4 rounded-xl mt-2 space-y-3">
         <div className="flex gap-2">
-          <Input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && doSearch()}
-            placeholder="Search exercises..." className="bg-secondary/50 border-white/10 rounded-xl text-sm" />
-          <Button size="sm" onClick={doSearch} className="gradient-bg text-primary-foreground rounded-xl">{searching ? "..." : "Search"}</Button>
+          <Input value={query} onChange={e => handleChange(e.target.value)} onKeyDown={e => e.key === "Enter" && doSearch()}
+            placeholder="Start typing to search..." autoFocus className="bg-secondary/50 border-white/10 rounded-xl text-sm" />
+          <Button size="sm" onClick={() => doSearch()} className="gradient-bg text-primary-foreground rounded-xl">{searching ? "..." : "Search"}</Button>
           <Button size="sm" variant="ghost" onClick={onClose}><X size={16} /></Button>
         </div>
-        <div className="max-h-48 overflow-y-auto space-y-1.5">
+        {searching && <p className="text-xs text-muted-foreground text-center py-2 animate-pulse">Searching...</p>}
+        <div className="max-h-60 overflow-y-auto space-y-1.5">
           {results.map(r => (
             <button key={r.id} onClick={() => onAdd({
               id: r.id, name: r.name, gifUrl: r.gifUrl, bodyPart: r.bodyPart,
@@ -812,7 +833,8 @@ function ExerciseSearchPanel({ onAdd, onClose }: { onAdd: (ex: ExerciseInPlan) =
               <Plus size={16} className="text-primary shrink-0" />
             </button>
           ))}
-          {results.length === 0 && !searching && query && <p className="text-xs text-muted-foreground text-center py-2">No results</p>}
+          {results.length === 0 && !searching && query.length >= 3 && <p className="text-xs text-muted-foreground text-center py-2">No results found</p>}
+          {query.length < 3 && query.length > 0 && <p className="text-xs text-muted-foreground text-center py-2">Type at least 3 characters...</p>}
         </div>
       </div>
     </motion.div>
