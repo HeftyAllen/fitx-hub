@@ -43,12 +43,21 @@ const DAY_COLORS = [
   "bg-amber-500/20 text-amber-400",
 ];
 
+interface MealPlanEntry {
+  id: string;
+  date: string;
+  dayName: string;
+  meals: { id: number; title: string; image?: string; readyInMinutes?: number }[];
+  nutrients?: any;
+}
+
 export default function CalendarView() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [plans, setPlans] = useState<WorkoutPlan[]>([]);
   const [entries, setEntries] = useState<CalendarEntry[]>([]);
+  const [mealEntries, setMealEntries] = useState<MealPlanEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -60,12 +69,14 @@ export default function CalendarView() {
     if (!user) return;
     setLoading(true);
     try {
-      const [plansSnap, entriesSnap] = await Promise.all([
+      const [plansSnap, entriesSnap, mealSnap] = await Promise.all([
         getDocs(collection(db, "users", user.uid, "workoutPlans")),
         getDocs(collection(db, "users", user.uid, "calendarEntries")),
+        getDocs(collection(db, "users", user.uid, "mealPlanEntries")),
       ]);
       setPlans(plansSnap.docs.map(d => ({ id: d.id, ...d.data() } as WorkoutPlan)));
       setEntries(entriesSnap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEntry)));
+      setMealEntries(mealSnap.docs.map(d => ({ id: d.id, ...d.data() } as MealPlanEntry)));
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -106,7 +117,13 @@ export default function CalendarView() {
     return entries.filter(e => e.date === dateStr);
   };
 
+  const getMealsForDate = (date: Date) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    return mealEntries.filter(e => e.date === dateStr);
+  };
+
   const selectedEntries = selectedDate ? getEntriesForDate(selectedDate) : [];
+  const selectedMeals   = selectedDate ? getMealsForDate(selectedDate)   : [];
 
   // Streak calc
   const streak = useMemo(() => {
@@ -170,8 +187,9 @@ export default function CalendarView() {
               {paddedDays.map((day, i) => {
                 if (!day) return <div key={`pad-${i}`} />;
                 const dayEntries = getEntriesForDate(day);
+                const dayMeals   = getMealsForDate(day);
                 const hasWorkout = dayEntries.length > 0;
-                const allCompleted = hasWorkout && dayEntries.every(e => e.completed);
+                const hasMeals   = dayMeals.length > 0;
                 const isSelected = selectedDate && isSameDay(day, selectedDate);
                 const todayClass = isToday(day);
 
@@ -188,13 +206,14 @@ export default function CalendarView() {
                     }`}
                   >
                     <span className="text-xs">{day.getDate()}</span>
-                    {hasWorkout && (
+                    {(hasWorkout || hasMeals) && (
                       <div className="flex gap-0.5 mt-0.5">
-                        {dayEntries.slice(0, 3).map((e, j) => (
+                        {dayEntries.slice(0, 3).map((e) => (
                           <div key={e.id} className={`w-1.5 h-1.5 rounded-full ${
                             e.completed ? "bg-green-400" : "bg-primary"
                           }`} />
                         ))}
+                        {hasMeals && <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
                       </div>
                     )}
                   </button>
@@ -203,12 +222,15 @@ export default function CalendarView() {
             </div>
 
             {/* Legend */}
-            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/[0.05]">
+            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/[0.05] flex-wrap">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <div className="w-2 h-2 rounded-full bg-primary" /> Scheduled
               </div>
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <div className="w-2 h-2 rounded-full bg-green-400" /> Completed
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="w-2 h-2 rounded-full bg-amber-400" /> Meal Plan
               </div>
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <div className="w-3 h-3 rounded border border-primary/30 bg-primary/10" /> Today
@@ -292,6 +314,44 @@ export default function CalendarView() {
                 </div>
               )}
             </motion.div>
+
+            {/* Selected day MEALS */}
+            {selectedDate && selectedMeals.length > 0 && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+                className="glass-card p-5 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-heading font-bold text-sm flex items-center gap-2">
+                    🍽️ Meal Plan
+                  </h3>
+                  <Link to="/nutrition" className="text-xs text-primary hover:underline">Edit →</Link>
+                </div>
+                {selectedMeals.map(me => (
+                  <div key={me.id} className="space-y-2">
+                    {me.meals.map((m, i) => (
+                      <div key={`${m.id}-${i}`} className="flex items-center gap-2 p-2 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                        {m.image
+                          ? <img src={`https://spoonacular.com/recipeImages/${m.id}-90x90.jpg`} alt="" className="w-9 h-9 rounded-lg object-cover" />
+                          : <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center text-base">🍽️</div>}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold truncate">{m.title}</p>
+                          {m.readyInMinutes && (
+                            <p className="text-[10px] text-muted-foreground">{m.readyInMinutes} min · meal {i + 1}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {me.nutrients && (
+                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-1">
+                        <span><strong className="text-foreground">{Math.round(me.nutrients.calories || 0)}</strong> cal</span>
+                        <span><strong className="text-foreground">{Math.round(me.nutrients.protein || 0)}g</strong> P</span>
+                        <span><strong className="text-foreground">{Math.round(me.nutrients.carbohydrates || 0)}g</strong> C</span>
+                        <span><strong className="text-foreground">{Math.round(me.nutrients.fat || 0)}g</strong> F</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </motion.div>
+            )}
 
             {/* Quick stats */}
             <div className="grid grid-cols-2 gap-3">

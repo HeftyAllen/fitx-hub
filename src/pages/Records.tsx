@@ -295,7 +295,7 @@ function RecordsList({ records, category, loading, onDelete, onAdd, label, empty
 
 /* ===== CHALLENGE CARD ===== */
 function ChallengeCard({ challenge, index, onJoin, onComplete }: {
-  challenge: ReturnType<typeof CHALLENGE_TEMPLATES[0] & { joined: boolean; completed: boolean; progress: number }> & any;
+  challenge: typeof CHALLENGE_TEMPLATES[0] & { joined: boolean; completed: boolean; progress: number } & any;
   index: number;
   onJoin?: (id: string) => void;
   onComplete?: (id: string) => void;

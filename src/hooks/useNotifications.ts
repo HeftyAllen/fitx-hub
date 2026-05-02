@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export type NotifCategory = "workout" | "nutrition" | "progress" | "challenge" | "system";
 
@@ -14,96 +15,44 @@ export interface AppNotification {
   icon?: string;
 }
 
-const SEED_NOTIFICATIONS: AppNotification[] = [
-  {
-    id: "n1",
-    category: "workout",
-    title: "Workout Reminder 💪",
-    body: "You have a Leg Day session scheduled for today at 6:00 PM. Ready to crush it?",
-    timestamp: new Date(Date.now() - 1000 * 60 * 20),
-    read: false,
-    actionLabel: "Start Session",
-    actionPath: "/workout-session",
-  },
-  {
-    id: "n2",
-    category: "challenge",
-    title: "Challenge Unlocked 🏆",
-    body: "You've completed 3 workouts this week — you've earned the 'Hat Trick' badge!",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-    read: false,
-    actionLabel: "View Rewards",
-    actionPath: "/rewards",
-  },
-  {
-    id: "n3",
-    category: "nutrition",
-    title: "Meal Reminder 🥗",
-    body: "Lunch time! You're 800 calories below your daily target. Log your meal to stay on track.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3),
-    read: false,
-    actionLabel: "Log Food",
-    actionPath: "/nutrition",
-  },
-  {
-    id: "n4",
-    category: "progress",
-    title: "New Personal Record! 🎉",
-    body: "You just hit a new PR on Bench Press: 100 kg × 5 reps. Keep pushing!",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5),
-    read: true,
-    actionLabel: "View Records",
-    actionPath: "/records",
-  },
-  {
-    id: "n5",
-    category: "progress",
-    title: "Weekly Report Ready 📊",
-    body: "Your week 14 report is in: 4 workouts, 2,800 kcal avg/day, weight down 0.4 kg.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
-    read: true,
-    actionLabel: "View Progress",
-    actionPath: "/progress",
-  },
-  {
-    id: "n6",
-    category: "challenge",
-    title: "Challenge Expiring Soon ⏳",
-    body: "The '10,000 Steps Daily' challenge ends in 2 days. You're 68% there — finish strong!",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 26),
-    read: true,
-    actionLabel: "View Challenge",
-    actionPath: "/rewards",
-  },
-  {
-    id: "n7",
-    category: "nutrition",
-    title: "Protein Goal Achieved ✅",
-    body: "You hit your protein target of 150g today. Your muscles will thank you!",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48),
-    read: true,
-    actionLabel: "View Nutrition",
-    actionPath: "/nutrition",
-  },
-  {
-    id: "n8",
-    category: "workout",
-    title: "Streak Alert 🔥",
-    body: "You've worked out 5 days in a row! One more day to earn the 'Iron Week' badge.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 72),
-    read: true,
-    actionLabel: "View Rewards",
-    actionPath: "/rewards",
-  },
-  {
-    id: "n9",
-    category: "system",
-    title: "FitX Journey Update 🚀",
-    body: "New features added: Before/After photo compare, recipe meal logging, and improved charts.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 96),
-    read: true,
-  },
-];
+/* ─────────── PER-USER LOCAL STORAGE ───────────
+ * Notifications are namespaced by uid so a new account starts clean
+ * and never inherits seeded data from a previous session.
+ */
+const STORAGE_PREFIX = "fitx_notifications_v2_";
+
+function welcomeSeed(): AppNotification[] {
+  // Brand-new account starts with a single welcome notification
+  return [
+    {
+      id: `n_welcome_${Date.now()}`,
+      category: "system",
+      title: "Welcome to FitX Journey 🚀",
+      body: "Set up your goals, plan your first workout and start fuelling your progress.",
+      timestamp: new Date(),
+      read: false,
+      actionLabel: "Get Started",
+      actionPath: "/onboarding",
+    },
+  ];
+}
+
+function loadFor(uid: string | null): AppNotification[] {
+  if (!uid) return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_PREFIX + uid);
+    if (!raw) return welcomeSeed();
+    const parsed = JSON.parse(raw) as AppNotification[];
+    return parsed.map(n => ({ ...n, timestamp: new Date(n.timestamp) }));
+  } catch {
+    return welcomeSeed();
+  }
+}
+
+function saveFor(uid: string | null, list: AppNotification[]) {
+  if (!uid) return;
+  try { localStorage.setItem(STORAGE_PREFIX + uid, JSON.stringify(list)); } catch { /* ignore */ }
+}
 
 export function useNotifications(prefs?: {
   workoutReminders?: boolean;
@@ -111,18 +60,30 @@ export function useNotifications(prefs?: {
   progressUpdates?: boolean;
   weeklyReport?: boolean;
 }) {
-  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
-    // Filter seeded notifications based on preferences
-    return SEED_NOTIFICATIONS.filter(n => {
-      if (!prefs) return true;
-      if (n.category === "workout" && prefs.workoutReminders === false) return false;
-      if (n.category === "challenge" && prefs.challengeAlerts === false) return false;
-      if (n.category === "progress" && prefs.progressUpdates === false) return false;
+  const { user } = useAuth();
+  const uid = user?.uid ?? null;
+
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => loadFor(uid));
+
+  // Reset state whenever the auth user changes (sign in / sign out / new account)
+  useEffect(() => {
+    setNotifications(loadFor(uid));
+  }, [uid]);
+
+  // Persist on every change, scoped per-user
+  useEffect(() => { saveFor(uid, notifications); }, [uid, notifications]);
+
+  const filteredByPrefs = useMemo(() => {
+    if (!prefs) return notifications;
+    return notifications.filter(n => {
+      if (n.category === "workout"   && prefs.workoutReminders === false) return false;
+      if (n.category === "challenge" && prefs.challengeAlerts  === false) return false;
+      if (n.category === "progress"  && prefs.progressUpdates  === false) return false;
       return true;
     });
-  });
+  }, [notifications, prefs]);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = filteredByPrefs.filter(n => !n.read).length;
 
   const markRead = useCallback((id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
@@ -136,21 +97,18 @@ export function useNotifications(prefs?: {
     setNotifications(prev => prev.filter(n => n.id !== id));
   }, []);
 
-  const dismissAll = useCallback(() => {
-    setNotifications([]);
-  }, []);
+  const dismissAll = useCallback(() => setNotifications([]), []);
 
   const pushNotification = useCallback((notif: Omit<AppNotification, "id" | "timestamp" | "read">) => {
     const newNotif: AppNotification = {
       ...notif,
-      id: `n_${Date.now()}`,
+      id: `n_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       timestamp: new Date(),
       read: false,
     };
     setNotifications(prev => [newNotif, ...prev]);
   }, []);
 
-  // Format relative timestamp
   const formatTime = (date: Date): string => {
     const diff = Date.now() - date.getTime();
     const mins = Math.floor(diff / 60000);
@@ -164,7 +122,7 @@ export function useNotifications(prefs?: {
   };
 
   return {
-    notifications,
+    notifications: filteredByPrefs,
     unreadCount,
     markRead,
     markAllRead,
