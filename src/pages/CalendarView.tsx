@@ -315,6 +315,44 @@ export default function CalendarView() {
               )}
             </motion.div>
 
+            {/* Selected day MEALS */}
+            {selectedDate && selectedMeals.length > 0 && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+                className="glass-card p-5 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-heading font-bold text-sm flex items-center gap-2">
+                    🍽️ Meal Plan
+                  </h3>
+                  <Link to="/nutrition" className="text-xs text-primary hover:underline">Edit →</Link>
+                </div>
+                {selectedMeals.map(me => (
+                  <div key={me.id} className="space-y-2">
+                    {me.meals.map((m, i) => (
+                      <div key={`${m.id}-${i}`} className="flex items-center gap-2 p-2 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                        {m.image
+                          ? <img src={`https://spoonacular.com/recipeImages/${m.id}-90x90.jpg`} alt="" className="w-9 h-9 rounded-lg object-cover" />
+                          : <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center text-base">🍽️</div>}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold truncate">{m.title}</p>
+                          {m.readyInMinutes && (
+                            <p className="text-[10px] text-muted-foreground">{m.readyInMinutes} min · meal {i + 1}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {me.nutrients && (
+                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-1">
+                        <span><strong className="text-foreground">{Math.round(me.nutrients.calories || 0)}</strong> cal</span>
+                        <span><strong className="text-foreground">{Math.round(me.nutrients.protein || 0)}g</strong> P</span>
+                        <span><strong className="text-foreground">{Math.round(me.nutrients.carbohydrates || 0)}g</strong> C</span>
+                        <span><strong className="text-foreground">{Math.round(me.nutrients.fat || 0)}g</strong> F</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </motion.div>
+            )}
+
             {/* Quick stats */}
             <div className="grid grid-cols-2 gap-3">
               <div className="glass-card p-4 rounded-2xl text-center">
