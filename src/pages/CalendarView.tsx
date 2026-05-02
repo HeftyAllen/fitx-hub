@@ -43,12 +43,21 @@ const DAY_COLORS = [
   "bg-amber-500/20 text-amber-400",
 ];
 
+interface MealPlanEntry {
+  id: string;
+  date: string;
+  dayName: string;
+  meals: { id: number; title: string; image?: string; readyInMinutes?: number }[];
+  nutrients?: any;
+}
+
 export default function CalendarView() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [plans, setPlans] = useState<WorkoutPlan[]>([]);
   const [entries, setEntries] = useState<CalendarEntry[]>([]);
+  const [mealEntries, setMealEntries] = useState<MealPlanEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -60,12 +69,14 @@ export default function CalendarView() {
     if (!user) return;
     setLoading(true);
     try {
-      const [plansSnap, entriesSnap] = await Promise.all([
+      const [plansSnap, entriesSnap, mealSnap] = await Promise.all([
         getDocs(collection(db, "users", user.uid, "workoutPlans")),
         getDocs(collection(db, "users", user.uid, "calendarEntries")),
+        getDocs(collection(db, "users", user.uid, "mealPlanEntries")),
       ]);
       setPlans(plansSnap.docs.map(d => ({ id: d.id, ...d.data() } as WorkoutPlan)));
       setEntries(entriesSnap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEntry)));
+      setMealEntries(mealSnap.docs.map(d => ({ id: d.id, ...d.data() } as MealPlanEntry)));
     } catch (e) { console.error(e); }
     setLoading(false);
   };
