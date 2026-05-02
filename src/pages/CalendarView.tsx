@@ -117,7 +117,13 @@ export default function CalendarView() {
     return entries.filter(e => e.date === dateStr);
   };
 
+  const getMealsForDate = (date: Date) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    return mealEntries.filter(e => e.date === dateStr);
+  };
+
   const selectedEntries = selectedDate ? getEntriesForDate(selectedDate) : [];
+  const selectedMeals   = selectedDate ? getMealsForDate(selectedDate)   : [];
 
   // Streak calc
   const streak = useMemo(() => {
@@ -181,8 +187,9 @@ export default function CalendarView() {
               {paddedDays.map((day, i) => {
                 if (!day) return <div key={`pad-${i}`} />;
                 const dayEntries = getEntriesForDate(day);
+                const dayMeals   = getMealsForDate(day);
                 const hasWorkout = dayEntries.length > 0;
-                const allCompleted = hasWorkout && dayEntries.every(e => e.completed);
+                const hasMeals   = dayMeals.length > 0;
                 const isSelected = selectedDate && isSameDay(day, selectedDate);
                 const todayClass = isToday(day);
 
@@ -199,13 +206,14 @@ export default function CalendarView() {
                     }`}
                   >
                     <span className="text-xs">{day.getDate()}</span>
-                    {hasWorkout && (
+                    {(hasWorkout || hasMeals) && (
                       <div className="flex gap-0.5 mt-0.5">
-                        {dayEntries.slice(0, 3).map((e, j) => (
+                        {dayEntries.slice(0, 3).map((e) => (
                           <div key={e.id} className={`w-1.5 h-1.5 rounded-full ${
                             e.completed ? "bg-green-400" : "bg-primary"
                           }`} />
                         ))}
+                        {hasMeals && <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
                       </div>
                     )}
                   </button>
@@ -214,12 +222,15 @@ export default function CalendarView() {
             </div>
 
             {/* Legend */}
-            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/[0.05]">
+            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/[0.05] flex-wrap">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <div className="w-2 h-2 rounded-full bg-primary" /> Scheduled
               </div>
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <div className="w-2 h-2 rounded-full bg-green-400" /> Completed
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="w-2 h-2 rounded-full bg-amber-400" /> Meal Plan
               </div>
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <div className="w-3 h-3 rounded border border-primary/30 bg-primary/10" /> Today
