@@ -105,8 +105,7 @@ export function useNotifications(prefs?: {
     );
     return unsub;
   }, [uid]);
-
-
+  const filteredByPrefs = useMemo(() => {
     if (!prefs) return notifications;
     return notifications.filter(n => {
       if (n.category === "workout"   && prefs.workoutReminders === false) return false;
