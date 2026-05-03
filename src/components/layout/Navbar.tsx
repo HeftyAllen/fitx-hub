@@ -69,6 +69,12 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Link to="/admin" title="Admin Console"
+              className="p-2 rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
+              <ShieldCheck size={18} />
+            </Link>
+          )}
           {/* Bell / notification trigger */}
           <button
             onClick={() => setNotifOpen(o => !o)}
