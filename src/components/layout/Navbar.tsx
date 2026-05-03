@@ -23,6 +23,7 @@ const navLinks = [
 export default function Navbar() {
   const { pathname } = useLocation();
   const { user, userProfile, logout } = useAuth();
+  const { isAdmin } = useAdmin();
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<NotifCategory | "all">("all");
