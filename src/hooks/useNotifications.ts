@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 
 export type NotifCategory = "workout" | "nutrition" | "progress" | "challenge" | "system";
@@ -73,6 +75,36 @@ export function useNotifications(prefs?: {
   // Persist on every change, scoped per-user
   useEffect(() => { saveFor(uid, notifications); }, [uid, notifications]);
 
+  // Bridge: subscribe to admin announcements and merge as system notifications
+  useEffect(() => {
+    if (!uid) return;
+    const seenKey = `fitx_seen_announcements_${uid}`;
+    const seen = new Set<string>(JSON.parse(localStorage.getItem(seenKey) || "[]"));
+    const unsub = onSnapshot(
+      query(collection(db, "announcements"), orderBy("createdAt", "desc"), limit(20)),
+      (snap) => {
+        const fresh = snap.docs.filter(d => !seen.has(d.id));
+        if (!fresh.length) return;
+        setNotifications(prev => {
+          const additions = fresh.map(d => {
+            const x = d.data() as any;
+            return {
+              id: `ann_${d.id}`,
+              category: "system" as NotifCategory,
+              title: x.title ?? "Announcement",
+              body:  x.body  ?? "",
+              timestamp: x.createdAt?.toDate?.() ?? new Date(),
+              read: false,
+            };
+          });
+          return [...additions, ...prev];
+        });
+        fresh.forEach(d => seen.add(d.id));
+        localStorage.setItem(seenKey, JSON.stringify([...seen]));
+      },
+    );
+    return unsub;
+  }, [uid]);
   const filteredByPrefs = useMemo(() => {
     if (!prefs) return notifications;
     return notifications.filter(n => {

@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function adminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && adminDoc().role in ['admin', 'moderator', 'staff'];
+    }
+
+    function isFullAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && adminDoc().role == 'admin';
+    }
+
+    // ── User-owned data: every collection lives under users/{uid}/...
+    match /users/{uid} {
+      allow read, write: if isOwner(uid) || isAdmin();
+
+      match /{document=**} {
+        allow read, write: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    // ── Admin registry — only full admins manage roles; users may read their own row
+    match /admins/{uid} {
+      allow read:  if isOwner(uid) || isAdmin();
+      allow write: if isFullAdmin();
+    }
+
+    // ── Append-only activity log
+    match /activityLogs/{id} {
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.keys().hasAll(['userId','action','createdAt']);
+      allow read:   if isAdmin();
+      allow update, delete: if isFullAdmin();
+    }
+
+    // ── Announcements (admin authored, all signed-in users read)
+    match /announcements/{id} {
+      allow read:  if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── Support tickets — owner + admin read; only owner creates; admin or owner updates
+    match /supportTickets/{id} {
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid;
+      allow read, update: if isSignedIn()
+                          && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isFullAdmin();
+
+      match /messages/{msgId} {
+        allow create: if isSignedIn()
+                      && request.resource.data.authorId == request.auth.uid;
+        allow read:   if isSignedIn()
+                      && (get(/databases/$(database)/documents/supportTickets/$(id)).data.userId == request.auth.uid
+                          || isAdmin());
+        allow update, delete: if isFullAdmin();
+      }
+    }
+
+    // ── Site settings & feature flags — public read, admin write
+    match /siteSettings/{doc} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+    match /featureFlags/{flag} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

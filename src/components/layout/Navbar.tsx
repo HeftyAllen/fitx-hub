@@ -4,10 +4,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo.png";
 import {
   LayoutDashboard, Dumbbell, UtensilsCrossed, TrendingUp,
-  Trophy, Calendar, Award, Settings, LogOut, Bell,
+  Trophy, Calendar, Award, Settings, LogOut, Bell, ShieldCheck,
 } from "lucide-react";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
 import { useNotifications, type NotifCategory } from "@/hooks/useNotifications";
+import { useAdmin } from "@/hooks/useAdmin";
 
 const navLinks = [
   { to: "/dashboard",       label: "Dashboard", icon: LayoutDashboard },
@@ -22,6 +23,7 @@ const navLinks = [
 export default function Navbar() {
   const { pathname } = useLocation();
   const { user, userProfile, logout } = useAuth();
+  const { isAdmin } = useAdmin();
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<NotifCategory | "all">("all");
@@ -67,6 +69,12 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Link to="/admin" title="Admin Console"
+              className="p-2 rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
+              <ShieldCheck size={18} />
+            </Link>
+          )}
           {/* Bell / notification trigger */}
           <button
             onClick={() => setNotifOpen(o => !o)}

@@ -5,6 +5,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AnimatePresence } from "framer-motion";
+import OfflineBanner from "@/components/OfflineBanner";
+import AdminRoute from "@/components/admin/AdminRoute";
+import AdminLayout from "@/components/admin/AdminLayout";
 import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
@@ -17,10 +20,19 @@ import Records from "./pages/Records";
 import CalendarView from "./pages/CalendarView";
 import Rewards from "./pages/Rewards";
 import Settings from "./pages/Settings";
+import Support from "./pages/Support";
 import WorkoutPlanner from "./pages/WorkoutPlanner";
 import WorkoutSession from "./pages/WorkoutSession";
 import MealPlanner from "./pages/MealPlanner";
 import NotFound from "./pages/NotFound";
+import AdminOverview from "./pages/admin/AdminOverview";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminContent from "./pages/admin/AdminContent";
+import AdminActivity from "./pages/admin/AdminActivity";
+import AdminAnnouncements from "./pages/admin/AdminAnnouncements";
+import AdminSupport from "./pages/admin/AdminSupport";
+import AdminSettings from "./pages/admin/AdminSettings";
+import AdminReports from "./pages/admin/AdminReports";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +64,20 @@ function AppRoutes() {
         <Route path="/calendar" element={<ProtectedRoute><CalendarView /></ProtectedRoute>} />
         <Route path="/rewards" element={<ProtectedRoute><Rewards /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
+
+        {/* Admin */}
+        <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
+          <Route index element={<AdminOverview />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="content" element={<AdminContent />} />
+          <Route path="activity" element={<AdminActivity />} />
+          <Route path="announcements" element={<AdminAnnouncements />} />
+          <Route path="support" element={<AdminSupport />} />
+          <Route path="settings" element={<AdminSettings />} />
+          <Route path="reports" element={<AdminReports />} />
+        </Route>
+
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AnimatePresence>
@@ -65,6 +91,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <OfflineBanner />
           <AppRoutes />
         </AuthProvider>
       </BrowserRouter>

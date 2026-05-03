@@ -1,0 +1,19 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "presence": {
+      "$uid": {
+        ".read":  "auth != null",
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['state','lastChanged'])"
+      }
+    },
+
+    "admins": {
+      ".read":  "auth != null",
+      ".write": false
+    }
+  }
+}
