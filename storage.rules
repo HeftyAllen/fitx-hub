@@ -1,0 +1,32 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() { return request.auth != null; }
+
+    function isAdmin() {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+
+    // Per-user uploads: users/{uid}/...
+    match /users/{uid}/{allPaths=**} {
+      allow read:  if request.auth.uid == uid || isAdmin();
+      allow write: if request.auth.uid == uid
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*|application/pdf');
+      allow delete: if request.auth.uid == uid || isAdmin();
+    }
+
+    // Public assets — read-all, admin write
+    match /public/{allPaths=**} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
