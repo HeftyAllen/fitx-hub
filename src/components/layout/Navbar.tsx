@@ -4,10 +4,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo.png";
 import {
   LayoutDashboard, Dumbbell, UtensilsCrossed, TrendingUp,
-  Trophy, Calendar, Award, Settings, LogOut, Bell,
+  Trophy, Calendar, Award, Settings, LogOut, Bell, ShieldCheck,
 } from "lucide-react";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
 import { useNotifications, type NotifCategory } from "@/hooks/useNotifications";
+import { useAdmin } from "@/hooks/useAdmin";
 
 const navLinks = [
   { to: "/dashboard",       label: "Dashboard", icon: LayoutDashboard },
