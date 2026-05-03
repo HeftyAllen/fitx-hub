@@ -510,6 +510,8 @@ export default function Settings() {
               </div>
             </a>
 
+            <button
+              onClick={handleLogout}
               className="w-full flex items-center gap-4 px-5 py-4 hover:bg-destructive/8 transition-colors group text-left"
             >
               <div className="p-2.5 rounded-xl bg-destructive/10 group-hover:bg-destructive/15 transition-colors">
