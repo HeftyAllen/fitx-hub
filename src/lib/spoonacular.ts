@@ -9,8 +9,12 @@
  *   4. Serve a "recent foods" list locally for zero-API repeat entries
  * ──────────────────────────────────────────────────────────────────*/
 
-const KEY  = "e65fd7fb2e8c41e8aacabf4b6da43a1e";
+const KEY  = import.meta.env.VITE_SPOONACULAR_KEY ?? "";
 const BASE = "https://api.spoonacular.com";
+if (!KEY && typeof window !== "undefined") {
+  // eslint-disable-next-line no-console
+  console.warn("[spoonacular] VITE_SPOONACULAR_KEY missing — recipe/nutrition calls will fail.");
+}
 
 const CACHE_TTL          = 24 * 60 * 60 * 1000;   // 24h
 const DAILY_LIMIT        = 150;                   // free plan
