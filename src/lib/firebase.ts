@@ -7,26 +7,16 @@ import {
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-const env = import.meta.env;
-
-function required(name: string, value: string | undefined): string {
-  if (!value) {
-    // eslint-disable-next-line no-console
-    console.error(
-      `[firebase] Missing env var ${name}. Add it to .env.local (see .env.example).`
-    );
-  }
-  return value ?? "";
-}
-
+// Firebase web config — public identifier (security enforced via Firestore/Storage rules).
+// Safe to commit. Do NOT put server secrets (Spoonacular, RapidAPI, etc.) here.
 const firebaseConfig = {
-  apiKey:            required("VITE_FIREBASE_API_KEY",        env.VITE_FIREBASE_API_KEY),
-  authDomain:        required("VITE_FIREBASE_AUTH_DOMAIN",    env.VITE_FIREBASE_AUTH_DOMAIN),
-  projectId:         required("VITE_FIREBASE_PROJECT_ID",     env.VITE_FIREBASE_PROJECT_ID),
-  storageBucket:     required("VITE_FIREBASE_STORAGE_BUCKET", env.VITE_FIREBASE_STORAGE_BUCKET),
-  messagingSenderId: required("VITE_FIREBASE_SENDER_ID",      env.VITE_FIREBASE_SENDER_ID),
-  appId:             required("VITE_FIREBASE_APP_ID",         env.VITE_FIREBASE_APP_ID),
-  measurementId:     env.VITE_FIREBASE_MEASUREMENT_ID,
+  apiKey: "AIzaSyAHEvRJuOyZ8SagrmioDFmrWH8rAqCu5Vk",
+  authDomain: "fit-x-journey.firebaseapp.com",
+  projectId: "fit-x-journey",
+  storageBucket: "fit-x-journey.appspot.com",
+  messagingSenderId: "583991205621",
+  appId: "1:583991205621:web:6db1600a16b23590c3efbc",
+  measurementId: "G-XT12JJNNC3",
 };
 
 const app = initializeApp(firebaseConfig);
