@@ -61,7 +61,7 @@ export default function Auth() {
     try {
       await signInWithGoogle();
       const uid = auth.currentUser?.uid;
-      if (uid) await routeAfterAuth(uid);
+      if (uid) await routeAfterAuth(uid, auth.currentUser?.email);
       else navigate("/dashboard");
     } catch (err: any) {
       setError(err.message || "Google sign in failed");
