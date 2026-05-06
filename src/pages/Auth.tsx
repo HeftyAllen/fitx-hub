@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { motion } from "framer-motion";
 import logo from "@/assets/logo.png";
 import { ArrowLeft } from "lucide-react";
