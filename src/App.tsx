@@ -43,6 +43,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function DashboardGate() {
+  const { isAdmin, loading } = useAdmin();
+  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+  if (isAdmin) return <Navigate to="/admin" replace />;
+  return <Dashboard />;
+}
+
 function AppRoutes() {
   const { user } = useAuth();
 
