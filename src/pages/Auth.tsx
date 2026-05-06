@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { motion } from "framer-motion";
 import logo from "@/assets/logo.png";
 import { ArrowLeft } from "lucide-react";
@@ -15,6 +18,17 @@ export default function Auth() {
   const { signIn, signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
+  const routeAfterAuth = async (uid: string) => {
+    try {
+      const snap = await getDoc(doc(db, "admins", uid));
+      if (snap.exists() && ["admin", "moderator", "staff"].includes(snap.data().role)) {
+        navigate("/admin");
+        return;
+      }
+    } catch {}
+    navigate("/dashboard");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -25,7 +39,9 @@ export default function Auth() {
         navigate("/onboarding");
       } else {
         await signIn(email, password);
-        navigate("/dashboard");
+        const uid = auth.currentUser?.uid;
+        if (uid) await routeAfterAuth(uid);
+        else navigate("/dashboard");
       }
     } catch (err: any) {
       setError(err.message || "Something went wrong");
@@ -38,7 +54,9 @@ export default function Auth() {
     setError("");
     try {
       await signInWithGoogle();
-      navigate("/dashboard");
+      const uid = auth.currentUser?.uid;
+      if (uid) await routeAfterAuth(uid);
+      else navigate("/dashboard");
     } catch (err: any) {
       setError(err.message || "Google sign in failed");
     }
