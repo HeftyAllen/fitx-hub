@@ -14,7 +14,7 @@ export {
   canMakeRequest,
 } from "./spoonacular";
 
-const EXERCISE_DB_KEY  = import.meta.env.VITE_RAPIDAPI_KEY ?? "";
+const EXERCISE_DB_KEY  = import.meta.env.VITE_RAPIDAPI_KEY ?? "02e5919d7cmshe07914db7605532p164aa8jsn0cde2d877db5";
 const EXERCISE_DB_HOST = import.meta.env.VITE_RAPIDAPI_EXERCISEDB_HOST ?? "exercisedb.p.rapidapi.com";
 if (!EXERCISE_DB_KEY && typeof window !== "undefined") {
   // eslint-disable-next-line no-console

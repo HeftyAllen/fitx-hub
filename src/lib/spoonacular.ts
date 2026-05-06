@@ -9,7 +9,7 @@
  *   4. Serve a "recent foods" list locally for zero-API repeat entries
  * ──────────────────────────────────────────────────────────────────*/
 
-const KEY  = import.meta.env.VITE_SPOONACULAR_KEY ?? "";
+const KEY  = import.meta.env.VITE_SPOONACULAR_KEY ?? "e65fd7fb2e8c41e8aacabf4b6da43a1e";
 const BASE = "https://api.spoonacular.com";
 if (!KEY && typeof window !== "undefined") {
   // eslint-disable-next-line no-console
