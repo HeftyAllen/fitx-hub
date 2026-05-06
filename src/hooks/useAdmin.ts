@@ -11,6 +11,9 @@ export interface AdminInfo {
   role: AdminRole | null;
 }
 
+// Hardcoded admin emails — always treated as admin regardless of Firestore.
+const ADMIN_EMAILS = ["admin1@gmail.com", "admin101@gmail.com"];
+
 export function useAdmin(): AdminInfo {
   const { user } = useAuth();
   const [info, setInfo] = useState<AdminInfo>({ loading: true, isAdmin: false, role: null });
@@ -20,6 +23,13 @@ export function useAdmin(): AdminInfo {
       setInfo({ loading: false, isAdmin: false, role: null });
       return;
     }
+
+    // Email allowlist short-circuit
+    if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+      setInfo({ loading: false, isAdmin: true, role: "admin" });
+      return;
+    }
+
     const ref = doc(db, "admins", user.uid);
     const unsub = onSnapshot(
       ref,
