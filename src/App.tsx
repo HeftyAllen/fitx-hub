@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AnimatePresence } from "framer-motion";
 import OfflineBanner from "@/components/OfflineBanner";
 import AdminRoute from "@/components/admin/AdminRoute";
+import { useAdmin } from "@/hooks/useAdmin";
 import AdminLayout from "@/components/admin/AdminLayout";
 import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
