@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDocFromServer } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { auth } from "@/lib/firebase";
 import { motion } from "framer-motion";
@@ -20,7 +20,7 @@ export default function Auth() {
 
   const routeAfterAuth = async (uid: string) => {
     try {
-      const snap = await getDoc(doc(db, "admins", uid));
+      const snap = await getDocFromServer(doc(db, "admins", uid));
       if (snap.exists() && ["admin", "moderator", "staff"].includes(snap.data().role)) {
         navigate("/admin");
         return;

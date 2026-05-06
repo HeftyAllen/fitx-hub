@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AnimatePresence } from "framer-motion";
 import OfflineBanner from "@/components/OfflineBanner";
 import AdminRoute from "@/components/admin/AdminRoute";
+import { useAdmin } from "@/hooks/useAdmin";
 import AdminLayout from "@/components/admin/AdminLayout";
 import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
@@ -43,6 +44,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function DashboardGate() {
+  const { isAdmin, loading } = useAdmin();
+  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+  if (isAdmin) return <Navigate to="/admin" replace />;
+  return <Dashboard />;
+}
+
 function AppRoutes() {
   const { user } = useAuth();
 
@@ -52,7 +60,7 @@ function AppRoutes() {
         <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Landing />} />
         <Route path="/auth" element={user ? <Navigate to="/dashboard" replace /> : <Auth />} />
         <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
-        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute><DashboardGate /></ProtectedRoute>} />
         <Route path="/workout-planner" element={<ProtectedRoute><WorkoutPlanner /></ProtectedRoute>} />
         <Route path="/workout-session" element={<ProtectedRoute><WorkoutSession /></ProtectedRoute>} />
         <Route path="/exercise-library" element={<ProtectedRoute><ExerciseLibrary /></ProtectedRoute>} />
