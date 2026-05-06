@@ -18,7 +18,13 @@ export default function Auth() {
   const { signIn, signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
-  const routeAfterAuth = async (uid: string) => {
+  const ADMIN_EMAILS = ["admin1@gmail.com", "admin101@gmail.com"];
+
+  const routeAfterAuth = async (uid: string, email?: string | null) => {
+    if (email && ADMIN_EMAILS.includes(email.toLowerCase())) {
+      navigate("/admin");
+      return;
+    }
     try {
       const snap = await getDocFromServer(doc(db, "admins", uid));
       if (snap.exists() && ["admin", "moderator", "staff"].includes(snap.data().role)) {
@@ -40,7 +46,7 @@ export default function Auth() {
       } else {
         await signIn(email, password);
         const uid = auth.currentUser?.uid;
-        if (uid) await routeAfterAuth(uid);
+        if (uid) await routeAfterAuth(uid, auth.currentUser?.email);
         else navigate("/dashboard");
       }
     } catch (err: any) {
@@ -55,7 +61,7 @@ export default function Auth() {
     try {
       await signInWithGoogle();
       const uid = auth.currentUser?.uid;
-      if (uid) await routeAfterAuth(uid);
+      if (uid) await routeAfterAuth(uid, auth.currentUser?.email);
       else navigate("/dashboard");
     } catch (err: any) {
       setError(err.message || "Google sign in failed");
