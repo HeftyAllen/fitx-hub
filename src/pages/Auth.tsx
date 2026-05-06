@@ -46,7 +46,7 @@ export default function Auth() {
       } else {
         await signIn(email, password);
         const uid = auth.currentUser?.uid;
-        if (uid) await routeAfterAuth(uid);
+        if (uid) await routeAfterAuth(uid, auth.currentUser?.email);
         else navigate("/dashboard");
       }
     } catch (err: any) {
