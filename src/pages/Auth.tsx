@@ -20,7 +20,7 @@ export default function Auth() {
 
   const routeAfterAuth = async (uid: string) => {
     try {
-      const snap = await getDoc(doc(db, "admins", uid));
+      const snap = await getDocFromServer(doc(db, "admins", uid));
       if (snap.exists() && ["admin", "moderator", "staff"].includes(snap.data().role)) {
         navigate("/admin");
         return;
