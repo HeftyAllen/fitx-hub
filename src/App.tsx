@@ -101,6 +101,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <OfflineBanner />
+          <AdminInviteBanner />
           <AppRoutes />
         </AuthProvider>
       </BrowserRouter>
