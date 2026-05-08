@@ -11,6 +11,7 @@ export type ActivityAction =
   | "plan.delete"
   | "meal.log"
   | "admin.role.change"
+  | "admin.invite.send"
   | "admin.user.suspend"
   | "admin.user.delete"
   | "admin.announcement.send"
