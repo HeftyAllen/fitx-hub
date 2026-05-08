@@ -7,7 +7,7 @@ import {
   signInWithPopup,
   signOut,
 } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
 
 interface AuthContextType {
@@ -23,6 +23,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+/**
+ * Ensure a `users/{uid}/profile/data` doc exists with at minimum
+ * email + createdAt + lastLoginAt. This is what the admin Users page
+ * lists, so it MUST run on every signup AND every sign-in.
+ */
+async function syncUserDoc(user: User) {
+  try {
+    const ref = doc(db, "users", user.uid, "profile", "data");
+    const snap = await getDoc(ref);
+    const base: any = {
+      email: user.email ?? null,
+      name: user.displayName ?? null,
+      photoURL: user.photoURL ?? null,
+      providerId: user.providerData?.[0]?.providerId ?? "password",
+      lastLoginAt: serverTimestamp(),
+    };
+    if (!snap.exists()) base.createdAt = serverTimestamp();
+    await setDoc(ref, base, { merge: true });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn("[auth] syncUserDoc failed", e);
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<any | null>(null);
@@ -37,24 +61,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
-      if (user) await fetchProfile(user.uid);
-      else setUserProfile(null);
+      if (user) {
+        await syncUserDoc(user);
+        await fetchProfile(user.uid);
+      } else {
+        setUserProfile(null);
+      }
       setLoading(false);
     });
     return unsubscribe;
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    await syncUserDoc(cred.user);
   };
 
   const signUp = async (email: string, password: string) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
+    await syncUserDoc(cred.user);
     return cred.user;
   };
 
   const signInWithGoogle = async () => {
-    await signInWithPopup(auth, googleProvider);
+    const cred = await signInWithPopup(auth, googleProvider);
+    await syncUserDoc(cred.user);
   };
 
   const logout = async () => {
