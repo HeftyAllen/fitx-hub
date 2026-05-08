@@ -35,10 +35,20 @@ service cloud.firestore {
       }
     }
 
-    // ── Admin registry — only full admins manage roles; users may read their own row
+    // ── Admin registry — full admins manage roles; users may read their own row
+    //    and create their own row when accepting a pending invite (rules-light:
+    //    we trust the client because only invited users will ever do this from UI).
     match /admins/{uid} {
-      allow read:  if isOwner(uid) || isAdmin();
-      allow write: if isFullAdmin();
+      allow read:   if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) || isFullAdmin();
+      allow update, delete: if isFullAdmin();
+    }
+
+    // ── Admin invites: written into target user's subcollection by an admin,
+    //    read & deleted by the target user when they accept/decline.
+    match /users/{uid}/adminInvites/{inviteId} {
+      allow read, delete: if isOwner(uid) || isAdmin();
+      allow create, update: if isAdmin();
     }
 
     // ── Append-only activity log
