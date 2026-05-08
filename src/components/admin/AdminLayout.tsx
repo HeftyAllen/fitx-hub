@@ -22,26 +22,38 @@ const links = [
 
 export default function AdminLayout() {
   const { role } = useAdmin();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const { pathname } = useLocation();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success("Signed out");
+      navigate("/", { replace: true });
+    } catch (e: any) {
+      toast.error(e.message ?? "Sign out failed");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] min-h-screen">
         {/* Sidebar */}
         <aside className="border-r border-border bg-card/30 backdrop-blur-xl p-4 lg:sticky lg:top-0 lg:h-screen flex flex-col">
-          <Link to="/dashboard" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
-            <ArrowLeft size={14} /> Back to app
+          <Link to="/" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
+            <Home size={14} /> Home
           </Link>
 
           <div className="flex items-center gap-2 px-3 py-3 mb-4 rounded-xl bg-primary/10 border border-primary/20">
             <ShieldCheck size={18} className="text-primary" />
-            <div>
-              <div className="text-sm font-semibold">Admin Console</div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold truncate">Admin Console</div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{role ?? "—"}</div>
             </div>
           </div>
 
-          <nav className="flex flex-col gap-1">
+          <nav className="flex flex-col gap-1 flex-1">
             {links.map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}
@@ -60,6 +72,15 @@ export default function AdminLayout() {
               </NavLink>
             ))}
           </nav>
+
+          <div className="mt-4 pt-4 border-t border-border space-y-2">
+            <div className="px-3 text-xs text-muted-foreground truncate" title={user?.email ?? ""}>
+              {user?.email}
+            </div>
+            <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={handleLogout}>
+              <LogOut size={14} /> Sign out
+            </Button>
+          </div>
         </aside>
 
         {/* Main */}
