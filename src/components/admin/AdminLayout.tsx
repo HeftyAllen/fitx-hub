@@ -1,10 +1,13 @@
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, FileText, Activity, Megaphone,
-  LifeBuoy, Settings as SettingsIcon, BarChart3, ArrowLeft, ShieldCheck,
+  LifeBuoy, Settings as SettingsIcon, BarChart3, Home, ShieldCheck, LogOut,
 } from "lucide-react";
 import { useAdmin } from "@/hooks/useAdmin";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 
 const links = [
   { to: "/admin",               label: "Overview",      icon: LayoutDashboard, end: true },
