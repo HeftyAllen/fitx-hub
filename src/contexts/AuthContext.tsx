@@ -30,17 +30,23 @@ const AuthContext = createContext<AuthContextType | null>(null);
  */
 async function syncUserDoc(user: User) {
   try {
-    const ref = doc(db, "users", user.uid, "profile", "data");
-    const snap = await getDoc(ref);
-    const base: any = {
+    const profRef = doc(db, "users", user.uid, "profile", "data");
+    const indexRef = doc(db, "users", user.uid); // listing-friendly summary
+    const profSnap = await getDoc(profRef);
+
+    const summary: any = {
       email: user.email ?? null,
       name: user.displayName ?? null,
       photoURL: user.photoURL ?? null,
       providerId: user.providerData?.[0]?.providerId ?? "password",
       lastLoginAt: serverTimestamp(),
     };
-    if (!snap.exists()) base.createdAt = serverTimestamp();
-    await setDoc(ref, base, { merge: true });
+    if (!profSnap.exists()) summary.createdAt = serverTimestamp();
+
+    await Promise.all([
+      setDoc(profRef, summary, { merge: true }),
+      setDoc(indexRef, summary, { merge: true }),
+    ]);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn("[auth] syncUserDoc failed", e);
