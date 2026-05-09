@@ -210,16 +210,21 @@ export default function Settings() {
     }
     setPhotoUploading(true);
     try {
-      const storageRef = ref(storage, `users/${user.uid}/avatar`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const storageRef = ref(storage, `users/${user.uid}/avatar.${ext}`);
+      await uploadBytes(storageRef, file, { contentType: file.type || "image/jpeg" });
+      const baseUrl = await getDownloadURL(storageRef);
+      const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}v=${Date.now()}`;
       const newProfile = { ...profile, photoURL: url };
       setProfile(newProfile);
       await setDoc(doc(db, "users", user.uid, "profile", "data"), { photoURL: url }, { merge: true });
       await refreshProfile();
       toast.success("Profile photo updated");
-    } catch {
-      toast.error("Photo upload failed — try again");
+    } catch (err: any) {
+      console.error("[avatar upload]", err);
+      toast.error(err?.code === "storage/unauthorized"
+        ? "Upload blocked — publish the storage rules in Firebase Console."
+        : "Photo upload failed — check the storage bucket name in firebase.ts.");
     } finally {
       setPhotoUploading(false);
     }

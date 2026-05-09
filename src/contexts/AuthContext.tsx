@@ -14,6 +14,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   userProfile: any | null;
+  needsOnboarding: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<User>;
   signInWithGoogle: () => Promise<void>;
@@ -23,15 +24,10 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-/**
- * Ensure a `users/{uid}/profile/data` doc exists with at minimum
- * email + createdAt + lastLoginAt. This is what the admin Users page
- * lists, so it MUST run on every signup AND every sign-in.
- */
 async function syncUserDoc(user: User) {
   try {
     const profRef = doc(db, "users", user.uid, "profile", "data");
-    const indexRef = doc(db, "users", user.uid); // listing-friendly summary
+    const indexRef = doc(db, "users", user.uid);
     const profSnap = await getDoc(profRef);
 
     const summary: any = {
@@ -48,7 +44,6 @@ async function syncUserDoc(user: User) {
       setDoc(indexRef, summary, { merge: true }),
     ]);
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.warn("[auth] syncUserDoc failed", e);
   }
 }
@@ -103,8 +98,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await fetchProfile(user.uid);
   };
 
+  // Onboarding considered complete when profile has a goalType.
+  const needsOnboarding = !!user && (!userProfile || !userProfile.goalType);
+
   return (
-    <AuthContext.Provider value={{ user, loading, userProfile, signIn, signUp, signInWithGoogle, logout, refreshProfile }}>
+    <AuthContext.Provider value={{
+      user, loading, userProfile, needsOnboarding,
+      signIn, signUp, signInWithGoogle, logout, refreshProfile,
+    }}>
       {children}
     </AuthContext.Provider>
   );

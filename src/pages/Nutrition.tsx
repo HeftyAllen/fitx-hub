@@ -55,7 +55,9 @@ const MEAL_TYPES = [
   { value: "dessert",   label: "Dessert" },
 ];
 
-const MACRO_GOALS = { calories: 2200, protein: 150, carbs: 250, fat: 70, fiber: 30 };
+const DEFAULT_MACRO_GOALS = { calories: 2200, protein: 150, carbs: 250, fat: 70, fiber: 30 };
+// Mutable per-user goals — overwritten by Nutrition() from the user's profile on mount.
+let MACRO_GOALS = { ...DEFAULT_MACRO_GOALS };
 const WATER_GOAL  = 8;
 
 const fadeUp  = { hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } };
@@ -1227,8 +1229,17 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
 /* ────────────────── MAIN PAGE ────────────────── */
 export default function Nutrition() {
   const [activeTab, setActiveTab] = useState<Tab>("Diary");
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const uid = user?.uid ?? null;
+
+  // Personalise calorie/macro targets from the onboarding-derived profile.
+  MACRO_GOALS = {
+    calories: (userProfile as any)?.calorieTarget || DEFAULT_MACRO_GOALS.calories,
+    protein:  (userProfile as any)?.protein       || DEFAULT_MACRO_GOALS.protein,
+    carbs:    (userProfile as any)?.carbs         || DEFAULT_MACRO_GOALS.carbs,
+    fat:      (userProfile as any)?.fat           || DEFAULT_MACRO_GOALS.fat,
+    fiber:    (userProfile as any)?.fiber         || DEFAULT_MACRO_GOALS.fiber,
+  };
 
   // Today’s totals for header
   const [headerTotals, setHeaderTotals] = useState({ calories: 0, protein: 0 });

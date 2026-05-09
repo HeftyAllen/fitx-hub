@@ -22,17 +22,18 @@ export default function Auth() {
 
   const routeAfterAuth = async (uid: string, email?: string | null) => {
     if (email && ADMIN_EMAILS.includes(email.toLowerCase())) {
-      navigate("/admin");
+      navigate("/admin", { replace: true });
       return;
     }
     try {
       const snap = await getDocFromServer(doc(db, "admins", uid));
       if (snap.exists() && ["admin", "moderator", "staff"].includes(snap.data().role)) {
-        navigate("/admin");
+        navigate("/admin", { replace: true });
         return;
       }
     } catch {}
-    navigate("/dashboard");
+    // RootRedirect / DashboardGate will route to /onboarding if profile is incomplete.
+    navigate("/dashboard", { replace: true });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,12 +43,12 @@ export default function Auth() {
     try {
       if (isSignUp) {
         await signUp(email, password);
-        navigate("/onboarding");
+        navigate("/onboarding", { replace: true });
       } else {
         await signIn(email, password);
         const uid = auth.currentUser?.uid;
         if (uid) await routeAfterAuth(uid, auth.currentUser?.email);
-        else navigate("/dashboard");
+        else navigate("/dashboard", { replace: true });
       }
     } catch (err: any) {
       setError(err.message || "Something went wrong");
@@ -62,7 +63,7 @@ export default function Auth() {
       await signInWithGoogle();
       const uid = auth.currentUser?.uid;
       if (uid) await routeAfterAuth(uid, auth.currentUser?.email);
-      else navigate("/dashboard");
+      else navigate("/dashboard", { replace: true });
     } catch (err: any) {
       setError(err.message || "Google sign in failed");
     }
