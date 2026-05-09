@@ -55,7 +55,7 @@ const MEAL_TYPES = [
   { value: "dessert",   label: "Dessert" },
 ];
 
-const MACRO_GOALS = { calories: 2200, protein: 150, carbs: 250, fat: 70, fiber: 30 };
+const DEFAULT_MACRO_GOALS = { calories: 2200, protein: 150, carbs: 250, fat: 70, fiber: 30 };
 const WATER_GOAL  = 8;
 
 const fadeUp  = { hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } };
