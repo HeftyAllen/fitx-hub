@@ -13,7 +13,11 @@ const firebaseConfig = {
   apiKey: "AIzaSyAHEvRJuOyZ8SagrmioDFmrWH8rAqCu5Vk",
   authDomain: "fit-x-journey.firebaseapp.com",
   projectId: "fit-x-journey",
-  storageBucket: "fit-x-journey.appspot.com",
+  // New Firebase projects use *.firebasestorage.app — legacy projects use *.appspot.com.
+  // Override via VITE_FIREBASE_STORAGE_BUCKET if your console shows the legacy host.
+  storageBucket:
+    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ||
+    "fit-x-journey.firebasestorage.app",
   messagingSenderId: "583991205621",
   appId: "1:583991205621:web:6db1600a16b23590c3efbc",
   measurementId: "G-XT12JJNNC3",

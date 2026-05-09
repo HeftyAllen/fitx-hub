@@ -17,6 +17,10 @@ export type ActivityAction =
   | "admin.announcement.send"
   | "admin.flag.toggle"
   | "admin.settings.update"
+  | "library.plan.create"
+  | "library.plan.publish"
+  | "library.plan.delete"
+  | "library.plan.optIn"
   | "support.ticket.open"
   | "support.ticket.reply";
 
@@ -33,8 +37,6 @@ export async function logActivity(action: ActivityAction, meta: Record<string, a
       userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
     });
   } catch (e) {
-    // swallow — never block UX on logging
-    // eslint-disable-next-line no-console
     console.warn("[activity] log failed", e);
   }
 }
