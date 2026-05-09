@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { motion, AnimatePresence } from "framer-motion";
 import logo from "@/assets/logo.png";
-import { ChevronRight, ChevronLeft, Check } from "lucide-react";
+import { ChevronRight, ChevronLeft, Check, Flame, Beef, Wheat, Droplets } from "lucide-react";
+import { computeTargets } from "@/lib/nutrition";
 
 const GOALS = [
   { id: "muscle", label: "Build Muscle", icon: "🏋️" },
@@ -44,18 +45,21 @@ export default function Onboarding() {
     return true;
   };
 
+  const targets = useMemo(() => computeTargets(profile as any), [profile]);
+
   const handleFinish = async () => {
     if (!user) return;
     await setDoc(doc(db, "users", user.uid, "profile", "data"), {
       ...profile,
+      ...targets,
       createdAt: new Date().toISOString(),
-    });
+    }, { merge: true });
     await setDoc(doc(db, "users", user.uid, "streaks", "data"), {
       current: 0, best: 0, lastActiveDate: null,
     });
     await setDoc(doc(db, "users", user.uid, "xp", "data"), { total: 0, level: 1 });
     await refreshProfile();
-    navigate("/dashboard");
+    navigate("/dashboard", { replace: true });
   };
 
   const slideVariants = {
