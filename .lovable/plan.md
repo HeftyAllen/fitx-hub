@@ -1,186 +1,112 @@
-# Plan: Security Hardening, Admin Dashboard & Offline Mode
+# Plan — Onboarding/Storage fix + Admin Library round 2
 
-## 1. Move API keys out of source code
+## 1. Fix the "signup jumps to dashboard then back to onboarding" flicker
 
-Currently hardcoded in repo:
-- `src/lib/firebase.ts` — Firebase web config (apiKey etc.)
-- `src/lib/spoonacular.ts` — Spoonacular key
-- `src/lib/api.ts` — RapidAPI/ExerciseDB key
+**Cause:** When `signUp()` resolves, `onAuthStateChanged` sets `user` immediately. The `/auth` route is `user ? <Navigate to="/dashboard" />` so React redirects to `/dashboard` for one frame *before* `handleSubmit` runs `navigate("/onboarding")`. `DashboardGate` then briefly renders before the second navigation lands.
 
-**Approach:**
-- Create `.env` with `VITE_` prefixed variables: `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_SENDER_ID`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_MEASUREMENT_ID`, `VITE_SPOONACULAR_KEY`, `VITE_RAPIDAPI_KEY`.
-- Add `.env.example` with placeholder values committed to repo.
-- Add `.env` to `.gitignore`.
-- Replace literals in `firebase.ts`, `spoonacular.ts`, `api.ts` with `import.meta.env.VITE_*` reads, with a runtime guard that warns if missing.
+**Fix:**
+- Add an `OnboardingGate` wrapper: if the user is signed in but `users/{uid}/profile/data` has no `goalType` (i.e. onboarding not completed), every protected route — including `/dashboard` — redirects to `/onboarding`.
+- `AuthContext` already loads `userProfile`; expose a derived `needsOnboarding` boolean (true when `userProfile?.goalType` is missing).
+- In `App.tsx`:
+  - `/` → if user && needsOnboarding → `/onboarding`, else if user → `/dashboard`, else `<Landing />`.
+  - `/auth` → same logic.
+  - `DashboardGate` first checks `needsOnboarding` before checking `isAdmin`.
+- In `Auth.tsx` use `navigate(..., { replace: true })` everywhere to remove flicker from history.
 
-**Note (honest caveat):** Firebase web `apiKey` is a public identifier — security comes from Firebase Rules + App Check, not from hiding the key. Spoonacular and RapidAPI keys, however, are real secrets and any client-side usage exposes them in the bundle. The proper long-term fix is to proxy those calls through a backend (Firebase Cloud Function / Lovable Cloud edge function). For this pass we'll move them to env vars (so they're not in git history going forward) and flag the proxy work as a follow-up. I'll mention this clearly to you in chat.
+## 2. Fix Firebase Storage upload 404 (preflight)
 
-## 2. Firebase security rules
+**Cause:** `firebase.ts` uses `storageBucket: "fit-x-journey.appspot.com"`. Firebase projects created after Oct 2024 use the `*.firebasestorage.app` bucket name; the legacy `*.appspot.com` host returns 404 on upload preflight.
 
-Create three rule files at the project root so you can paste them into the Firebase console (or deploy via CLI):
+**Fix:**
+- Update `src/lib/firebase.ts` `storageBucket` to `"fit-x-journey.firebasestorage.app"` (and surface it via `VITE_FIREBASE_STORAGE_BUCKET` env so it's swappable).
+- Tighten `storage.rules` so `users/{uid}/...` works for both avatar and progress paths (current rule is fine — just needs to be deployed).
+- In `Settings.tsx` avatar path, append a content-type and a deterministic name (`avatar.jpg`) plus a cache-buster on the returned URL so the new image shows immediately.
 
-**`firestore.rules`** — owner-only access pattern:
-```
-rules_version='2';
-service cloud.firestore {
-  match /databases/{db}/documents {
-    function isSignedIn()  { return request.auth != null; }
-    function isOwner(uid)  { return isSignedIn() && request.auth.uid == uid; }
-    function isAdmin()     { return isSignedIn() &&
-      get(/databases/$(db)/documents/admins/$(request.auth.uid)).data.role in ['admin','moderator']; }
+**You will need to:** confirm the actual bucket name in Firebase Console → Storage (top of page shows `gs://...`). If yours is still `appspot.com`, keep the old value; if it shows `firebasestorage.app`, the new value is correct. I'll wire it through env so flipping is one line.
 
-    // All per-user data lives under users/{uid}/...
-    match /users/{uid}/{document=**} {
-      allow read, write: if isOwner(uid) || isAdmin();
-    }
+**Also required:** publish the updated `storage.rules` in the Firebase Console (Storage → Rules → Publish).
 
-    // Admin registry — only admins can read/write
-    match /admins/{uid} {
-      allow read:  if isSignedIn() && (isOwner(uid) || isAdmin());
-      allow write: if isAdmin();
-    }
+## 3. Smarter onboarding — calories that match the goal
 
-    // Audit/activity logs — append-only for users, full read for admins
-    match /activityLogs/{id} {
-      allow create: if isSignedIn() &&
-                    request.resource.data.userId == request.auth.uid;
-      allow read:   if isAdmin();
-      allow update, delete: if false;
-    }
+Add a final computed step that derives daily targets from the inputs using **Mifflin-St Jeor** + activity multiplier + goal adjustment, and stores them on the profile so Nutrition / MealPlanner can read them.
 
-    // Announcements — public read, admin write
-    match /announcements/{id} {
-      allow read:  if isSignedIn();
-      allow write: if isAdmin();
-    }
-
-    // Support tickets — owner + admin
-    match /supportTickets/{id} {
-      allow create: if isSignedIn();
-      allow read, update: if isSignedIn() &&
-        (resource.data.userId == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
-    }
-
-    // Feature flags & site settings — public read, admin write
-    match /siteSettings/{doc}      { allow read: if true; allow write: if isAdmin(); }
-    match /featureFlags/{flag}     { allow read: if true; allow write: if isAdmin(); }
-
-    match /{document=**} { allow read, write: if false; } // default deny
-  }
-}
+```text
+BMR (male)   = 10*kg + 6.25*cm - 5*age + 5
+BMR (female) = 10*kg + 6.25*cm - 5*age - 161
+TDEE         = BMR * activityFactor(daysPerWeek)
+              1-2 d → 1.375 | 3-4 d → 1.55 | 5-6 d → 1.725 | 7 → 1.9
+calorieTarget = TDEE + goalDelta
+              lose: -500 | muscle: +300 | endurance: +200 | maintain/general/flex: 0
+macros (g)   = protein 1.8*kg (muscle 2.2, lose 2.0)
+              fat 25% of cals / 9
+              carbs = remaining cals / 4
 ```
 
-**`storage.rules`** — users own their `users/{uid}/...` paths; admins can read all:
-```
-rules_version='2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    function isSignedIn() { return request.auth != null; }
-    function isAdmin() { return isSignedIn() &&
-      firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)); }
+Changes:
+- New `src/lib/nutrition.ts` with `computeTargets(profile)` returning `{ calorieTarget, protein, carbs, fat, bmr, tdee }`.
+- Onboarding writes these alongside the existing fields.
+- Onboarding step 6 (current "all set") becomes a **summary card** showing the computed numbers before "Enter Dashboard" so the user sees the plan was personalised.
+- Unit handling: convert lbs→kg and ft→cm before computing.
+- Nutrition page reads `calorieTarget` from profile (falls back to old default if missing).
 
-    match /users/{uid}/{allPaths=**} {
-      allow read:  if request.auth.uid == uid || isAdmin();
-      allow write: if request.auth.uid == uid &&
-                   request.resource.size < 5 * 1024 * 1024 &&
-                   request.resource.contentType.matches('image/.*|application/pdf');
-    }
-    match /public/{allPaths=**} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-  }
-}
+## 4. Admin round 2 — Global library + opt-in (per your earlier choice)
+
+Foundation already shipped (logout, real-time users, invites). This round adds the content side.
+
+### Data model
+```text
+library/workouts/{planId}     ← admin-authored, world-readable
+library/mealPlans/{planId}    ← admin-authored, world-readable
+users/{uid}/libraryOptIns/{planId}  ← user accepts → "subscribed"
+users/{uid}/workoutPlans/{id} ← copied from library on accept (existing user space)
+users/{uid}/mealPlans/{id}    ← copied from library on accept
+users/{uid}/notifications/{id} ← "New workout plan available" / etc.
 ```
 
-**`database.rules.json`** (Realtime Database — only if you actually use it; project currently doesn't, but you asked for it):
-```
-{
-  "rules": {
-    ".read": false,
-    ".write": false,
-    "presence": {
-      "$uid": {
-        ".read":  "auth != null",
-        ".write": "auth != null && auth.uid === $uid"
-      }
-    },
-    "admins": { ".read": "auth != null", ".write": false }
-  }
-}
-```
+### Firestore rules additions
+- `library/{type}/{id}`: read = signed-in, write = admin.
+- `users/{uid}/notifications/{id}`: owner read/update/delete; admin create.
+- `users/{uid}/libraryOptIns/{id}`: owner full access; admin read.
 
-I'll add a short `SECURITY.md` explaining how to deploy these (firebase CLI commands).
+### Admin UI (`/admin/content`)
+- Tabs: **Workout Library** | **Meal Plan Library**.
+- Each tab: list of plans (real-time), "Create plan" dialog (title, description, days, exercises/meals JSON-friendly form), Edit, Delete.
+- "Publish" toggle (`status: draft|published`). Only published plans appear to users.
+- On publish: write a notification to **every** active user OR to a chosen subset (defaults to "all users"); checkbox "Notify users now".
 
-## 3. Admin page
+### User UX
+- New `/library` page (linked in sidebar): shows published plans; "Add to my plans" button.
+- Accepting writes the opt-in doc + clones the plan into the user's own `workoutPlans` / `mealPlans` so the existing pages keep working unchanged.
+- `NotificationCenter` already exists — surfaces the new "New plan available" alerts with a CTA that opens `/library`.
 
-Routes: `/admin` (guarded by `AdminRoute` wrapper that checks `admins/{uid}` doc).
+### Activity log
+Add `library.plan.publish`, `library.plan.optIn`, `library.plan.delete` action types.
 
-**Layout:** sidebar + main content, sub-routes:
-- `/admin` — Overview dashboard (KPIs: total users, signups last 7d, active workouts, errors logged, API calls used today)
-- `/admin/users` — User table with search/filter, suspend/delete, role assignment (admin/moderator/staff/readonly), "impersonate" link (loads that uid's data read-only into a viewer; we won't actually swap auth tokens — too risky — instead a read-only "view as" mode)
-- `/admin/content` — CRUD for announcements + curated workout templates + featured recipes (saved to `siteSettings/featured`)
-- `/admin/activity` — Activity log table (filter by user, action, date), CSV export
-- `/admin/announcements` — Compose + send in-app banner; writes to `announcements/{id}` which the user navbar listens to and surfaces in the existing NotificationCenter (replaces the "send email to all users" feature, which would need a backend)
-- `/admin/support` — Support ticket inbox; users open tickets from a new "Help" link in Settings; admins reply inline (thread stored in `supportTickets/{id}/messages`)
-- `/admin/settings` — Site settings (logo, brand colors saved to `siteSettings/branding`), feature flags toggle (`featureFlags/{name}` → readable by client, gates routes/components)
-- `/admin/reports` — Charts: signups over time, workout volume, API usage (Spoonacular counter), top features. Export CSV.
+## 5. Files touched
 
-**Replacements / removals (since they don't fit a Firebase-only stack):**
-- "Email logs / bounces" → removed (no email service wired). Replaced with **In-app announcement log** showing read-rate.
-- "Backup & restore" → replaced with **Export user data** (download a uid's Firestore subtree as JSON) + **Bulk JSON export** for admins.
-- "Payment failures / Integrations API keys UI" → removed (no payment system). Replaced with **API quota monitor** (Spoonacular daily/monthly counter, RapidAPI status).
-- "A/B test controls" → folded into **Feature flags** (single rollout %).
-- "Real impersonation" → **Read-only "View as user"** mode (safer; no token swap).
+| File | Change |
+|---|---|
+| `src/lib/firebase.ts` | bucket via env, default to `firebasestorage.app` |
+| `.env.example` | already has var, document new value |
+| `src/contexts/AuthContext.tsx` | expose `needsOnboarding` |
+| `src/App.tsx` | OnboardingGate + replace navigations |
+| `src/pages/Auth.tsx` | `navigate(..., {replace:true})` |
+| `src/pages/Onboarding.tsx` | compute + store targets, summary step |
+| `src/lib/nutrition.ts` | new — formulas |
+| `src/pages/Nutrition.tsx` | read `calorieTarget` from profile |
+| `src/pages/Settings.tsx` | cache-buster on avatar URL |
+| `firestore.rules` | library + notifications + opt-ins |
+| `storage.rules` | unchanged content, just redeploy |
+| `src/pages/admin/AdminContent.tsx` | full rewrite — library CRUD + publish |
+| `src/pages/Library.tsx` | new — browse + opt-in |
+| `src/components/layout/Navbar.tsx` | add "Library" link |
+| `src/lib/activity.ts` | new action types |
 
-**Bootstrapping the first admin:** Firestore doc `admins/{yourUid}` created manually via the Firebase console (one-line instruction in SECURITY.md), since rules forbid self-promotion.
+## 6. After I implement
 
-**Activity logging helper:** new `src/lib/activity.ts` with `logActivity(action, meta)` that writes to `activityLogs/{autoId}` — called from key flows (login, workout complete, plan created, admin actions).
+You must:
+1. Verify the bucket name in Firebase Console → Storage and tell me if it's `appspot.com` or `firebasestorage.app` (I'll default to the new format).
+2. Publish updated `firestore.rules` and `storage.rules` in Firebase Console.
+3. Add "Storage" → set rules → publish if you haven't yet enabled Storage at all.
 
-## 4. Offline mode
-
-Two layers:
-
-**A. Firestore offline persistence**
-- Update `src/lib/firebase.ts` to use `initializeFirestore` with `persistentLocalCache({ tabManager: persistentMultipleTabManager() })`. This caches reads/writes locally and replays mutations when back online.
-
-**B. App-shell PWA + offline UX**
-- Add Vite plugin `vite-plugin-pwa` configured with Workbox to precache the app shell, and runtime-cache exercise GIFs / Spoonacular responses (StaleWhileRevalidate).
-- Add `public/manifest.webmanifest` + icons (reuse existing logo).
-- New `src/hooks/useOnline.ts` listening to `navigator.onLine` + `online`/`offline` events.
-- Global `<OfflineBanner />` mounted in `App.tsx` showing "You're offline — changes will sync when you reconnect."
-- Disable network-only actions (Spoonacular search, recipe lookup) when offline with a tooltip; allow viewing cached content, logging workouts, editing plans.
-- Settings page: toggle "Enable offline mode" + "Clear offline cache" button.
-
-## 5. File-level changes (technical summary)
-
-**New files**
-- `.env.example`, `firestore.rules`, `storage.rules`, `database.rules.json`, `SECURITY.md`
-- `src/lib/activity.ts`, `src/lib/admin.ts` (helpers: isAdmin, listUsers, etc.)
-- `src/hooks/useAdmin.ts`, `src/hooks/useOnline.ts`, `src/hooks/useFeatureFlag.ts`
-- `src/components/admin/AdminLayout.tsx`, `AdminRoute.tsx`, `OfflineBanner.tsx`
-- `src/pages/admin/AdminOverview.tsx`, `AdminUsers.tsx`, `AdminContent.tsx`, `AdminActivity.tsx`, `AdminAnnouncements.tsx`, `AdminSupport.tsx`, `AdminSettings.tsx`, `AdminReports.tsx`
-- `src/pages/Support.tsx` (user-facing ticket form, linked from Settings)
-
-**Edited files**
-- `src/lib/firebase.ts` — env vars + persistent cache
-- `src/lib/spoonacular.ts`, `src/lib/api.ts` — env vars
-- `src/App.tsx` — add `/admin/*` routes, OfflineBanner, mount announcements listener
-- `src/components/layout/Navbar.tsx` — show "Admin" link if `useAdmin()` true; surface announcements in NotificationCenter
-- `src/pages/Settings.tsx` — Help/Support link, offline toggle
-- `vite.config.ts` — add `vite-plugin-pwa`
-- `.gitignore` — add `.env`
-- `package.json` — add `vite-plugin-pwa`, `recharts` (already present? will check), `papaparse` for CSV export
-
-## 6. What I need from you
-
-After approval and implementation:
-1. Add the env values in **Workspace Settings** (I'll list the exact names).
-2. In Firebase console, create `admins/{yourUid}` doc with `{ role: "admin", createdAt: <timestamp> }` so you become the first admin.
-3. Deploy the three rules files via Firebase console or `firebase deploy --only firestore:rules,storage,database`.
-
-## 7. Honest limitations
-- **Spoonacular/RapidAPI keys** will still be reachable from the bundle until proxied through a backend function. Moving them to env keeps them out of git but does not hide them from a determined user. I'll flag a follow-up to proxy via Lovable Cloud / a Cloud Function.
-- **Email sending, real impersonation, scheduled backups** require a backend — replaced with the alternatives above.
-- **Realtime Database rules** are included as requested but the app doesn't currently use RTDB; rules are a safe-default deny.
+Reply **approve** to implement, or tell me what to drop/add.
