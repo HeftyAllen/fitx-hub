@@ -31,7 +31,7 @@ export default function Library() {
 
   useEffect(() => {
     const q = query(
-      collection(db, "library", tab),
+      collection(db, `library_${tab}`),
       where("status", "==", "published"),
       orderBy("createdAt", "desc"),
     );

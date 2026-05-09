@@ -34,7 +34,7 @@ export default function AdminContent() {
   const [daysText, setDaysText] = useState("");
 
   useEffect(() => {
-    const q = query(collection(db, "library", tab), orderBy("createdAt", "desc"));
+    const q = query(collection(db, `library_${tab}`), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       setPlans(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
     }, (err) => {
@@ -48,7 +48,7 @@ export default function AdminContent() {
     const days = daysText.split("\n").map(s => s.trim()).filter(Boolean);
     const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     try {
-      await setDoc(doc(db, "library", tab, id), {
+      await setDoc(doc(db, `library_${tab}`, id), {
         title: title.trim(),
         description: desc.trim() || null,
         days,
@@ -67,7 +67,7 @@ export default function AdminContent() {
   async function togglePublish(p: LibraryPlan) {
     const next = p.status === "published" ? "draft" : "published";
     try {
-      await setDoc(doc(db, "library", tab, p.id), { status: next, publishedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, `library_${tab}`, p.id), { status: next, publishedAt: serverTimestamp() }, { merge: true });
       if (next === "published") logActivity("library.plan.publish", { id: p.id, type: tab });
       toast.success(next === "published" ? "Published — visible in Library" : "Unpublished");
     } catch (e: any) {
@@ -77,7 +77,7 @@ export default function AdminContent() {
 
   async function remove(p: LibraryPlan) {
     if (!confirm(`Delete "${p.title}"?`)) return;
-    await deleteDoc(doc(db, "library", tab, p.id));
+    await deleteDoc(doc(db, `library_${tab}`, p.id));
     logActivity("library.plan.delete", { id: p.id, type: tab });
     toast.success("Deleted");
   }
