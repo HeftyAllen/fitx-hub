@@ -201,16 +201,47 @@ export default function Onboarding() {
               )}
 
               {step === 6 && (
-                <div className="flex flex-col items-center gap-6 text-center py-8">
-                  <motion.div
-                    className="w-20 h-20 rounded-full gradient-bg flex items-center justify-center"
-                    animate={{ scale: [0.8, 1.1, 1] }}
-                    transition={{ duration: 0.5 }}
-                  >
-                    <Check size={40} className="text-primary-foreground" />
-                  </motion.div>
-                  <h2 className="text-2xl font-heading font-bold gradient-text">You're all set!</h2>
-                  <p className="text-muted-foreground">Let's start your fitness journey</p>
+                <div className="space-y-5">
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <motion.div
+                      className="w-16 h-16 rounded-full gradient-bg flex items-center justify-center"
+                      animate={{ scale: [0.8, 1.1, 1] }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      <Check size={32} className="text-primary-foreground" />
+                    </motion.div>
+                    <h2 className="text-2xl font-heading font-bold gradient-text">Your personalised plan</h2>
+                    <p className="text-muted-foreground text-sm">Calibrated to your goal of <span className="text-foreground font-semibold">{profile.goalType || "fitness"}</span></p>
+                  </div>
+
+                  <div className="rounded-2xl bg-secondary/40 border border-border p-5 flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-primary/15 flex items-center justify-center">
+                      <Flame className="text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Daily calories</p>
+                      <p className="text-3xl font-black tabular-nums">{targets.calorieTarget}</p>
+                      <p className="text-[11px] text-muted-foreground">BMR {targets.bmr} · TDEE {targets.tdee}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "Protein", value: targets.protein, color: "#06b6d4", icon: Beef },
+                      { label: "Carbs",   value: targets.carbs,   color: "#f59e0b", icon: Wheat },
+                      { label: "Fat",     value: targets.fat,     color: "#8b5cf6", icon: Droplets },
+                    ].map(m => (
+                      <div key={m.label} className="rounded-2xl bg-secondary/40 border border-border p-3 text-center">
+                        <m.icon size={16} style={{ color: m.color }} className="mx-auto mb-1" />
+                        <p className="text-lg font-black tabular-nums" style={{ color: m.color }}>{m.value}g</p>
+                        <p className="text-[10px] text-muted-foreground">{m.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    You can fine-tune these any time in Settings.
+                  </p>
                 </div>
               )}
             </motion.div>
