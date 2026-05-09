@@ -31,7 +31,7 @@ export default function Library() {
 
   useEffect(() => {
     const q = query(
-      collection(db, "library", tab, "items" as any).withConverter ? collection(db, "library", tab) : collection(db, "library", tab),
+      collection(db, "library", tab),
       where("status", "==", "published"),
       orderBy("createdAt", "desc"),
     );
