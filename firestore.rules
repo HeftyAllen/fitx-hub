@@ -51,8 +51,13 @@ service cloud.firestore {
       allow create, update: if isAdmin();
     }
 
-    // ── Global content library — admin authored, signed-in users read.
-    match /library/{type}/{planId} {
+    // ── Global content library (workouts + meal plans) — admin authored,
+    //    signed-in users read.
+    match /library_workouts/{planId} {
+      allow read:  if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+    match /library_mealPlans/{planId} {
       allow read:  if isSignedIn();
       allow create, update, delete: if isAdmin();
     }
