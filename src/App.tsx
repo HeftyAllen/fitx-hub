@@ -35,32 +35,53 @@ import AdminAnnouncements from "./pages/admin/AdminAnnouncements";
 import AdminSupport from "./pages/admin/AdminSupport";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminReports from "./pages/admin/AdminReports";
+import Library from "./pages/Library";
 
 const queryClient = new QueryClient();
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+const Spinner = () => (
+  <div className="min-h-screen bg-background flex items-center justify-center">
+    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+  </div>
+);
+
+function ProtectedRoute({ children, allowOnboarding = false }: { children: React.ReactNode; allowOnboarding?: boolean }) {
+  const { user, loading, needsOnboarding } = useAuth();
+  if (loading) return <Spinner />;
   if (!user) return <Navigate to="/" replace />;
+  if (needsOnboarding && !allowOnboarding) return <Navigate to="/onboarding" replace />;
   return <>{children}</>;
 }
 
 function DashboardGate() {
   const { isAdmin, loading } = useAdmin();
-  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return <Spinner />;
   if (isAdmin) return <Navigate to="/admin" replace />;
   return <Dashboard />;
 }
 
-function AppRoutes() {
-  const { user } = useAuth();
+function RootRedirect() {
+  const { user, loading, needsOnboarding } = useAuth();
+  if (loading) return <Spinner />;
+  if (!user) return <Landing />;
+  if (needsOnboarding) return <Navigate to="/onboarding" replace />;
+  return <Navigate to="/dashboard" replace />;
+}
 
+function AuthRedirect() {
+  const { user, loading, needsOnboarding } = useAuth();
+  if (loading) return <Spinner />;
+  if (!user) return <Auth />;
+  return <Navigate to={needsOnboarding ? "/onboarding" : "/dashboard"} replace />;
+}
+
+function AppRoutes() {
   return (
     <AnimatePresence mode="wait">
       <Routes>
-        <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Landing />} />
-        <Route path="/auth" element={user ? <Navigate to="/dashboard" replace /> : <Auth />} />
-        <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+        <Route path="/" element={<RootRedirect />} />
+        <Route path="/auth" element={<AuthRedirect />} />
+        <Route path="/onboarding" element={<ProtectedRoute allowOnboarding><Onboarding /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardGate /></ProtectedRoute>} />
         <Route path="/workout-planner" element={<ProtectedRoute><WorkoutPlanner /></ProtectedRoute>} />
         <Route path="/workout-session" element={<ProtectedRoute><WorkoutSession /></ProtectedRoute>} />
@@ -74,6 +95,7 @@ function AppRoutes() {
         <Route path="/rewards" element={<ProtectedRoute><Rewards /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
+        <Route path="/library" element={<ProtectedRoute><Library /></ProtectedRoute>} />
 
         {/* Admin */}
         <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
