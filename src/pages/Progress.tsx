@@ -189,8 +189,11 @@ export default function Progress() {
     if (!newWeight || !user) return;
     setLoggingWeight(true);
     try {
+      const entered = parseFloat(newWeight);
+      const isImperialInput = userProfile?.units === "imperial";
+      const kg = isImperialInput ? +(entered / 2.20462).toFixed(2) : entered;
       await addDoc(collection(db, "users", user.uid, "weightLogs"), {
-        weight: parseFloat(newWeight),
+        weight: kg,
         note: newWeightNote,
         date: Timestamp.now(),
       });
