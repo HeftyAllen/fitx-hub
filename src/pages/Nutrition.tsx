@@ -24,6 +24,10 @@ import {
   doc, setDoc, getDoc, collection, getDocs, addDoc, deleteDoc, Timestamp,
 } from "firebase/firestore";
 import { format, subDays, addDays, startOfWeek } from "date-fns";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import { computeTargets } from "@/lib/nutrition";
 
 /* ────────────────── CONSTANTS ────────────────── */
 const TABS = ["Diary", "Recipes", "Meal Plan", "Barcode Scan"] as const;
