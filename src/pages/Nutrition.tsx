@@ -723,15 +723,109 @@ function DiaryTab() {
           </p>
         </div>
 
-        <button className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-secondary/50 border border-border hover:border-primary/30 transition-all text-sm font-semibold group">
-          <div className="flex items-center gap-2">
-            <Target size={15} className="text-primary" />
-            Adjust Nutrition Goals
-          </div>
-          <ArrowRight size={14} className="text-muted-foreground group-hover:translate-x-1 transition-transform" />
-        </button>
+        <AdjustGoalsButton />
       </div>
     </div>
+  );
+}
+
+/* ────────────────── ADJUST GOALS DIALOG ────────────────── */
+function AdjustGoalsButton() {
+  const { user, userProfile, refreshProfile } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [vals, setVals] = useState({
+    calorieTarget: MACRO_GOALS.calories,
+    protein: MACRO_GOALS.protein,
+    carbs: MACRO_GOALS.carbs,
+    fat: MACRO_GOALS.fat,
+    fiber: MACRO_GOALS.fiber,
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setVals({
+      calorieTarget: MACRO_GOALS.calories,
+      protein: MACRO_GOALS.protein,
+      carbs: MACRO_GOALS.carbs,
+      fat: MACRO_GOALS.fat,
+      fiber: MACRO_GOALS.fiber,
+    });
+  }, [open]);
+
+  const reset = () => {
+    const t = computeTargets((userProfile as any) || {});
+    setVals({
+      calorieTarget: t.calorieTarget, protein: t.protein,
+      carbs: t.carbs, fat: t.fat, fiber: t.fiber,
+    });
+    toast.success("Reset to recommended targets");
+  };
+
+  const save = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "users", user.uid, "profile", "data"), vals, { merge: true });
+      MACRO_GOALS = { calories: vals.calorieTarget, protein: vals.protein, carbs: vals.carbs, fat: vals.fat, fiber: vals.fiber };
+      await refreshProfile();
+      toast.success("Goals updated");
+      setOpen(false);
+    } catch {
+      toast.error("Failed to save");
+    } finally { setSaving(false); }
+  };
+
+  const fields: { key: keyof typeof vals; label: string; unit: string }[] = [
+    { key: "calorieTarget", label: "Daily Calories", unit: "cal" },
+    { key: "protein", label: "Protein", unit: "g" },
+    { key: "carbs",   label: "Carbs",   unit: "g" },
+    { key: "fat",     label: "Fat",     unit: "g" },
+    { key: "fiber",   label: "Fiber",   unit: "g" },
+  ];
+
+  return (
+    <>
+      <button onClick={() => setOpen(true)}
+        className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-secondary/50 border border-border hover:border-primary/30 transition-all text-sm font-semibold group">
+        <div className="flex items-center gap-2">
+          <Target size={15} className="text-primary" />
+          Adjust Nutrition Goals
+        </div>
+        <ArrowRight size={14} className="text-muted-foreground group-hover:translate-x-1 transition-transform" />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adjust Nutrition Goals</DialogTitle>
+            <DialogDescription>Override the targets calculated from onboarding.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {fields.map(f => (
+              <div key={f.key} className="flex items-center gap-3">
+                <label className="text-sm font-medium flex-1">{f.label}</label>
+                <input type="number" min={0} value={vals[f.key]}
+                  onChange={e => setVals(v => ({ ...v, [f.key]: Number(e.target.value) }))}
+                  className="w-24 px-3 py-2 rounded-lg bg-secondary text-sm text-right focus:outline-none focus:ring-1 focus:ring-primary/50" />
+                <span className="text-xs text-muted-foreground w-6">{f.unit}</span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="flex-row justify-between gap-2 sm:justify-between">
+            <button onClick={reset} className="px-3 py-2 rounded-lg bg-secondary text-xs font-semibold text-muted-foreground hover:text-foreground">
+              Reset to recommended
+            </button>
+            <div className="flex gap-2">
+              <button onClick={() => setOpen(false)} className="px-3 py-2 rounded-lg bg-secondary text-sm">Cancel</button>
+              <button onClick={save} disabled={saving}
+                className="px-4 py-2 rounded-lg gradient-bg text-primary-foreground text-sm font-bold disabled:opacity-60">
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
