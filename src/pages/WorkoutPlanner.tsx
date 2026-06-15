@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Dumbbell, Play, Trash2, Copy, Edit2, Search, X, ChevronDown, ChevronUp,
   Clock, Target, Heart, Info, Filter, Layers, Calendar as CalIcon, LayoutGrid, List,
-  Zap, GripVertical, BookOpen
+  Zap, GripVertical, BookOpen, Library as LibraryIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useChallenges } from "@/hooks/useChallenges";
+import { LibrarySection } from "@/pages/Library";
 
 interface ExerciseInPlan {
   id: string;
@@ -67,7 +68,7 @@ export default function WorkoutPlanner() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editingPlan, setEditingPlan] = useState<WorkoutPlan | null>(null);
-  const [activeTab, setActiveTab] = useState<"plans" | "library">("plans");
+  const [activeTab, setActiveTab] = useState<"plans" | "library" | "coach">("plans");
   const { challenges } = useChallenges();
 
   useEffect(() => { if (user) fetchPlans(); }, [user]);
@@ -148,6 +149,7 @@ export default function WorkoutPlanner() {
         <div className="flex gap-1 p-1 bg-secondary/40 rounded-2xl w-fit border border-white/[0.05]">
           {[
             { id: "plans" as const, label: "My Plans", icon: LayoutGrid },
+            { id: "coach" as const, label: "Coach Library", icon: LibraryIcon },
             { id: "library" as const, label: "Exercise Library", icon: BookOpen },
           ].map(tab => (
             <button
@@ -177,6 +179,10 @@ export default function WorkoutPlanner() {
                 onStart={(p) => navigate("/workout-session", { state: { plan: p } })}
                 onCreate={() => setShowCreate(true)}
               />
+            </motion.div>
+          ) : activeTab === "coach" ? (
+            <motion.div key="coach" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+              <LibrarySection defaultTab="workouts" showTabs={false} />
             </motion.div>
           ) : (
             <motion.div key="library" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
