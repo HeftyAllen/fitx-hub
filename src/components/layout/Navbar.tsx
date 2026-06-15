@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo.png";
 import {
   LayoutDashboard, Dumbbell, UtensilsCrossed, TrendingUp,
-  Trophy, Calendar, Award, Settings, LogOut, Bell, ShieldCheck, Library as LibraryIcon,
+  Trophy, Calendar, Award, Settings, LogOut, Bell, ShieldCheck,
 } from "lucide-react";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
 import { useNotifications, type NotifCategory } from "@/hooks/useNotifications";
@@ -14,7 +14,6 @@ const navLinks = [
   { to: "/dashboard",       label: "Dashboard", icon: LayoutDashboard },
   { to: "/workout-planner", label: "Workout",   icon: Dumbbell },
   { to: "/nutrition",       label: "Nutrition", icon: UtensilsCrossed },
-  { to: "/library",         label: "Library",   icon: LibraryIcon },
   { to: "/progress",        label: "Progress",  icon: TrendingUp },
   { to: "/records",         label: "Records",   icon: Trophy },
   { to: "/calendar",        label: "Calendar",  icon: Calendar },

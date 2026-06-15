@@ -18,7 +18,6 @@ const GENDERS = ["Male", "Female", "Non-binary", "Prefer not to say"];
 
 interface ProfileData {
   name: string;
-  bio: string;
   photoURL: string;
   gender: string;
   dob: string;
@@ -38,7 +37,6 @@ interface ProfileData {
 
 const defaultProfile: ProfileData = {
   name: "",
-  bio: "",
   photoURL: "",
   gender: "",
   dob: "",
@@ -315,23 +313,10 @@ export default function Settings() {
               </Field>
             </div>
 
-            <Field label="Bio">
-              <textarea
-                value={profile.bio}
-                onChange={e => set("bio")(e.target.value)}
-                placeholder="A short bio — your training style, goals, favourite lift..."
-                rows={3}
-                maxLength={200}
-                className="w-full px-4 py-3 rounded-xl bg-secondary border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm transition-all resize-none"
-              />
-              <p className="text-xs text-muted-foreground text-right">{profile.bio.length}/200</p>
-            </Field>
-
             <div className="flex justify-end">
               <SaveButton
                 onClick={() => saveSection("profile", setProfileSaving, {
                   name: profile.name,
-                  bio: profile.bio,
                   gender: profile.gender,
                   photoURL: profile.photoURL,
                 })}
