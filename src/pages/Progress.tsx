@@ -137,6 +137,26 @@ export default function Progress() {
     ]).finally(() => setLoadingAll(false));
   }, [user]);
 
+  // Auto-seed a starting weight entry from onboarding if the user has none yet.
+  useEffect(() => {
+    if (!user || !userProfile) return;
+    const profWeight = parseFloat(String((userProfile as any).weight ?? ""));
+    if (!profWeight || isNaN(profWeight)) return;
+    if (weightLogs.length > 0) return;
+    (async () => {
+      try {
+        await addDoc(collection(db, "users", user.uid, "weightLogs"), {
+          weight: profWeight,
+          note: "Starting weight (from onboarding)",
+          date: Timestamp.now(),
+          seeded: true,
+        });
+        await loadWeightLogs();
+      } catch (e) { console.warn("seed weight failed", e); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, userProfile, weightLogs.length]);
+
   async function loadWeightLogs() {
     const snap = await getDocs(query(collection(db, "users", user!.uid, "weightLogs"), orderBy("date", "asc")));
     setWeightLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
