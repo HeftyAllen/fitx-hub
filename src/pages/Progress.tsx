@@ -270,6 +270,9 @@ export default function Progress() {
   }
 
   /* ──────────────── CHART DATA ──────────────── */
+  const isImperial = userProfile?.units === "imperial";
+  const toDisplay = (kg: number) => isImperial ? +(kg * 2.20462).toFixed(1) : +Number(kg).toFixed(1);
+
   function getFilteredWeightData() {
     const now = Date.now();
     const cutoffs: Record<string, number> = {
@@ -281,15 +284,17 @@ export default function Progress() {
       .filter(w => (w.date?.toMillis?.() ?? 0) >= cutoff)
       .map(w => ({
         date: new Date(w.date?.toMillis?.() ?? Date.now()).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
-        weight: w.weight,
+        weight: toDisplay(w.weight),
       }));
   }
 
   /* ──────────────── DERIVED STATS ──────────────── */
-  const currentWeight = weightLogs.length ? weightLogs[weightLogs.length - 1].weight : null;
-  const startWeight = weightLogs.length ? weightLogs[0].weight : null;
-  const weightChange = currentWeight && startWeight ? +(currentWeight - startWeight).toFixed(1) : null;
-  const units = userProfile?.units === "imperial" ? "lbs" : "kg";
+  const currentWeightRaw = weightLogs.length ? weightLogs[weightLogs.length - 1].weight : null;
+  const startWeightRaw   = weightLogs.length ? weightLogs[0].weight : null;
+  const currentWeight = currentWeightRaw !== null ? toDisplay(currentWeightRaw) : null;
+  const startWeight   = startWeightRaw   !== null ? toDisplay(startWeightRaw)   : null;
+  const weightChange  = currentWeight !== null && startWeight !== null ? +(currentWeight - startWeight).toFixed(1) : null;
+  const units = isImperial ? "lbs" : "kg";
   const chartData = getFilteredWeightData();
 
   const latestMeasure = measurements[0];
