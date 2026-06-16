@@ -1164,11 +1164,14 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
   const [product, setProduct] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const controlsRef = useRef<any>(null);
 
   const stopCamera = () => {
-    streamRef.current?.getTracks().forEach(t => t.stop());
-    streamRef.current = null;
+    try { controlsRef.current?.stop?.(); } catch {}
+    controlsRef.current = null;
+    const stream = videoRef.current?.srcObject as MediaStream | null;
+    stream?.getTracks().forEach(t => t.stop());
+    if (videoRef.current) videoRef.current.srcObject = null;
     setScanning(false);
   };
 
@@ -1177,25 +1180,30 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
   const startCamera = async () => {
     setError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
+      const { BrowserMultiFormatReader } = await import("@zxing/browser");
+      const reader = new BrowserMultiFormatReader();
       setScanning(true);
-      toast.info("Camera active — type the barcode below or use your scanner");
-    } catch {
-      setError("Camera unavailable. You can still type a UPC manually.");
+      const controls = await reader.decodeFromVideoDevice(undefined, videoRef.current!, (result) => {
+        if (result) {
+          const code = result.getText();
+          setUpc(code);
+          toast.success(`Detected: ${code}`);
+          stopCamera();
+          setTimeout(() => doLookup(code), 100);
+        }
+      });
+      controlsRef.current = controls;
+    } catch (e: any) {
+      setError(e?.message?.includes("Permission") ? "Camera permission denied" : "Camera unavailable. You can still type a UPC manually.");
+      setScanning(false);
     }
   };
 
-  const lookup = async () => {
-    if (!upc.trim()) return;
+  const doLookup = async (code: string) => {
     setError(null);
     setProduct(null);
     try {
-      const data = await lookupBarcode(upc.trim());
+      const data = await lookupBarcode(code.trim());
       if (!data || data.status === "failure") { setError("Product not found"); return; }
       setProduct(data);
     } catch (e: any) {
@@ -1203,6 +1211,9 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
       else setError("Lookup failed");
     }
   };
+
+  const lookup = () => upc.trim() && doLookup(upc.trim());
+
 
   const logProduct = (mealId: string) => {
     if (!product) return;
