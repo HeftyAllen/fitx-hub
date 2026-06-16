@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { SiteSettingsProvider } from "@/contexts/SiteSettingsContext";
 import { AnimatePresence } from "framer-motion";
 import OfflineBanner from "@/components/OfflineBanner";
 import AdminInviteBanner from "@/components/AdminInviteBanner";
@@ -122,9 +123,11 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <OfflineBanner />
-          <AdminInviteBanner />
-          <AppRoutes />
+          <SiteSettingsProvider>
+            <OfflineBanner />
+            <AdminInviteBanner />
+            <AppRoutes />
+          </SiteSettingsProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

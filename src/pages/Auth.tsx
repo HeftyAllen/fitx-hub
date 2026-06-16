@@ -7,6 +7,7 @@ import { auth } from "@/lib/firebase";
 import { motion } from "framer-motion";
 import logo from "@/assets/logo.png";
 import { ArrowLeft } from "lucide-react";
+import { logActivity } from "@/lib/activity";
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
@@ -43,9 +44,11 @@ export default function Auth() {
     try {
       if (isSignUp) {
         await signUp(email, password);
+        logActivity("auth.signup", { email });
         navigate("/onboarding", { replace: true });
       } else {
         await signIn(email, password);
+        logActivity("auth.login", { email });
         const uid = auth.currentUser?.uid;
         if (uid) await routeAfterAuth(uid, auth.currentUser?.email);
         else navigate("/dashboard", { replace: true });
@@ -61,6 +64,7 @@ export default function Auth() {
     setError("");
     try {
       await signInWithGoogle();
+      logActivity("auth.login", { method: "google" });
       const uid = auth.currentUser?.uid;
       if (uid) await routeAfterAuth(uid, auth.currentUser?.email);
       else navigate("/dashboard", { replace: true });
