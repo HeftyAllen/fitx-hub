@@ -44,9 +44,11 @@ export default function Auth() {
     try {
       if (isSignUp) {
         await signUp(email, password);
+        logActivity("auth.signup", { email });
         navigate("/onboarding", { replace: true });
       } else {
         await signIn(email, password);
+        logActivity("auth.login", { email });
         const uid = auth.currentUser?.uid;
         if (uid) await routeAfterAuth(uid, auth.currentUser?.email);
         else navigate("/dashboard", { replace: true });
