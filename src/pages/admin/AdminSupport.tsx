@@ -78,11 +78,22 @@ export default function AdminSupport() {
     await updateDoc(doc(db, "supportTickets", activeId), { status: s });
   }
 
+  const openCount = tickets.filter(t => t.status === "open").length;
+  const pendingCount = tickets.filter(t => t.status === "pending").length;
+  const closedCount = tickets.filter(t => t.status === "closed").length;
+
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl font-bold">Support</h1>
-        <p className="text-sm text-muted-foreground">{tickets.length} tickets</p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold">Support Inbox</h1>
+          <p className="text-sm text-muted-foreground">{tickets.length} total tickets across all users</p>
+        </div>
+        <div className="flex gap-2">
+          <Badge variant="destructive">{openCount} open</Badge>
+          <Badge variant="secondary">{pendingCount} pending</Badge>
+          <Badge variant="outline">{closedCount} closed</Badge>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4">
