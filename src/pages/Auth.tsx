@@ -7,6 +7,7 @@ import { auth } from "@/lib/firebase";
 import { motion } from "framer-motion";
 import logo from "@/assets/logo.png";
 import { ArrowLeft } from "lucide-react";
+import { logActivity } from "@/lib/activity";
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
