@@ -65,7 +65,7 @@ export default function AdminContent() {
         title: t,
         description: (extra.description ?? desc).trim() || null,
         days,
-        imageUrl: extra.imageUrl ?? imageUrl.trim() || null,
+        imageUrl: extra.imageUrl ?? (imageUrl.trim() || null),
         source: extra.source ?? "custom",
         status: statusOverride ?? "draft",
         createdAt: serverTimestamp(),
