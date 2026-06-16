@@ -1452,29 +1452,30 @@ export default function Nutrition() {
         </motion.div>
 
         {/* ── TABS + API USAGE ── */}
-        <div className="flex flex-wrap items-center gap-3 justify-between">
-          <div className="flex items-center gap-1 p-1 bg-secondary rounded-2xl">
-            {TABS.map(tab => {
-              const Icon = TAB_ICONS[tab];
-              const isNew = tab === "Barcode Scan";
-              return (
-                <button key={tab} onClick={() => setActiveTab(tab)}
-                  className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                    activeTab === tab
-                      ? "gradient-bg text-primary-foreground shadow-lg shadow-primary/20"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}>
-                  <Icon size={14} />
-                  <span className="hidden sm:inline">{tab}</span>
-                  <span className="sm:hidden">{tab.split(" ")[0]}</span>
-                  {isNew && (
-                    <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full text-[8px] font-black bg-amber-500 text-amber-950 leading-none">new</span>
-                  )}
-                </button>
-              );
-            })}
+        <div className="flex items-center gap-3 justify-between">
+          <div className="flex-1 min-w-0 -mx-1 px-1 overflow-x-auto scrollbar-hide">
+            <div className="inline-flex items-center gap-1 p-1 bg-secondary rounded-2xl">
+              {TABS.map(tab => {
+                const Icon = TAB_ICONS[tab];
+                const isNew = tab === "Barcode Scan";
+                return (
+                  <button key={tab} onClick={() => setActiveTab(tab)}
+                    className={`relative flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
+                      activeTab === tab
+                        ? "gradient-bg text-primary-foreground shadow-lg shadow-primary/20"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}>
+                    <Icon size={14} />
+                    <span>{tab.split(" ")[0]}</span>
+                    {isNew && (
+                      <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full text-[8px] font-black bg-amber-500 text-amber-950 leading-none">new</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <ApiUsageBadge />
+          <div className="hidden md:block flex-shrink-0"><ApiUsageBadge /></div>
         </div>
 
         {/* ── TAB CONTENT ── */}
