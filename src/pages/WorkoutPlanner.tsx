@@ -722,13 +722,19 @@ function AddToPlanModal({ exercise, plans, onClose, onRefresh }: { exercise: any
 function CreatePlanModal({ existingPlan, onClose, onSave }: {
   existingPlan: WorkoutPlan | null;
   onClose: () => void;
-  onSave: (plan: { name: string; exercises: ExerciseInPlan[]; days: string[] }) => void;
+  onSave: (
+    plan: { name: string; exercises: ExerciseInPlan[]; days: string[] },
+    opts: { syncToCalendar: boolean; syncDays: string[]; weeks: number }
+  ) => void;
 }) {
   const [name, setName] = useState(existingPlan?.name || "");
   const [exercises, setExercises] = useState<ExerciseInPlan[]>(existingPlan?.exercises || []);
   const [days, setDays] = useState<string[]>(existingPlan?.days || []);
   const [showSearch, setShowSearch] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
+  const [syncToCalendar, setSyncToCalendar] = useState(false);
+  const [syncDays, setSyncDays] = useState<string[]>([]);
+  const [weeks, setWeeks] = useState(4);
 
   const addExercise = (ex: ExerciseInPlan) => { setExercises(prev => [...prev, ex]); toast.success(`Added ${ex.name}`); };
   const removeExercise = (idx: number) => { setExercises(prev => prev.filter((_, i) => i !== idx)); };
