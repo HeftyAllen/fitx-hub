@@ -3,7 +3,7 @@ import AppLayout from "@/components/layout/AppLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import {
-  searchRecipes, getRecipeById, searchIngredients,
+  searchRecipes, getRecipeById, searchIngredients, getIngredientInfo,
   generateMealPlan, canGenerateMealPlan,
   getDailyUsage, canMakeRequest,
   getRecentFoods, pushRecentFood, lookupBarcode,
