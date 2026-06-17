@@ -347,12 +347,105 @@ function RecipeDetailModal({ recipe: initialRecipe, onClose, onLogMeal }: {
   );
 }
 
+/* ────────────────── PORTION EDITOR ────────────────── */
+function PortionEditor({ item, mealId, uid, onCancel, onConfirm }: {
+  item: any; mealId: string; uid: string | null;
+  onCancel: () => void; onConfirm: (food: LoggedFood) => void;
+}) {
+  const [amount, setAmount] = useState<number>(100);
+  const [unit, setUnit] = useState<string>("grams");
+  const [units, setUnits] = useState<string[]>(["grams", "oz", "cup", "tbsp", "tsp", "serving"]);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["ingr-info", item.id, amount, unit],
+    queryFn: () => getIngredientInfo(item.id, amount, unit),
+    enabled: !!item.id,
+    staleTime: 24 * 60 * 60 * 1000,
+    retry: false,
+  });
+
+  useEffect(() => {
+    const possible = (data as any)?.possibleUnits as string[] | undefined;
+    if (possible?.length) {
+      setUnits(Array.from(new Set([...possible, "grams", "oz", "cup", "serving"])));
+    }
+  }, [data]);
+
+  const nutrients = (data as any)?.nutrition?.nutrients || [];
+  const cals    = getNutrient(nutrients, "Calories");
+  const protein = getNutrient(nutrients, "Protein");
+  const carbs   = getNutrient(nutrients, "Carbohydrates");
+  const fat     = getNutrient(nutrients, "Fat");
+
+  const confirm = () => {
+    const food: LoggedFood = {
+      id:       String(item.id),
+      name:     item.name,
+      meal:     mealId,
+      image:    item.image ? `https://spoonacular.com/cdn/ingredients_100x100/${item.image}` : undefined,
+      amount, unit,
+      calories: cals, protein, carbs, fat,
+    };
+    onConfirm(food);
+    pushRecentFood(uid, food);
+  };
+
+  return (
+    <div className="p-4 space-y-3 border-t border-border bg-secondary/20">
+      <div className="flex items-center gap-3">
+        {item.image && (
+          <img src={`https://spoonacular.com/cdn/ingredients_100x100/${item.image}`} alt="" className="w-10 h-10 rounded-lg object-cover" />
+        )}
+        <div className="min-w-0">
+          <p className="text-sm font-bold capitalize truncate">{item.name}</p>
+          <p className="text-[10px] text-muted-foreground">Edit portion to compute calories & macros</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-[1fr_1.3fr] gap-2">
+        <input type="number" min={1} value={amount}
+          onChange={e => setAmount(Math.max(1, Number(e.target.value) || 1))}
+          className="px-3 py-2 rounded-lg bg-card text-sm font-bold focus:outline-none focus:ring-1 focus:ring-primary/50" />
+        <select value={unit} onChange={e => setUnit(e.target.value)}
+          className="px-3 py-2 rounded-lg bg-card text-sm font-medium focus:outline-none focus:ring-1 focus:ring-primary/50">
+          {units.map(u => <option key={u} value={u}>{u}</option>)}
+        </select>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {[
+          { label: "Cal",  value: cals,    color: "#2563eb", suffix: "" },
+          { label: "P",    value: protein, color: "#06b6d4", suffix: "g" },
+          { label: "C",    value: carbs,   color: "#f59e0b", suffix: "g" },
+          { label: "F",    value: fat,     color: "#8b5cf6", suffix: "g" },
+        ].map(s => (
+          <div key={s.label} className="text-center py-1.5 rounded-lg bg-card">
+            <p className="text-sm font-black tabular-nums" style={{ color: s.color }}>
+              {isLoading ? "…" : `${s.value}${s.suffix}`}
+            </p>
+            <p className="text-[9px] text-muted-foreground uppercase">{s.label}</p>
+          </div>
+        ))}
+      </div>
+      {error && (
+        <p className="text-[10px] text-destructive">Couldn't load nutrition for that unit — try grams.</p>
+      )}
+      <div className="flex gap-2">
+        <button onClick={onCancel} className="flex-1 py-2 rounded-lg bg-secondary text-xs font-semibold">Back</button>
+        <button onClick={confirm} disabled={isLoading || cals === 0}
+          className="flex-1 py-2 rounded-lg gradient-bg text-primary-foreground text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
+          <Plus size={12} /> Log {cals || 0} cal
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ────────────────── FOOD SEARCH PANEL ────────────────── */
-function FoodSearchPanel({ meal, uid, onClose, onAdd }: {
-  meal: string; uid: string | null; onClose: () => void; onAdd: (item: LoggedFood) => void;
+function FoodSearchPanel({ meal, mealId, uid, onClose, onAdd }: {
+  meal: string; mealId: string; uid: string | null; onClose: () => void; onAdd: (item: LoggedFood) => void;
 }) {
   const [query, setQuery] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
+  const [pending, setPending] = useState<any | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recent = useMemo(() => getRecentFoods(uid, 8), [uid]);
 
@@ -370,47 +463,51 @@ function FoodSearchPanel({ meal, uid, onClose, onAdd }: {
     retry: false,
   });
 
-  const limitReached = error?.message === "DAILY_LIMIT_REACHED";
+  const limitReached = (error as any)?.message === "DAILY_LIMIT_REACHED";
 
-  const handleAdd = (item: any, isRecent = false) => {
-    const food: LoggedFood = isRecent ? {
-      ...item, meal,
-    } : {
-      id:       String(item.id),
-      name:     item.name,
-      meal,
-      image:    item.image ? `https://spoonacular.com/cdn/ingredients_100x100/${item.image}` : undefined,
-      calories: item.calories || 0,
-      protein:  item.protein  || 0,
-      carbs:    item.carbs    || 0,
-      fat:      item.fat      || 0,
-    };
-    onAdd(food);
-    pushRecentFood(uid, food);
+  const addRecent = (r: RecentFood) => {
+    onAdd({
+      id: String(r.id), name: r.name, meal: mealId, image: r.image,
+      calories: r.calories || 0, protein: r.protein || 0,
+      carbs: r.carbs || 0, fat: r.fat || 0,
+      amount: r.amount, unit: r.unit,
+    });
+    pushRecentFood(uid, r);
     onClose();
   };
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-      className="absolute inset-x-0 top-full mt-2 z-20 bg-card border border-border rounded-2xl shadow-2xl shadow-black/40 overflow-hidden">
-      <div className="p-3 border-b border-border">
-        <div className="relative">
+      className="absolute inset-x-0 top-full mt-2 z-30 bg-card border border-border rounded-2xl shadow-2xl shadow-black/40 overflow-hidden"
+      onMouseDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}>
+      <div className="p-3 border-b border-border flex items-center gap-2">
+        <div className="relative flex-1">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input ref={inputRef} type="text" placeholder={`Search food for ${meal}... (3+ chars)`} value={query}
             onChange={e => setQuery(e.target.value)}
             className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-secondary text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/50" />
         </div>
+        <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground"><X size={14} /></button>
       </div>
 
+      {pending ? (
+        <PortionEditor
+          item={pending}
+          mealId={mealId}
+          uid={uid}
+          onCancel={() => setPending(null)}
+          onConfirm={(food) => { onAdd(food); setPending(null); onClose(); }}
+        />
+      ) : (
       <div className="max-h-72 overflow-y-auto">
-        {/* Recent foods (zero-API) */}
         {!debouncedQ && recent.length > 0 && (
           <div className="p-2">
             <p className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <History size={10} /> Recent foods (no API call)
             </p>
             {recent.map(r => (
-              <button key={r.id} onClick={() => handleAdd(r, true)}
+              <button key={r.id} onClick={() => addRecent(r)}
                 className="w-full flex items-center gap-3 px-3 py-2 hover:bg-secondary/60 transition-colors text-left rounded-xl">
                 <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 overflow-hidden">
                   {r.image ? <img src={r.image} alt="" className="w-full h-full object-cover" /> : <Apple size={12} className="text-muted-foreground" />}
@@ -443,7 +540,7 @@ function FoodSearchPanel({ meal, uid, onClose, onAdd }: {
         )}
 
         {data?.results?.map((item: any) => (
-          <button key={item.id} onClick={() => handleAdd(item)}
+          <button key={item.id} onClick={() => setPending(item)}
             className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/60 transition-colors text-left">
             <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 overflow-hidden">
               {item.image
@@ -451,7 +548,7 @@ function FoodSearchPanel({ meal, uid, onClose, onAdd }: {
                 : <Apple size={14} className="text-muted-foreground" />}
             </div>
             <span className="text-sm font-medium capitalize flex-1">{item.name}</span>
-            <Plus size={13} className="text-primary flex-shrink-0" />
+            <ArrowRight size={12} className="text-primary flex-shrink-0" />
           </button>
         ))}
 
@@ -459,6 +556,7 @@ function FoodSearchPanel({ meal, uid, onClose, onAdd }: {
           <div className="py-8 text-center text-muted-foreground text-xs">No results found</div>
         )}
       </div>
+      )}
     </motion.div>
   );
 }
