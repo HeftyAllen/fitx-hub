@@ -1489,13 +1489,17 @@ export default function Nutrition() {
   const uid = user?.uid ?? null;
 
   // Personalise calorie/macro targets from the onboarding-derived profile.
+  // If the profile doesn't have explicit targets yet (e.g. user just finished onboarding
+  // without an explicit nutrition step), compute them on the fly from goal/weight/etc.
+  const computed = useMemo(() => computeTargets((userProfile as any) || {}), [userProfile]);
   MACRO_GOALS = {
-    calories: (userProfile as any)?.calorieTarget || DEFAULT_MACRO_GOALS.calories,
-    protein:  (userProfile as any)?.protein       || DEFAULT_MACRO_GOALS.protein,
-    carbs:    (userProfile as any)?.carbs         || DEFAULT_MACRO_GOALS.carbs,
-    fat:      (userProfile as any)?.fat           || DEFAULT_MACRO_GOALS.fat,
-    fiber:    (userProfile as any)?.fiber         || DEFAULT_MACRO_GOALS.fiber,
+    calories: (userProfile as any)?.calorieTarget || computed.calorieTarget || DEFAULT_MACRO_GOALS.calories,
+    protein:  (userProfile as any)?.protein       || computed.protein       || DEFAULT_MACRO_GOALS.protein,
+    carbs:    (userProfile as any)?.carbs         || computed.carbs         || DEFAULT_MACRO_GOALS.carbs,
+    fat:      (userProfile as any)?.fat           || computed.fat           || DEFAULT_MACRO_GOALS.fat,
+    fiber:    (userProfile as any)?.fiber         || computed.fiber         || DEFAULT_MACRO_GOALS.fiber,
   };
+
 
   // Today’s totals for header
   const [headerTotals, setHeaderTotals] = useState({ calories: 0, protein: 0 });
