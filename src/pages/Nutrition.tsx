@@ -3,7 +3,7 @@ import AppLayout from "@/components/layout/AppLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import {
-  searchRecipes, getRecipeById, searchIngredients,
+  searchRecipes, getRecipeById, searchIngredients, getIngredientInfo,
   generateMealPlan, canGenerateMealPlan,
   getDailyUsage, canMakeRequest,
   getRecentFoods, pushRecentFood, lookupBarcode,
@@ -347,12 +347,105 @@ function RecipeDetailModal({ recipe: initialRecipe, onClose, onLogMeal }: {
   );
 }
 
+/* ────────────────── PORTION EDITOR ────────────────── */
+function PortionEditor({ item, mealId, uid, onCancel, onConfirm }: {
+  item: any; mealId: string; uid: string | null;
+  onCancel: () => void; onConfirm: (food: LoggedFood) => void;
+}) {
+  const [amount, setAmount] = useState<number>(100);
+  const [unit, setUnit] = useState<string>("grams");
+  const [units, setUnits] = useState<string[]>(["grams", "oz", "cup", "tbsp", "tsp", "serving"]);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["ingr-info", item.id, amount, unit],
+    queryFn: () => getIngredientInfo(item.id, amount, unit),
+    enabled: !!item.id,
+    staleTime: 24 * 60 * 60 * 1000,
+    retry: false,
+  });
+
+  useEffect(() => {
+    const possible = (data as any)?.possibleUnits as string[] | undefined;
+    if (possible?.length) {
+      setUnits(Array.from(new Set([...possible, "grams", "oz", "cup", "serving"])));
+    }
+  }, [data]);
+
+  const nutrients = (data as any)?.nutrition?.nutrients || [];
+  const cals    = getNutrient(nutrients, "Calories");
+  const protein = getNutrient(nutrients, "Protein");
+  const carbs   = getNutrient(nutrients, "Carbohydrates");
+  const fat     = getNutrient(nutrients, "Fat");
+
+  const confirm = () => {
+    const food: LoggedFood = {
+      id:       String(item.id),
+      name:     item.name,
+      meal:     mealId,
+      image:    item.image ? `https://spoonacular.com/cdn/ingredients_100x100/${item.image}` : undefined,
+      amount, unit,
+      calories: cals, protein, carbs, fat,
+    };
+    onConfirm(food);
+    pushRecentFood(uid, food);
+  };
+
+  return (
+    <div className="p-4 space-y-3 border-t border-border bg-secondary/20">
+      <div className="flex items-center gap-3">
+        {item.image && (
+          <img src={`https://spoonacular.com/cdn/ingredients_100x100/${item.image}`} alt="" className="w-10 h-10 rounded-lg object-cover" />
+        )}
+        <div className="min-w-0">
+          <p className="text-sm font-bold capitalize truncate">{item.name}</p>
+          <p className="text-[10px] text-muted-foreground">Edit portion to compute calories & macros</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-[1fr_1.3fr] gap-2">
+        <input type="number" min={1} value={amount}
+          onChange={e => setAmount(Math.max(1, Number(e.target.value) || 1))}
+          className="px-3 py-2 rounded-lg bg-card text-sm font-bold focus:outline-none focus:ring-1 focus:ring-primary/50" />
+        <select value={unit} onChange={e => setUnit(e.target.value)}
+          className="px-3 py-2 rounded-lg bg-card text-sm font-medium focus:outline-none focus:ring-1 focus:ring-primary/50">
+          {units.map(u => <option key={u} value={u}>{u}</option>)}
+        </select>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {[
+          { label: "Cal",  value: cals,    color: "#2563eb", suffix: "" },
+          { label: "P",    value: protein, color: "#06b6d4", suffix: "g" },
+          { label: "C",    value: carbs,   color: "#f59e0b", suffix: "g" },
+          { label: "F",    value: fat,     color: "#8b5cf6", suffix: "g" },
+        ].map(s => (
+          <div key={s.label} className="text-center py-1.5 rounded-lg bg-card">
+            <p className="text-sm font-black tabular-nums" style={{ color: s.color }}>
+              {isLoading ? "…" : `${s.value}${s.suffix}`}
+            </p>
+            <p className="text-[9px] text-muted-foreground uppercase">{s.label}</p>
+          </div>
+        ))}
+      </div>
+      {error && (
+        <p className="text-[10px] text-destructive">Couldn't load nutrition for that unit — try grams.</p>
+      )}
+      <div className="flex gap-2">
+        <button onClick={onCancel} className="flex-1 py-2 rounded-lg bg-secondary text-xs font-semibold">Back</button>
+        <button onClick={confirm} disabled={isLoading || cals === 0}
+          className="flex-1 py-2 rounded-lg gradient-bg text-primary-foreground text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
+          <Plus size={12} /> Log {cals || 0} cal
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ────────────────── FOOD SEARCH PANEL ────────────────── */
-function FoodSearchPanel({ meal, uid, onClose, onAdd }: {
-  meal: string; uid: string | null; onClose: () => void; onAdd: (item: LoggedFood) => void;
+function FoodSearchPanel({ meal, mealId, uid, onClose, onAdd }: {
+  meal: string; mealId: string; uid: string | null; onClose: () => void; onAdd: (item: LoggedFood) => void;
 }) {
   const [query, setQuery] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
+  const [pending, setPending] = useState<any | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recent = useMemo(() => getRecentFoods(uid, 8), [uid]);
 
@@ -370,47 +463,51 @@ function FoodSearchPanel({ meal, uid, onClose, onAdd }: {
     retry: false,
   });
 
-  const limitReached = error?.message === "DAILY_LIMIT_REACHED";
+  const limitReached = (error as any)?.message === "DAILY_LIMIT_REACHED";
 
-  const handleAdd = (item: any, isRecent = false) => {
-    const food: LoggedFood = isRecent ? {
-      ...item, meal,
-    } : {
-      id:       String(item.id),
-      name:     item.name,
-      meal,
-      image:    item.image ? `https://spoonacular.com/cdn/ingredients_100x100/${item.image}` : undefined,
-      calories: item.calories || 0,
-      protein:  item.protein  || 0,
-      carbs:    item.carbs    || 0,
-      fat:      item.fat      || 0,
-    };
-    onAdd(food);
-    pushRecentFood(uid, food);
+  const addRecent = (r: RecentFood) => {
+    onAdd({
+      id: String(r.id), name: r.name, meal: mealId, image: r.image,
+      calories: r.calories || 0, protein: r.protein || 0,
+      carbs: r.carbs || 0, fat: r.fat || 0,
+      amount: r.amount, unit: r.unit,
+    });
+    pushRecentFood(uid, r);
     onClose();
   };
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-      className="absolute inset-x-0 top-full mt-2 z-20 bg-card border border-border rounded-2xl shadow-2xl shadow-black/40 overflow-hidden">
-      <div className="p-3 border-b border-border">
-        <div className="relative">
+      className="absolute inset-x-0 top-full mt-2 z-30 bg-card border border-border rounded-2xl shadow-2xl shadow-black/40 overflow-hidden"
+      onMouseDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}>
+      <div className="p-3 border-b border-border flex items-center gap-2">
+        <div className="relative flex-1">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input ref={inputRef} type="text" placeholder={`Search food for ${meal}... (3+ chars)`} value={query}
             onChange={e => setQuery(e.target.value)}
             className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-secondary text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/50" />
         </div>
+        <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground"><X size={14} /></button>
       </div>
 
+      {pending ? (
+        <PortionEditor
+          item={pending}
+          mealId={mealId}
+          uid={uid}
+          onCancel={() => setPending(null)}
+          onConfirm={(food) => { onAdd(food); setPending(null); onClose(); }}
+        />
+      ) : (
       <div className="max-h-72 overflow-y-auto">
-        {/* Recent foods (zero-API) */}
         {!debouncedQ && recent.length > 0 && (
           <div className="p-2">
             <p className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <History size={10} /> Recent foods (no API call)
             </p>
             {recent.map(r => (
-              <button key={r.id} onClick={() => handleAdd(r, true)}
+              <button key={r.id} onClick={() => addRecent(r)}
                 className="w-full flex items-center gap-3 px-3 py-2 hover:bg-secondary/60 transition-colors text-left rounded-xl">
                 <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 overflow-hidden">
                   {r.image ? <img src={r.image} alt="" className="w-full h-full object-cover" /> : <Apple size={12} className="text-muted-foreground" />}
@@ -443,7 +540,7 @@ function FoodSearchPanel({ meal, uid, onClose, onAdd }: {
         )}
 
         {data?.results?.map((item: any) => (
-          <button key={item.id} onClick={() => handleAdd(item)}
+          <button key={item.id} onClick={() => setPending(item)}
             className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/60 transition-colors text-left">
             <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 overflow-hidden">
               {item.image
@@ -451,7 +548,7 @@ function FoodSearchPanel({ meal, uid, onClose, onAdd }: {
                 : <Apple size={14} className="text-muted-foreground" />}
             </div>
             <span className="text-sm font-medium capitalize flex-1">{item.name}</span>
-            <Plus size={13} className="text-primary flex-shrink-0" />
+            <ArrowRight size={12} className="text-primary flex-shrink-0" />
           </button>
         ))}
 
@@ -459,6 +556,7 @@ function FoodSearchPanel({ meal, uid, onClose, onAdd }: {
           <div className="py-8 text-center text-muted-foreground text-xs">No results found</div>
         )}
       </div>
+      )}
     </motion.div>
   );
 }
@@ -619,13 +717,19 @@ function DiaryTab() {
     toast.success(`Copied ${cloned.length} items from yesterday — zero API calls`);
   };
 
-  // close search panel on outside click
+  // close search panel only on explicit outside click (not on scroll/drag).
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setActiveFoodSearch(null);
+      const t = e.target as HTMLElement;
+      if (!ref.current) return;
+      // ignore clicks inside meals area or on scrollbars
+      if (ref.current.contains(t)) return;
+      // ignore clicks inside any sticky right-column controls — only close on backdrop clicks
+      if (t.closest("[data-keep-search-open]")) return;
+      setActiveFoodSearch(null);
     };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
+    document.addEventListener("click", h);
+    return () => document.removeEventListener("click", h);
   }, []);
 
   return (
@@ -656,7 +760,7 @@ function DiaryTab() {
         </div>
 
         {/* Meal rows */}
-        <div ref={ref} className="space-y-3">
+        <div ref={ref} className="space-y-3" data-keep-search-open>
           {MEALS.map(meal => (
             <div key={meal.id} className="relative">
               <MealRow meal={meal} items={itemsByMeal(meal.id)}
@@ -664,7 +768,7 @@ function DiaryTab() {
                 onRemove={removeFood} />
               <AnimatePresence>
                 {activeFoodSearch === meal.id && (
-                  <FoodSearchPanel meal={meal.label} uid={uid}
+                  <FoodSearchPanel meal={meal.label} mealId={meal.id} uid={uid}
                     onClose={() => setActiveFoodSearch(null)}
                     onAdd={addFood} />
                 )}
@@ -675,7 +779,7 @@ function DiaryTab() {
       </div>
 
       {/* Right column: macros + insights */}
-      <div className="space-y-4 lg:sticky lg:top-20">
+      <div className="space-y-4 lg:sticky lg:top-20" data-keep-search-open>
         <div className="glass-card p-5">
           <CalorieRing consumed={totals.calories} goal={MACRO_GOALS.calories} />
           <div className="space-y-2 mt-4">
@@ -686,23 +790,66 @@ function DiaryTab() {
           </div>
         </div>
 
-        {/* Hydration */}
-        <div className="glass-card p-4 space-y-3">
+        {/* Hydration — animated wave glasses */}
+        <div className="glass-card p-4 space-y-3 overflow-hidden">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Hydration</p>
-            <span className="text-xs font-bold text-cyan-400">{dayLog.water} / {WATER_GOAL} glasses</span>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <Droplets size={12} className="text-cyan-400" /> Hydration
+            </p>
+            <motion.span
+              key={dayLog.water}
+              initial={{ scale: 1.3, color: "#22d3ee" }}
+              animate={{ scale: 1, color: "#22d3ee" }}
+              transition={{ type: "spring", stiffness: 400, damping: 18 }}
+              className="text-xs font-bold tabular-nums">
+              {dayLog.water} / {WATER_GOAL} glasses
+            </motion.span>
           </div>
-          <div className="flex gap-1">
-            {Array.from({ length: WATER_GOAL }).map((_, i) => (
-              <button key={i} onClick={() => setWater(i + 1 === dayLog.water ? i : i + 1)}
-                className={`h-8 flex-1 rounded-lg flex items-center justify-center transition-all ${
-                  i < dayLog.water ? "bg-cyan-500/20 border border-cyan-500/40" : "bg-secondary border border-border/40"
-                }`}>
-                <Droplets size={11} className={i < dayLog.water ? "text-cyan-400" : "text-muted-foreground/40"} />
-              </button>
-            ))}
+          <div className="grid grid-cols-8 gap-1.5">
+            {Array.from({ length: WATER_GOAL }).map((_, i) => {
+              const filled = i < dayLog.water;
+              return (
+                <motion.button
+                  key={i}
+                  onClick={() => setWater(i + 1 === dayLog.water ? i : i + 1)}
+                  whileTap={{ scale: 0.85 }}
+                  whileHover={{ scale: 1.06 }}
+                  className="relative h-12 rounded-xl overflow-hidden border bg-secondary/40 border-border/40 group"
+                  style={filled ? { borderColor: "rgba(34,211,238,0.5)" } : undefined}>
+                  {/* Wave fill */}
+                  <motion.div
+                    initial={false}
+                    animate={{ y: filled ? "0%" : "100%" }}
+                    transition={{ type: "spring", stiffness: 120, damping: 18, delay: filled ? i * 0.04 : 0 }}
+                    className="absolute inset-x-0 bottom-0 h-full"
+                    style={{
+                      background: "linear-gradient(180deg, rgba(34,211,238,0.85) 0%, rgba(6,182,212,0.95) 100%)",
+                    }}>
+                    {/* Animated wave crest */}
+                    <motion.div
+                      animate={{ x: ["-10%", "10%", "-10%"] }}
+                      transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+                      className="absolute -top-1 inset-x-0 h-2 opacity-60"
+                      style={{
+                        background: "radial-gradient(ellipse at 50% 100%, rgba(255,255,255,0.5) 0%, transparent 70%)",
+                      }} />
+                  </motion.div>
+                  <Droplets
+                    size={13}
+                    className={`absolute inset-0 m-auto transition-colors ${filled ? "text-white drop-shadow" : "text-muted-foreground/40"}`}
+                  />
+                </motion.button>
+              );
+            })}
+          </div>
+          <div className="flex gap-1.5">
+            <button onClick={() => setWater(Math.max(0, dayLog.water - 1))}
+              className="flex-1 py-1.5 rounded-lg bg-secondary text-xs font-bold text-muted-foreground hover:text-foreground">−</button>
+            <button onClick={() => setWater(Math.min(WATER_GOAL, dayLog.water + 1))}
+              className="flex-1 py-1.5 rounded-lg bg-cyan-500/20 text-xs font-bold text-cyan-400 hover:bg-cyan-500/30">+ Glass</button>
           </div>
         </div>
+
 
         {/* AI insight (zero API) */}
         <div className="glass-card p-4 space-y-2">
@@ -1342,13 +1489,17 @@ export default function Nutrition() {
   const uid = user?.uid ?? null;
 
   // Personalise calorie/macro targets from the onboarding-derived profile.
+  // If the profile doesn't have explicit targets yet (e.g. user just finished onboarding
+  // without an explicit nutrition step), compute them on the fly from goal/weight/etc.
+  const computed = useMemo(() => computeTargets((userProfile as any) || {}), [userProfile]);
   MACRO_GOALS = {
-    calories: (userProfile as any)?.calorieTarget || DEFAULT_MACRO_GOALS.calories,
-    protein:  (userProfile as any)?.protein       || DEFAULT_MACRO_GOALS.protein,
-    carbs:    (userProfile as any)?.carbs         || DEFAULT_MACRO_GOALS.carbs,
-    fat:      (userProfile as any)?.fat           || DEFAULT_MACRO_GOALS.fat,
-    fiber:    (userProfile as any)?.fiber         || DEFAULT_MACRO_GOALS.fiber,
+    calories: (userProfile as any)?.calorieTarget || computed.calorieTarget || DEFAULT_MACRO_GOALS.calories,
+    protein:  (userProfile as any)?.protein       || computed.protein       || DEFAULT_MACRO_GOALS.protein,
+    carbs:    (userProfile as any)?.carbs         || computed.carbs         || DEFAULT_MACRO_GOALS.carbs,
+    fat:      (userProfile as any)?.fat           || computed.fat           || DEFAULT_MACRO_GOALS.fat,
+    fiber:    (userProfile as any)?.fiber         || computed.fiber         || DEFAULT_MACRO_GOALS.fiber,
   };
+
 
   // Today’s totals for header
   const [headerTotals, setHeaderTotals] = useState({ calories: 0, protein: 0 });
