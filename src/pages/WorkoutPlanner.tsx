@@ -197,16 +197,44 @@ export default function WorkoutPlanner() {
             <CreatePlanModal
               existingPlan={editingPlan}
               onClose={() => { setShowCreate(false); setEditingPlan(null); }}
-              onSave={async (plan) => {
+              onSave={async (plan, opts) => {
                 if (!user) return;
+                let planId = editingPlan?.id;
+                let planName = plan.name;
                 if (editingPlan) {
                   await updateDoc(doc(db, "users", user.uid, "workoutPlans", editingPlan.id), plan);
                   setPlans(p => p.map(x => x.id === editingPlan.id ? { ...x, ...plan } : x));
                   toast.success("Plan updated");
                 } else {
                   const ref = await addDoc(collection(db, "users", user.uid, "workoutPlans"), { ...plan, createdAt: Timestamp.now() });
+                  planId = ref.id;
                   setPlans(p => [{ ...plan, id: ref.id, createdAt: Timestamp.now() } as WorkoutPlan, ...p]);
                   toast.success("Plan created!");
+                }
+                // Calendar sync — schedule this plan on selected weekdays for the next N weeks
+                if (opts?.syncToCalendar && opts.syncDays.length && planId) {
+                  const today = new Date();
+                  const weeks = opts.weeks || 4;
+                  const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+                  const entries: { dateStr: string }[] = [];
+                  for (let w = 0; w < weeks; w++) {
+                    for (const dn of opts.syncDays) {
+                      const target = dayMap[dn];
+                      const base = new Date(today);
+                      base.setDate(base.getDate() + w * 7);
+                      const diff = (target - base.getDay() + 7) % 7;
+                      const d = new Date(base);
+                      d.setDate(base.getDate() + diff);
+                      const dateStr = d.toISOString().slice(0, 10);
+                      entries.push({ dateStr });
+                    }
+                  }
+                  await Promise.all(entries.map(({ dateStr }) =>
+                    addDoc(collection(db, "users", user.uid, "calendarEntries"), {
+                      date: dateStr, planId, planName, completed: false, createdAt: Timestamp.now(),
+                    })
+                  ));
+                  toast.success(`Synced ${entries.length} sessions to calendar`);
                 }
                 setShowCreate(false);
                 setEditingPlan(null);
