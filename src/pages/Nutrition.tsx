@@ -717,13 +717,19 @@ function DiaryTab() {
     toast.success(`Copied ${cloned.length} items from yesterday — zero API calls`);
   };
 
-  // close search panel on outside click
+  // close search panel only on explicit outside click (not on scroll/drag).
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setActiveFoodSearch(null);
+      const t = e.target as HTMLElement;
+      if (!ref.current) return;
+      // ignore clicks inside meals area or on scrollbars
+      if (ref.current.contains(t)) return;
+      // ignore clicks inside any sticky right-column controls — only close on backdrop clicks
+      if (t.closest("[data-keep-search-open]")) return;
+      setActiveFoodSearch(null);
     };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
+    document.addEventListener("click", h);
+    return () => document.removeEventListener("click", h);
   }, []);
 
   return (
@@ -754,7 +760,7 @@ function DiaryTab() {
         </div>
 
         {/* Meal rows */}
-        <div ref={ref} className="space-y-3">
+        <div ref={ref} className="space-y-3" data-keep-search-open>
           {MEALS.map(meal => (
             <div key={meal.id} className="relative">
               <MealRow meal={meal} items={itemsByMeal(meal.id)}
@@ -762,7 +768,7 @@ function DiaryTab() {
                 onRemove={removeFood} />
               <AnimatePresence>
                 {activeFoodSearch === meal.id && (
-                  <FoodSearchPanel meal={meal.label} uid={uid}
+                  <FoodSearchPanel meal={meal.label} mealId={meal.id} uid={uid}
                     onClose={() => setActiveFoodSearch(null)}
                     onAdd={addFood} />
                 )}
@@ -773,7 +779,7 @@ function DiaryTab() {
       </div>
 
       {/* Right column: macros + insights */}
-      <div className="space-y-4 lg:sticky lg:top-20">
+      <div className="space-y-4 lg:sticky lg:top-20" data-keep-search-open>
         <div className="glass-card p-5">
           <CalorieRing consumed={totals.calories} goal={MACRO_GOALS.calories} />
           <div className="space-y-2 mt-4">
@@ -784,23 +790,66 @@ function DiaryTab() {
           </div>
         </div>
 
-        {/* Hydration */}
-        <div className="glass-card p-4 space-y-3">
+        {/* Hydration — animated wave glasses */}
+        <div className="glass-card p-4 space-y-3 overflow-hidden">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Hydration</p>
-            <span className="text-xs font-bold text-cyan-400">{dayLog.water} / {WATER_GOAL} glasses</span>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <Droplets size={12} className="text-cyan-400" /> Hydration
+            </p>
+            <motion.span
+              key={dayLog.water}
+              initial={{ scale: 1.3, color: "#22d3ee" }}
+              animate={{ scale: 1, color: "#22d3ee" }}
+              transition={{ type: "spring", stiffness: 400, damping: 18 }}
+              className="text-xs font-bold tabular-nums">
+              {dayLog.water} / {WATER_GOAL} glasses
+            </motion.span>
           </div>
-          <div className="flex gap-1">
-            {Array.from({ length: WATER_GOAL }).map((_, i) => (
-              <button key={i} onClick={() => setWater(i + 1 === dayLog.water ? i : i + 1)}
-                className={`h-8 flex-1 rounded-lg flex items-center justify-center transition-all ${
-                  i < dayLog.water ? "bg-cyan-500/20 border border-cyan-500/40" : "bg-secondary border border-border/40"
-                }`}>
-                <Droplets size={11} className={i < dayLog.water ? "text-cyan-400" : "text-muted-foreground/40"} />
-              </button>
-            ))}
+          <div className="grid grid-cols-8 gap-1.5">
+            {Array.from({ length: WATER_GOAL }).map((_, i) => {
+              const filled = i < dayLog.water;
+              return (
+                <motion.button
+                  key={i}
+                  onClick={() => setWater(i + 1 === dayLog.water ? i : i + 1)}
+                  whileTap={{ scale: 0.85 }}
+                  whileHover={{ scale: 1.06 }}
+                  className="relative h-12 rounded-xl overflow-hidden border bg-secondary/40 border-border/40 group"
+                  style={filled ? { borderColor: "rgba(34,211,238,0.5)" } : undefined}>
+                  {/* Wave fill */}
+                  <motion.div
+                    initial={false}
+                    animate={{ y: filled ? "0%" : "100%" }}
+                    transition={{ type: "spring", stiffness: 120, damping: 18, delay: filled ? i * 0.04 : 0 }}
+                    className="absolute inset-x-0 bottom-0 h-full"
+                    style={{
+                      background: "linear-gradient(180deg, rgba(34,211,238,0.85) 0%, rgba(6,182,212,0.95) 100%)",
+                    }}>
+                    {/* Animated wave crest */}
+                    <motion.div
+                      animate={{ x: ["-10%", "10%", "-10%"] }}
+                      transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+                      className="absolute -top-1 inset-x-0 h-2 opacity-60"
+                      style={{
+                        background: "radial-gradient(ellipse at 50% 100%, rgba(255,255,255,0.5) 0%, transparent 70%)",
+                      }} />
+                  </motion.div>
+                  <Droplets
+                    size={13}
+                    className={`absolute inset-0 m-auto transition-colors ${filled ? "text-white drop-shadow" : "text-muted-foreground/40"}`}
+                  />
+                </motion.button>
+              );
+            })}
+          </div>
+          <div className="flex gap-1.5">
+            <button onClick={() => setWater(Math.max(0, dayLog.water - 1))}
+              className="flex-1 py-1.5 rounded-lg bg-secondary text-xs font-bold text-muted-foreground hover:text-foreground">−</button>
+            <button onClick={() => setWater(Math.min(WATER_GOAL, dayLog.water + 1))}
+              className="flex-1 py-1.5 rounded-lg bg-cyan-500/20 text-xs font-bold text-cyan-400 hover:bg-cyan-500/30">+ Glass</button>
           </div>
         </div>
+
 
         {/* AI insight (zero API) */}
         <div className="glass-card p-4 space-y-2">
