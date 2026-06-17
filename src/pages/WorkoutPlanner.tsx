@@ -832,12 +832,62 @@ function CreatePlanModal({ existingPlan, onClose, onSave }: {
             </div>
           </div>
 
+          {/* Sync to Calendar */}
+          <div className="rounded-2xl border border-white/[0.08] bg-secondary/30 p-4 space-y-3">
+            <label className="flex items-center justify-between gap-3 cursor-pointer">
+              <div className="flex items-center gap-2.5">
+                <CalIcon size={16} className="text-primary" />
+                <div>
+                  <p className="text-sm font-semibold">Sync to Calendar</p>
+                  <p className="text-[11px] text-muted-foreground">Auto-schedule this workout on chosen days</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSyncToCalendar(v => !v)}
+                className={`relative w-11 h-6 rounded-full transition-colors ${syncToCalendar ? "bg-primary" : "bg-secondary"}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${syncToCalendar ? "translate-x-5" : ""}`} />
+              </button>
+            </label>
+            <AnimatePresence>
+              {syncToCalendar && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden space-y-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Pick days to schedule</p>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {DAYS.map(d => (
+                        <button key={d} type="button"
+                          onClick={() => setSyncDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])}
+                          className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-all ${syncDays.includes(d) ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
+                          {d}
+                        </button>
+                      ))}
+                      <button type="button" onClick={() => setSyncDays([...days])}
+                        className="text-[10px] px-2.5 py-1.5 rounded-full font-bold text-primary hover:bg-primary/10">
+                        Use schedule
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs text-muted-foreground">For the next</label>
+                    <input type="number" min={1} max={12} value={weeks}
+                      onChange={e => setWeeks(Math.max(1, Math.min(12, parseInt(e.target.value) || 1)))}
+                      className="w-16 bg-card border border-white/10 rounded-lg px-2 py-1 text-sm text-center" />
+                    <span className="text-xs text-muted-foreground">weeks</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           <div className="flex gap-3 pt-2">
             <Button variant="outline" onClick={onClose} className="flex-1 rounded-xl border-white/10">Cancel</Button>
             <Button onClick={() => {
               if (!name.trim()) { toast.error("Enter a plan name"); return; }
               if (exercises.length === 0) { toast.error("Add at least one exercise"); return; }
-              onSave({ name: name.trim(), exercises, days });
+              if (syncToCalendar && syncDays.length === 0) { toast.error("Pick at least one day to sync"); return; }
+              onSave({ name: name.trim(), exercises, days }, { syncToCalendar, syncDays, weeks });
             }} className="flex-1 gradient-bg text-primary-foreground rounded-xl">
               {existingPlan ? "Update Plan" : "Save Plan"}
             </Button>
