@@ -1,54 +1,85 @@
-## Scope
+# Dashboard & Nutrition Overhaul — Phase 1
 
-Six related fixes across the user app. Admin features are out of scope this round.
+## Pre-work: Secrets & Backend
 
-### 1. Progress page — seed from onboarding + sync workouts
-- On Progress mount, if `users/{uid}/weights` is empty AND `userProfile.weight` exists, auto-insert a starting weight entry so "Current Weight" / chart aren't blank.
-- "Total Workouts" + "kg lifted" read from `users/{uid}/workoutLogs` (completed sessions). Wire `WorkoutSession` completion to write a log doc `{ planId, exercises, totalVolume, durationMin, completedAt }` and bump a `users/{uid}/stats/summary` counter. Progress page subscribes to that stats doc.
-- "Personal Records" reads from existing `records` collection (already used by Records page).
+Right now the app is Firebase-only (client SDK) with API keys baked into the bundle. FatSecret OAuth2 requires a **server-side** token exchange — the Client Secret cannot ship in the browser.
 
-### 2. Merge Workout + Library
-- Keep `/workout-planner` route. Add a Tabs header: **My Plans | Library**. Library tab embeds the existing `Library.tsx` content (published admin plans + "Add to my plans").
-- Remove Library link from `Navbar` (workout dropdown / single tab now covers it). `/library` route stays for back-compat.
+**Required:** Enable **Lovable Cloud** so we get an edge-function runtime + secret storage. Without it, FatSecret cannot be integrated securely.
 
-### 3. Nutrition — "Adjust Goals" works
-- Wire the button to open a dialog with editable `calorieTarget / protein / carbs / fat / fiber`. Save to `users/{uid}/profile/data`. "Reset to recommended" button recomputes via `computeTargets`.
-- Verify Meal Planner add/save works (currently buttons are no-ops) — make cells open a small picker that saves to `users/{uid}/mealPlan/{weekKey}`.
-- Barcode scanner: hook up to `@zxing/browser` via dynamic import on the existing scan button in Nutrition; on detect → Open Food Facts lookup → log meal.
+You should also **rotate the FatSecret Client Secret you posted in chat** — treat the one you sent as burned.
 
-### 4. Settings / Profile cleanup
-- Remove the "Bio" field entirely (or replace with a short "Goal note" tied to `goalType` — going with remove for simplicity).
-- Make Body Metrics editable (height, weight, dob, gender) and save to profile.
-- Add Fitness Preferences card with `units: "metric" | "imperial"` toggle.
+Once Cloud is on, I'll store `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` via the secrets tool and proxy all FatSecret calls through an edge function (`/fatsecret-proxy`) that caches OAuth tokens.
 
-### 5. App-wide units
-- New `useUnits()` hook reading `userProfile.units` (default `metric`).
-- Helpers `formatWeight(kg, units)` and `formatHeight(cm, units)`.
-- Apply on Progress (weight cards, chart axis), Records (lift weights), Nutrition (water already ml — leave), Settings display.
-- All stored values stay canonical (kg / cm); only display converts. Input forms accept the user's unit and convert on save.
+---
 
-### 6. Support — proper ticket UX
-- `Support.tsx` becomes a real two-pane interface: left = list of my tickets (status badges), right = open conversation with admin replies (already powered by `supportTickets/{id}/messages`).
-- New ticket dialog: subject + category (Bug / Feature / Account / Other) + message + optional screenshot upload to `users/{uid}/support/{ticketId}/...`.
-- Real-time updates via `onSnapshot`. Shows "Admin replied" toast + unread dot.
+## Workstream A — Dashboard Redesign
 
-## Files to edit / create
+1. Remove "Today's Macros" card from `Dashboard.tsx`.
+2. Compact "Quick Actions" — move to top, reduce padding, single horizontal row on desktop / 2-row grid on mobile.
+3. Remove standalone "Daily Motivation" card.
+4. New **Suggestions card** (see Workstream B).
+5. Sync fix pass: Active Challenges, Recent Workouts, Volume This Week, Today's Workout — all read from the same Firestore collections used elsewhere (audit + dedupe).
 
-- `src/pages/Progress.tsx` (seed weight, read stats)
-- `src/pages/WorkoutSession.tsx` (log on complete)
-- `src/pages/WorkoutPlanner.tsx` (tabs: My / Library)
-- `src/pages/Library.tsx` (export inner component for embedding)
-- `src/pages/Nutrition.tsx` (Adjust Goals dialog, barcode wiring)
-- `src/pages/MealPlanner.tsx` (clickable cells, persistence)
-- `src/pages/Settings.tsx` (remove bio, metrics + units)
-- `src/pages/Support.tsx` (two-pane ticketing)
-- `src/components/layout/Navbar.tsx` (drop Library link)
-- `src/hooks/useUnits.ts` (new)
-- `src/lib/units.ts` (new — converters/formatters)
-- `src/lib/barcode.ts` (new — zxing + OFF lookup)
-- `firestore.rules` (add `workoutLogs`, `stats`, `mealPlan` paths if missing)
+## Workstream B — Intelligent Suggestions Engine
 
-## Out of scope (next round)
-- Admin promotion notification UX polish
-- Admin per-user plan assignment UI
-- Admin analytics charts
+New module `src/lib/suggestions.ts` producing a ranked list of insight cards:
+- **Motivation** — quote bank (`src/lib/quotes.ts`, ~150 entries), deterministic daily pick by date+uid hash, last-7-days exclusion.
+- **Workout calorie prediction** — MET-based estimator using today's planned exercises (sets × reps × est. MET × bodyweight).
+- **Nutrition suggestion** — branches on `goalType` + today's workout intensity.
+- **Recovery alert** — streak detector on workout logs (≥6 consecutive days → warn).
+- **Calorie compliance** — time-of-day aware (after 6pm, flag >300 kcal gap).
+- **Performance insights** — PR detection, volume trend over last 4 weeks.
+- **Plateau detection** — 3–4 week weight stagnation vs. goal direction.
+
+Rendered in `Dashboard.tsx` as a single carousel/stack with up to 4 active suggestions, motivation always pinned.
+
+## Workstream C — Onboarding & Goal Targets
+
+- Add weight-pace selector to `Onboarding.tsx` (lose/gain 0.25, 0.5, 1.0 kg/wk + maintain).
+- Update `src/lib/nutrition.ts` `computeTargets` to use pace (1 kg/wk ≈ ±1100 kcal/day, 0.5 ≈ ±550, etc.) instead of fixed deltas.
+- Persist `weeklyPace` and `nutritionPreference` (high-protein / balanced / low-carb / high-carb / higher-fat / custom split) on profile.
+- All consumers (Dashboard, Nutrition, MealPlanner, Suggestions, Progress) read from one helper.
+
+## Workstream D — Nutrition Module Fixes
+
+- Fix **Copy Yesterday**: pull full `foodLog/{yesterday}` doc, write to today preserving meal buckets + macros.
+- **Meal target distribution**: default 25/30/30/15 split (breakfast/lunch/dinner/snack), user-adjustable in goals dialog, totals must equal daily target.
+- Surface per-meal target + progress in each meal section.
+
+## Workstream E — FatSecret Migration (Food Logging + Barcode)
+
+- Edge function `fatsecret-proxy` with endpoints: `search`, `barcode`, `food` (details), `autocomplete`.
+- Client `src/lib/fatsecret.ts` wraps the proxy.
+- Replace Spoonacular calls in `Nutrition.tsx` food search + portion editor.
+- Replace ZXing → FatSecret barcode lookup on scan.
+- Keep Spoonacular for **recipes only** (Workstream F).
+- Map FatSecret servings into portion editor (branded, generic, restaurant where available).
+
+## Workstream F — Recipes & Meal Planning
+
+- Broaden Spoonacular search params (drop overly strict filters, raise `number` to 24, add cuisine/meal-type/keyword).
+- Reliable diet filters: Paleo, Vegan, Vegetarian, Whole30, Keto, Mediterranean, High-Protein, Low-Carb.
+- **Saved presets** under `users/{uid}/recipePresets`.
+- Meal plan generator auto-seeds from onboarding (calories, diet, intolerances) with manual override.
+
+## Workstream G — Barcode + Grocery List
+
+- Remove dedicated UPC page.
+- Unified scan workflow inside Nutrition: scan → show product → buttons "Add to Diary" + "Add to Grocery List".
+- New page `src/pages/GroceryList.tsx` backed by `users/{uid}/groceryList`.
+
+---
+
+## Suggested Execution Order
+
+Because each workstream is large, I recommend shipping in **three sub-phases** rather than one mega-commit:
+
+1. **Phase 1a** — Cloud enablement + FatSecret edge function + Onboarding pace/goals refactor + nutrition targets sync. (Foundations everything else depends on.)
+2. **Phase 1b** — Dashboard redesign + Suggestions engine + sync fixes.
+3. **Phase 1c** — Nutrition fixes (Copy Yesterday, meal targets), FatSecret swap in Food Log + Barcode, Grocery List, recipe filter improvements.
+
+## Confirmations needed before I start
+
+1. **Approve enabling Lovable Cloud?** (Required for FatSecret.)
+2. **Confirm you've rotated the FatSecret secret** you pasted — I'll request the new one via a secure form, not chat.
+3. **Proceed sub-phase by sub-phase** (1a → 1b → 1c) as above, or do you want me to attempt it all in one pass?
