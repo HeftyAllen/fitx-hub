@@ -6,15 +6,23 @@ import { db } from "@/lib/firebase";
 import { motion, AnimatePresence } from "framer-motion";
 import logo from "@/assets/logo.png";
 import { ChevronRight, ChevronLeft, Check, Flame, Beef, Wheat, Droplets } from "lucide-react";
-import { computeTargets } from "@/lib/nutrition";
+import { computeTargets, PACE_OPTIONS, type WeeklyPace, type NutritionPreference } from "@/lib/nutrition";
 
 const GOALS = [
-  { id: "muscle", label: "Build Muscle", icon: "🏋️" },
-  { id: "lose", label: "Lose Weight", icon: "🔥" },
-  { id: "flex", label: "Improve Flexibility", icon: "🧘" },
-  { id: "endurance", label: "Increase Endurance", icon: "🏃" },
-  { id: "maintain", label: "Maintain Weight", icon: "⚖️" },
-  { id: "general", label: "General Fitness", icon: "💪" },
+  { id: "muscle", label: "Build Muscle", icon: "🏋️", kind: "gain" as const },
+  { id: "lose", label: "Lose Weight", icon: "🔥", kind: "lose" as const },
+  { id: "flex", label: "Improve Flexibility", icon: "🧘", kind: "maintain" as const },
+  { id: "endurance", label: "Increase Endurance", icon: "🏃", kind: "maintain" as const },
+  { id: "maintain", label: "Maintain Weight", icon: "⚖️", kind: "maintain" as const },
+  { id: "general", label: "General Fitness", icon: "💪", kind: "maintain" as const },
+];
+
+const NUTRITION_PREFS: { id: NutritionPreference; label: string; sub: string }[] = [
+  { id: "balanced",     label: "Balanced",      sub: "30P / 40C / 30F" },
+  { id: "high-protein", label: "High Protein",  sub: "40P / 35C / 25F" },
+  { id: "low-carb",     label: "Low Carb",      sub: "35P / 20C / 45F" },
+  { id: "high-carb",    label: "High Carb",     sub: "25P / 55C / 20F" },
+  { id: "higher-fat",   label: "Higher Fat",    sub: "25P / 30C / 45F" },
 ];
 
 const DIETS = ["None", "Vegetarian", "Vegan", "Keto", "Paleo", "Gluten-Free", "Dairy-Free", "High Protein"];
@@ -24,13 +32,16 @@ export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [profile, setProfile] = useState({
     name: "", dob: "", gender: "", height: "", weight: "",
-    heightUnit: "cm", weightUnit: "kg",
-    goalType: "", experienceLevel: "", daysPerWeek: 3, workoutDuration: 30,
+    heightUnit: "cm" as "cm" | "ft", weightUnit: "kg" as "kg" | "lbs",
+    goalType: "",
+    weeklyPace: 0 as WeeklyPace,
+    nutritionPreference: "balanced" as NutritionPreference,
+    experienceLevel: "", daysPerWeek: 3, workoutDuration: 30,
     dietaryPrefs: [] as string[], equipmentAccess: [] as string[],
   });
   const { user, refreshProfile } = useAuth();
   const navigate = useNavigate();
-  const totalSteps = 7;
+  const totalSteps = 8;
 
   const update = (field: string, value: any) => setProfile((p) => ({ ...p, [field]: value }));
   const toggleArray = (field: string, val: string) => {
@@ -38,10 +49,17 @@ export default function Onboarding() {
     update(field, arr.includes(val) ? arr.filter((v: string) => v !== val) : [...arr, val]);
   };
 
+  const goalKind = GOALS.find(g => g.id === profile.goalType)?.kind ?? "maintain";
+  const visiblePaceOptions = PACE_OPTIONS.filter(p => {
+    if (goalKind === "lose") return p.goalKind !== "gain";
+    if (goalKind === "gain") return p.goalKind !== "lose";
+    return true;
+  });
+
   const canNext = () => {
-    if (step === 1) return profile.name && profile.dob && profile.gender;
+    if (step === 1) return !!(profile.name && profile.dob && profile.gender && profile.height && profile.weight);
     if (step === 2) return !!profile.goalType;
-    if (step === 3) return !!profile.experienceLevel;
+    if (step === 4) return !!profile.experienceLevel;
     return true;
   };
 
@@ -71,7 +89,6 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
-        {/* Progress bar */}
         <div className="mb-6 h-1.5 bg-secondary rounded-full overflow-hidden">
           <motion.div
             className="h-full gradient-bg rounded-full"
@@ -82,29 +99,12 @@ export default function Onboarding() {
 
         <div className="glass-card p-8">
           <AnimatePresence mode="wait">
-            <motion.div
-              key={step}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.25 }}
-            >
+            <motion.div key={step} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.25 }}>
               {step === 0 && (
                 <div className="flex flex-col items-center gap-6 text-center py-8">
-                  <motion.img
-                    src={logo}
-                    alt="FitX Journey"
-                    className="h-24 w-auto"
-                    animate={{ scale: [0.9, 1.05, 1] }}
-                    transition={{ duration: 0.8 }}
-                  />
-                  <h1 className="text-3xl font-heading font-bold gradient-text">
-                    Your transformation starts here
-                  </h1>
-                  <p className="text-muted-foreground">
-                    Let's set up your profile to personalize your experience
-                  </p>
+                  <motion.img src={logo} alt="FitX Journey" className="h-24 w-auto" animate={{ scale: [0.9, 1.05, 1] }} transition={{ duration: 0.8 }} />
+                  <h1 className="text-3xl font-heading font-bold gradient-text">Your transformation starts here</h1>
+                  <p className="text-muted-foreground">Let's set up your profile to personalise your experience</p>
                 </div>
               )}
 
@@ -115,9 +115,7 @@ export default function Onboarding() {
                   <input type="date" value={profile.dob} onChange={(e) => update("dob", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-secondary border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
                   <div className="flex gap-2">
                     {["Male", "Female", "Other"].map((g) => (
-                      <button key={g} onClick={() => update("gender", g)} className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all ${profile.gender === g ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
-                        {g}
-                      </button>
+                      <button key={g} onClick={() => update("gender", g)} className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all ${profile.gender === g ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>{g}</button>
                     ))}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -148,13 +146,50 @@ export default function Onboarding() {
               )}
 
               {step === 3 && (
+                <div className="space-y-5">
+                  <div>
+                    <h2 className="text-xl font-heading font-bold">Weight Goal Pace</h2>
+                    <p className="text-xs text-muted-foreground mt-1">Sets your daily calorie target. Slower paces are easier to sustain.</p>
+                  </div>
+                  <div className="space-y-2">
+                    {visiblePaceOptions.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => update("weeklyPace", opt.value)}
+                        className={`w-full px-4 py-3 rounded-xl text-sm font-medium text-left transition-all flex items-center justify-between ${profile.weeklyPace === opt.value ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}
+                      >
+                        <span>{opt.label}</span>
+                        {opt.value !== 0 && (
+                          <span className="text-xs opacity-80">{opt.value < 0 ? "−" : "+"}{Math.round(Math.abs(opt.value) * 7700 / 7)} kcal/day</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="pt-2">
+                    <h3 className="text-sm font-heading font-bold mb-2">Nutrition Preference</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {NUTRITION_PREFS.map(np => (
+                        <button
+                          key={np.id}
+                          onClick={() => update("nutritionPreference", np.id)}
+                          className={`px-3 py-2 rounded-xl text-left transition-all ${profile.nutritionPreference === np.id ? "gradient-border bg-primary/10" : "bg-secondary hover:bg-secondary/80"}`}
+                        >
+                          <p className="text-sm font-medium">{np.label}</p>
+                          <p className="text-[10px] text-muted-foreground">{np.sub}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {step === 4 && (
                 <div className="space-y-6">
                   <h2 className="text-xl font-heading font-bold">Experience Level</h2>
                   <div className="flex gap-2">
                     {["Beginner", "Intermediate", "Advanced"].map((lvl) => (
-                      <button key={lvl} onClick={() => update("experienceLevel", lvl)} className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all ${profile.experienceLevel === lvl ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
-                        {lvl}
-                      </button>
+                      <button key={lvl} onClick={() => update("experienceLevel", lvl)} className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all ${profile.experienceLevel === lvl ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>{lvl}</button>
                     ))}
                   </div>
                   <div>
@@ -165,49 +200,39 @@ export default function Onboarding() {
                     <label className="text-sm text-muted-foreground mb-2 block">Workout duration</label>
                     <div className="flex gap-2">
                       {[15, 30, 45, 60].map((d) => (
-                        <button key={d} onClick={() => update("workoutDuration", d)} className={`flex-1 py-2 rounded-xl text-sm ${profile.workoutDuration === d ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
-                          {d === 60 ? "60+" : d} min
-                        </button>
+                        <button key={d} onClick={() => update("workoutDuration", d)} className={`flex-1 py-2 rounded-xl text-sm ${profile.workoutDuration === d ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>{d === 60 ? "60+" : d} min</button>
                       ))}
                     </div>
                   </div>
                 </div>
               )}
 
-              {step === 4 && (
+              {step === 5 && (
                 <div className="space-y-4">
                   <h2 className="text-xl font-heading font-bold">Dietary Preferences</h2>
                   <div className="flex flex-wrap gap-2">
                     {DIETS.map((d) => (
-                      <button key={d} onClick={() => toggleArray("dietaryPrefs", d)} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${profile.dietaryPrefs.includes(d) ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
-                        {d}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {step === 5 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-heading font-bold">Equipment Access</h2>
-                  <div className="flex flex-wrap gap-2">
-                    {EQUIPMENT.map((e) => (
-                      <button key={e} onClick={() => toggleArray("equipmentAccess", e)} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${profile.equipmentAccess.includes(e) ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
-                        {e}
-                      </button>
+                      <button key={d} onClick={() => toggleArray("dietaryPrefs", d)} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${profile.dietaryPrefs.includes(d) ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>{d}</button>
                     ))}
                   </div>
                 </div>
               )}
 
               {step === 6 && (
+                <div className="space-y-4">
+                  <h2 className="text-xl font-heading font-bold">Equipment Access</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {EQUIPMENT.map((e) => (
+                      <button key={e} onClick={() => toggleArray("equipmentAccess", e)} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${profile.equipmentAccess.includes(e) ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>{e}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {step === 7 && (
                 <div className="space-y-5">
                   <div className="flex flex-col items-center gap-3 text-center">
-                    <motion.div
-                      className="w-16 h-16 rounded-full gradient-bg flex items-center justify-center"
-                      animate={{ scale: [0.8, 1.1, 1] }}
-                      transition={{ duration: 0.5 }}
-                    >
+                    <motion.div className="w-16 h-16 rounded-full gradient-bg flex items-center justify-center" animate={{ scale: [0.8, 1.1, 1] }} transition={{ duration: 0.5 }}>
                       <Check size={32} className="text-primary-foreground" />
                     </motion.div>
                     <h2 className="text-2xl font-heading font-bold gradient-text">Your personalised plan</h2>
@@ -239,9 +264,7 @@ export default function Onboarding() {
                     ))}
                   </div>
 
-                  <p className="text-[11px] text-muted-foreground text-center">
-                    You can fine-tune these any time in Settings.
-                  </p>
+                  <p className="text-[11px] text-muted-foreground text-center">You can fine-tune these any time in Settings.</p>
                 </div>
               )}
             </motion.div>
