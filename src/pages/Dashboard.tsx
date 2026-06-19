@@ -467,17 +467,7 @@ export default function Dashboard() {
             )}
           </motion.div>
 
-          {/* Motivation */}
-          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl flex flex-col justify-between">
-            <div>
-              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground mb-3">Daily Motivation</h3>
-              <p className="text-foreground/80 italic text-sm leading-relaxed">"{greeting.sub}"</p>
-            </div>
-            <div className="flex items-center gap-2 mt-4 pt-3 border-t border-white/[0.06]">
-              <Target size={14} className="text-primary" />
-              <p className="text-xs text-muted-foreground">Stay consistent, results will follow</p>
-            </div>
-          </motion.div>
+
 
           {/* Active Challenges */}
           <motion.div variants={fadeUp} className="lg:col-span-2 glass-card p-5 rounded-2xl">
