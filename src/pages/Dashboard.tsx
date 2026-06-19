@@ -279,6 +279,23 @@ export default function Dashboard() {
           <StatCard icon={Trophy} label="Total PRs" value={String(workoutLogs.length)} color="bg-warning/20 text-warning" />
         </motion.div>
 
+        {/* Quick Actions — compact horizontal pills (above weekly activity) */}
+        <motion.div variants={fadeUp} initial="hidden" animate="visible" className="glass-card p-3 rounded-2xl">
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { label: "Log Meal", icon: UtensilsCrossed, to: "/nutrition", color: "text-success" },
+              { label: "Workout", icon: Dumbbell, to: "/workout-planner", color: "text-primary" },
+              { label: "Weight", icon: Scale, to: "/progress", color: "text-accent" },
+              { label: "Add PR", icon: Trophy, to: "/records", color: "text-warning" },
+            ].map(({ label, icon: Icon, to, color }) => (
+              <Link key={label} to={to} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-secondary/40 border border-white/[0.05] hover:border-white/[0.12] transition-all hover:scale-[1.02] active:scale-[0.98]">
+                <Icon size={14} className={color} />
+                <span className="text-xs font-medium">{label}</span>
+              </Link>
+            ))}
+          </div>
+        </motion.div>
+
         {/* Main grid */}
         <motion.div variants={stagger} initial="hidden" animate="visible" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Weekly Activity Chart - takes 2 cols */}
