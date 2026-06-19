@@ -1,14 +1,14 @@
 import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/layout/AppLayout";
 import { motion } from "framer-motion";
-import { Plus, Dumbbell, UtensilsCrossed, Scale, Trophy, Droplets, TrendingUp, Flame, Calendar, Zap, Target, ChevronRight, Clock, BarChart3, Award } from "lucide-react";
+import { Plus, Dumbbell, UtensilsCrossed, Scale, Trophy, Droplets, TrendingUp, Flame, Calendar, Zap, Target, ChevronRight, Clock, BarChart3, Award, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { useAuth as useAuthCtx } from "@/contexts/AuthContext";
+import { useState, useEffect, useMemo } from "react";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, orderBy, limit, where, Timestamp } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, AreaChart, Area } from "recharts";
 import { useChallenges } from "@/hooks/useChallenges";
+import { buildSuggestions, type Suggestion } from "@/lib/suggestions";
 
 const GREETINGS = [
   { label: "Welcome back,",       sub: "Glad to see you again. Let's crush it today." },
