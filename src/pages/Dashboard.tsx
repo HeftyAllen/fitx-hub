@@ -125,6 +125,8 @@ export default function Dashboard() {
   const [workoutLogs, setWorkoutLogs] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
   const [recentPRs, setRecentPRs] = useState<any[]>([]);
+  const [todayCalories, setTodayCalories] = useState(0);
+  const [weightHistory, setWeightHistory] = useState<{ dateISO: string; weightKg: number }[]>([]);
   const { challenges, loading: challengesLoading } = useChallenges();
   const [weeklyData, setWeeklyData] = useState<{ day: string; minutes: number; volume: number }[]>(
     WEEKDAYS.map(d => ({ day: d, minutes: 0, volume: 0 }))
@@ -174,6 +176,28 @@ export default function Dashboard() {
       prs.sort((a: any, b: any) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
       setRecentPRs(prs.slice(0, 3));
     });
+
+    // Today's calories
+    const today = new Date().toISOString().split("T")[0];
+    getDoc(doc(db, "users", user.uid, "foodLog", today)).then(snap => {
+      if (!snap.exists()) return setTodayCalories(0);
+      const data = snap.data() as any;
+      let cals = 0;
+      ["breakfast", "lunch", "dinner", "snacks"].forEach(meal => {
+        (data[meal] || []).forEach((item: any) => { cals += Number(item.calories) || 0; });
+      });
+      setTodayCalories(Math.round(cals));
+    }).catch(() => setTodayCalories(0));
+
+    // Weight history (last ~60d)
+    getDocs(collection(db, "users", user.uid, "weightLogs")).then(snap => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        const date = data.date?.toDate ? data.date.toDate() : new Date(data.date || d.id);
+        return { dateISO: date.toISOString().slice(0, 10), weightKg: Number(data.weightKg ?? data.weight) || 0 };
+      }).filter(x => x.weightKg > 0).sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+      setWeightHistory(items);
+    }).catch(() => setWeightHistory([]));
   }, [user]);
 
   const totalWorkoutsThisWeek = weeklyData.filter(d => d.minutes > 0).length;
