@@ -279,6 +279,23 @@ export default function Dashboard() {
           <StatCard icon={Trophy} label="Total PRs" value={String(workoutLogs.length)} color="bg-warning/20 text-warning" />
         </motion.div>
 
+        {/* Quick Actions — compact horizontal pills (above weekly activity) */}
+        <motion.div variants={fadeUp} initial="hidden" animate="visible" className="glass-card p-3 rounded-2xl">
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { label: "Log Meal", icon: UtensilsCrossed, to: "/nutrition", color: "text-success" },
+              { label: "Workout", icon: Dumbbell, to: "/workout-planner", color: "text-primary" },
+              { label: "Weight", icon: Scale, to: "/progress", color: "text-accent" },
+              { label: "Add PR", icon: Trophy, to: "/records", color: "text-warning" },
+            ].map(({ label, icon: Icon, to, color }) => (
+              <Link key={label} to={to} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-secondary/40 border border-white/[0.05] hover:border-white/[0.12] transition-all hover:scale-[1.02] active:scale-[0.98]">
+                <Icon size={14} className={color} />
+                <span className="text-xs font-medium">{label}</span>
+              </Link>
+            ))}
+          </div>
+        </motion.div>
+
         {/* Main grid */}
         <motion.div variants={stagger} initial="hidden" animate="visible" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Weekly Activity Chart - takes 2 cols */}
@@ -315,33 +332,87 @@ export default function Dashboard() {
           </motion.div>
 
           {/* Intelligent Suggestions */}
-          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Sparkles size={12} className="text-primary" /> Suggestions
-              </h3>
-              <span className="text-[10px] text-muted-foreground">For you</span>
+          <motion.div
+            variants={fadeUp}
+            className="relative glass-card p-5 rounded-2xl flex flex-col overflow-hidden"
+            style={{
+              background:
+                "linear-gradient(155deg, hsl(var(--primary) / 0.10) 0%, hsl(var(--secondary) / 0.55) 55%, hsl(var(--secondary) / 0.35) 100%)",
+              boxShadow: "0 18px 50px -22px hsl(var(--primary) / 0.55), inset 0 1px 0 hsl(0 0% 100% / 0.04)",
+            }}
+          >
+            {/* ambient glows */}
+            <div className="pointer-events-none absolute -top-16 -right-12 w-48 h-48 rounded-full bg-primary/25 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-20 -left-10 w-56 h-56 rounded-full bg-accent/15 blur-3xl" />
+
+            <div className="relative flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
+                  <Sparkles size={13} className="text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-heading font-bold uppercase tracking-wider">Suggestions</h3>
+                  <p className="text-[10px] text-muted-foreground -mt-0.5">Tuned to your day</p>
+                </div>
+              </div>
+              <span className="text-[10px] text-muted-foreground bg-secondary/60 px-2 py-1 rounded-full border border-white/[0.05]">
+                {suggestions.length}
+              </span>
             </div>
-            <div className="space-y-2.5 flex-1">
-              {suggestions.map((s, i) => (
-                <motion.div
-                  key={s.id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="p-3 rounded-xl bg-secondary/40 border border-white/[0.05]"
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="text-base leading-none mt-0.5">{s.icon ?? "💡"}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-xs font-semibold ${s.accent ?? "text-foreground"}`}>{s.title}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{s.body}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+
+            {(() => {
+              const [hero, ...rest] = suggestions;
+              return (
+                <div className="relative space-y-3 flex-1">
+                  {/* Featured hero suggestion */}
+                  {hero && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="relative p-4 rounded-xl border border-white/[0.08] bg-gradient-to-br from-background/70 to-secondary/40 backdrop-blur-sm"
+                      style={{ boxShadow: "0 10px 30px -18px hsl(var(--primary) / 0.6)" }}
+                    >
+                      <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
+                      <div className="flex items-start gap-3">
+                        <div className="text-2xl leading-none mt-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
+                          {hero.icon ?? "✨"}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-[10px] uppercase tracking-wider font-bold ${hero.accent ?? "text-primary"}`}>
+                            Featured
+                          </p>
+                          <p className="text-sm font-heading font-bold mt-0.5">{hero.title}</p>
+                          <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{hero.body}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Rest of the suggestions */}
+                  {rest.map((s, i) => (
+                    <motion.div
+                      key={s.id}
+                      initial={{ opacity: 0, x: -6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 + i * 0.06 }}
+                      className="group relative p-3 rounded-xl bg-secondary/40 border border-white/[0.05] hover:border-white/[0.12] hover:bg-secondary/60 transition-all"
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-background/50 border border-white/[0.06] flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                          <span className="text-sm leading-none">{s.icon ?? "💡"}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-xs font-semibold ${s.accent ?? "text-foreground"}`}>{s.title}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{s.body}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              );
+            })()}
           </motion.div>
+
 
 
           {/* Today's Workout */}
@@ -415,22 +486,7 @@ export default function Dashboard() {
             <WaterTracker />
           </motion.div>
 
-          {/* Quick Actions — compact horizontal pills */}
-          <motion.div variants={fadeUp} className="lg:col-span-3 glass-card p-3 rounded-2xl">
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { label: "Log Meal", icon: UtensilsCrossed, to: "/nutrition", color: "text-success" },
-                { label: "Workout", icon: Dumbbell, to: "/workout-planner", color: "text-primary" },
-                { label: "Weight", icon: Scale, to: "/progress", color: "text-accent" },
-                { label: "Add PR", icon: Trophy, to: "/records", color: "text-warning" },
-              ].map(({ label, icon: Icon, to, color }) => (
-                <Link key={label} to={to} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-secondary/40 border border-white/[0.05] hover:border-white/[0.12] transition-all hover:scale-[1.02] active:scale-[0.98]">
-                  <Icon size={14} className={color} />
-                  <span className="text-xs font-medium">{label}</span>
-                </Link>
-              ))}
-            </div>
-          </motion.div>
+
 
 
           {/* Recent Workouts */}
