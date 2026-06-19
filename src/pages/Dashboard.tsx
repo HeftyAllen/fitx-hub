@@ -210,6 +210,15 @@ export default function Dashboard() {
   const todayDayName = WEEKDAYS[new Date().getDay() === 0 ? 6 : new Date().getDay() - 1];
   const todayPlan = plans.find(p => p.days?.includes(todayDayName));
 
+  const suggestions = useMemo<Suggestion[]>(() => buildSuggestions({
+    uid: user?.uid ?? null,
+    profile: userProfile,
+    todayPlan,
+    workoutLogs,
+    todayCalories,
+    weightHistory,
+  }), [user?.uid, userProfile, todayPlan, workoutLogs, todayCalories, weightHistory]);
+
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-5">
