@@ -314,27 +314,35 @@ export default function Dashboard() {
             </div>
           </motion.div>
 
-          {/* Today's Macros */}
-          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground">Today's Macros</h3>
-              <Link to="/nutrition" className="text-xs text-primary hover:underline">Log →</Link>
+          {/* Intelligent Suggestions */}
+          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Sparkles size={12} className="text-primary" /> Suggestions
+              </h3>
+              <span className="text-[10px] text-muted-foreground">For you</span>
             </div>
-            <div className="flex justify-around">
-              <MacroRing value={0} max={2200} label="Calories" color="#2563EB" size={80} />
-              <MacroRing value={0} max={150} label="Protein" color="#06B6D4" size={80} />
-              <MacroRing value={0} max={250} label="Carbs" color="#FACC15" size={80} />
-            </div>
-            <div className="mt-4 pt-3 border-t border-white/[0.06]">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Fats</span>
-                <span className="font-medium">0 / 70g</span>
-              </div>
-              <div className="relative h-1.5 mt-1 bg-secondary rounded-full overflow-hidden">
-                <div className="absolute inset-y-0 left-0 rounded-full bg-orange-500/70 w-0" />
-              </div>
+            <div className="space-y-2.5 flex-1">
+              {suggestions.map((s, i) => (
+                <motion.div
+                  key={s.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="p-3 rounded-xl bg-secondary/40 border border-white/[0.05]"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="text-base leading-none mt-0.5">{s.icon ?? "💡"}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-xs font-semibold ${s.accent ?? "text-foreground"}`}>{s.title}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{s.body}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
             </div>
           </motion.div>
+
 
           {/* Today's Workout */}
           <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl">
