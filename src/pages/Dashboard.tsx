@@ -434,7 +434,7 @@ export default function Dashboard() {
 
 
           {/* Recent Workouts */}
-          <motion.div variants={fadeUp} className="lg:col-span-2 glass-card p-5 rounded-2xl">
+          <motion.div variants={fadeUp} className="lg:col-span-3 glass-card p-5 rounded-2xl">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground">Recent Workouts</h3>
               <Link to="/records" className="text-xs text-primary hover:underline flex items-center gap-1">
