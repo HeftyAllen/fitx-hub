@@ -1,14 +1,14 @@
 import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/layout/AppLayout";
 import { motion } from "framer-motion";
-import { Plus, Dumbbell, UtensilsCrossed, Scale, Trophy, Droplets, TrendingUp, Flame, Calendar, Zap, Target, ChevronRight, Clock, BarChart3, Award } from "lucide-react";
+import { Plus, Dumbbell, UtensilsCrossed, Scale, Trophy, Droplets, TrendingUp, Flame, Calendar, Zap, Target, ChevronRight, Clock, BarChart3, Award, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { useAuth as useAuthCtx } from "@/contexts/AuthContext";
+import { useState, useEffect, useMemo } from "react";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, orderBy, limit, where, Timestamp } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, AreaChart, Area } from "recharts";
 import { useChallenges } from "@/hooks/useChallenges";
+import { buildSuggestions, type Suggestion } from "@/lib/suggestions";
 
 const GREETINGS = [
   { label: "Welcome back,",       sub: "Glad to see you again. Let's crush it today." },
@@ -125,6 +125,8 @@ export default function Dashboard() {
   const [workoutLogs, setWorkoutLogs] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
   const [recentPRs, setRecentPRs] = useState<any[]>([]);
+  const [todayCalories, setTodayCalories] = useState(0);
+  const [weightHistory, setWeightHistory] = useState<{ dateISO: string; weightKg: number }[]>([]);
   const { challenges, loading: challengesLoading } = useChallenges();
   const [weeklyData, setWeeklyData] = useState<{ day: string; minutes: number; volume: number }[]>(
     WEEKDAYS.map(d => ({ day: d, minutes: 0, volume: 0 }))
@@ -174,6 +176,28 @@ export default function Dashboard() {
       prs.sort((a: any, b: any) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
       setRecentPRs(prs.slice(0, 3));
     });
+
+    // Today's calories
+    const today = new Date().toISOString().split("T")[0];
+    getDoc(doc(db, "users", user.uid, "foodLog", today)).then(snap => {
+      if (!snap.exists()) return setTodayCalories(0);
+      const data = snap.data() as any;
+      let cals = 0;
+      ["breakfast", "lunch", "dinner", "snacks"].forEach(meal => {
+        (data[meal] || []).forEach((item: any) => { cals += Number(item.calories) || 0; });
+      });
+      setTodayCalories(Math.round(cals));
+    }).catch(() => setTodayCalories(0));
+
+    // Weight history (last ~60d)
+    getDocs(collection(db, "users", user.uid, "weightLogs")).then(snap => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        const date = data.date?.toDate ? data.date.toDate() : new Date(data.date || d.id);
+        return { dateISO: date.toISOString().slice(0, 10), weightKg: Number(data.weightKg ?? data.weight) || 0 };
+      }).filter(x => x.weightKg > 0).sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+      setWeightHistory(items);
+    }).catch(() => setWeightHistory([]));
   }, [user]);
 
   const totalWorkoutsThisWeek = weeklyData.filter(d => d.minutes > 0).length;
@@ -185,6 +209,15 @@ export default function Dashboard() {
 
   const todayDayName = WEEKDAYS[new Date().getDay() === 0 ? 6 : new Date().getDay() - 1];
   const todayPlan = plans.find(p => p.days?.includes(todayDayName));
+
+  const suggestions = useMemo<Suggestion[]>(() => buildSuggestions({
+    uid: user?.uid ?? null,
+    profile: userProfile,
+    todayPlan,
+    workoutLogs,
+    todayCalories,
+    weightHistory,
+  }), [user?.uid, userProfile, todayPlan, workoutLogs, todayCalories, weightHistory]);
 
   return (
     <AppLayout>
@@ -281,27 +314,35 @@ export default function Dashboard() {
             </div>
           </motion.div>
 
-          {/* Today's Macros */}
-          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground">Today's Macros</h3>
-              <Link to="/nutrition" className="text-xs text-primary hover:underline">Log →</Link>
+          {/* Intelligent Suggestions */}
+          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Sparkles size={12} className="text-primary" /> Suggestions
+              </h3>
+              <span className="text-[10px] text-muted-foreground">For you</span>
             </div>
-            <div className="flex justify-around">
-              <MacroRing value={0} max={2200} label="Calories" color="#2563EB" size={80} />
-              <MacroRing value={0} max={150} label="Protein" color="#06B6D4" size={80} />
-              <MacroRing value={0} max={250} label="Carbs" color="#FACC15" size={80} />
-            </div>
-            <div className="mt-4 pt-3 border-t border-white/[0.06]">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Fats</span>
-                <span className="font-medium">0 / 70g</span>
-              </div>
-              <div className="relative h-1.5 mt-1 bg-secondary rounded-full overflow-hidden">
-                <div className="absolute inset-y-0 left-0 rounded-full bg-orange-500/70 w-0" />
-              </div>
+            <div className="space-y-2.5 flex-1">
+              {suggestions.map((s, i) => (
+                <motion.div
+                  key={s.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="p-3 rounded-xl bg-secondary/40 border border-white/[0.05]"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="text-base leading-none mt-0.5">{s.icon ?? "💡"}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-xs font-semibold ${s.accent ?? "text-foreground"}`}>{s.title}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{s.body}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
             </div>
           </motion.div>
+
 
           {/* Today's Workout */}
           <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl">
@@ -374,28 +415,26 @@ export default function Dashboard() {
             <WaterTracker />
           </motion.div>
 
-          {/* Quick Actions */}
-          <motion.div variants={fadeUp} className="lg:col-span-3 glass-card p-5 rounded-2xl">
-            <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground mb-3">Quick Actions</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Quick Actions — compact horizontal pills */}
+          <motion.div variants={fadeUp} className="lg:col-span-3 glass-card p-3 rounded-2xl">
+            <div className="grid grid-cols-4 gap-2">
               {[
-                { label: "Log Meal", icon: UtensilsCrossed, to: "/nutrition", color: "bg-success/15 text-success" },
-                { label: "Start Workout", icon: Dumbbell, to: "/workout-planner", color: "bg-primary/15 text-primary" },
-                { label: "Log Weight", icon: Scale, to: "/progress", color: "bg-accent/15 text-accent" },
-                { label: "Add PR", icon: Trophy, to: "/records", color: "bg-warning/15 text-warning" },
+                { label: "Log Meal", icon: UtensilsCrossed, to: "/nutrition", color: "text-success" },
+                { label: "Workout", icon: Dumbbell, to: "/workout-planner", color: "text-primary" },
+                { label: "Weight", icon: Scale, to: "/progress", color: "text-accent" },
+                { label: "Add PR", icon: Trophy, to: "/records", color: "text-warning" },
               ].map(({ label, icon: Icon, to, color }) => (
-                <Link key={label} to={to} className="flex items-center gap-3 p-3.5 rounded-2xl bg-secondary/50 border border-white/[0.05] hover:border-white/[0.12] transition-all hover:scale-[1.02] active:scale-[0.98]">
-                  <div className={`p-2.5 rounded-xl ${color}`}>
-                    <Icon size={16} />
-                  </div>
-                  <span className="text-sm font-medium">{label}</span>
+                <Link key={label} to={to} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-secondary/40 border border-white/[0.05] hover:border-white/[0.12] transition-all hover:scale-[1.02] active:scale-[0.98]">
+                  <Icon size={14} className={color} />
+                  <span className="text-xs font-medium">{label}</span>
                 </Link>
               ))}
             </div>
           </motion.div>
 
+
           {/* Recent Workouts */}
-          <motion.div variants={fadeUp} className="lg:col-span-2 glass-card p-5 rounded-2xl">
+          <motion.div variants={fadeUp} className="lg:col-span-3 glass-card p-5 rounded-2xl">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground">Recent Workouts</h3>
               <Link to="/records" className="text-xs text-primary hover:underline flex items-center gap-1">
@@ -428,17 +467,7 @@ export default function Dashboard() {
             )}
           </motion.div>
 
-          {/* Motivation */}
-          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl flex flex-col justify-between">
-            <div>
-              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground mb-3">Daily Motivation</h3>
-              <p className="text-foreground/80 italic text-sm leading-relaxed">"{greeting.sub}"</p>
-            </div>
-            <div className="flex items-center gap-2 mt-4 pt-3 border-t border-white/[0.06]">
-              <Target size={14} className="text-primary" />
-              <p className="text-xs text-muted-foreground">Stay consistent, results will follow</p>
-            </div>
-          </motion.div>
+
 
           {/* Active Challenges */}
           <motion.div variants={fadeUp} className="lg:col-span-2 glass-card p-5 rounded-2xl">

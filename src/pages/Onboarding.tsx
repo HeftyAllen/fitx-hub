@@ -49,12 +49,8 @@ export default function Onboarding() {
     update(field, arr.includes(val) ? arr.filter((v: string) => v !== val) : [...arr, val]);
   };
 
-  const goalKind = GOALS.find(g => g.id === profile.goalType)?.kind ?? "maintain";
-  const visiblePaceOptions = PACE_OPTIONS.filter(p => {
-    if (goalKind === "lose") return p.goalKind !== "gain";
-    if (goalKind === "gain") return p.goalKind !== "lose";
-    return true;
-  });
+  // Always show all pace options (lose, maintain, gain) — users can decide their direction freely.
+  const visiblePaceOptions = PACE_OPTIONS;
 
   const canNext = () => {
     if (step === 1) return !!(profile.name && profile.dob && profile.gender && profile.height && profile.weight);
