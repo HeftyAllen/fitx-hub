@@ -415,25 +415,23 @@ export default function Dashboard() {
             <WaterTracker />
           </motion.div>
 
-          {/* Quick Actions */}
-          <motion.div variants={fadeUp} className="lg:col-span-3 glass-card p-5 rounded-2xl">
-            <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground mb-3">Quick Actions</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Quick Actions — compact horizontal pills */}
+          <motion.div variants={fadeUp} className="lg:col-span-3 glass-card p-3 rounded-2xl">
+            <div className="grid grid-cols-4 gap-2">
               {[
-                { label: "Log Meal", icon: UtensilsCrossed, to: "/nutrition", color: "bg-success/15 text-success" },
-                { label: "Start Workout", icon: Dumbbell, to: "/workout-planner", color: "bg-primary/15 text-primary" },
-                { label: "Log Weight", icon: Scale, to: "/progress", color: "bg-accent/15 text-accent" },
-                { label: "Add PR", icon: Trophy, to: "/records", color: "bg-warning/15 text-warning" },
+                { label: "Log Meal", icon: UtensilsCrossed, to: "/nutrition", color: "text-success" },
+                { label: "Workout", icon: Dumbbell, to: "/workout-planner", color: "text-primary" },
+                { label: "Weight", icon: Scale, to: "/progress", color: "text-accent" },
+                { label: "Add PR", icon: Trophy, to: "/records", color: "text-warning" },
               ].map(({ label, icon: Icon, to, color }) => (
-                <Link key={label} to={to} className="flex items-center gap-3 p-3.5 rounded-2xl bg-secondary/50 border border-white/[0.05] hover:border-white/[0.12] transition-all hover:scale-[1.02] active:scale-[0.98]">
-                  <div className={`p-2.5 rounded-xl ${color}`}>
-                    <Icon size={16} />
-                  </div>
-                  <span className="text-sm font-medium">{label}</span>
+                <Link key={label} to={to} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-secondary/40 border border-white/[0.05] hover:border-white/[0.12] transition-all hover:scale-[1.02] active:scale-[0.98]">
+                  <Icon size={14} className={color} />
+                  <span className="text-xs font-medium">{label}</span>
                 </Link>
               ))}
             </div>
           </motion.div>
+
 
           {/* Recent Workouts */}
           <motion.div variants={fadeUp} className="lg:col-span-2 glass-card p-5 rounded-2xl">
