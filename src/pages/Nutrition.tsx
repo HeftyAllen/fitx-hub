@@ -1046,19 +1046,26 @@ function AdjustGoalsButton() {
 /* ────────────────── RECIPES TAB ────────────────── */
 function RecipesTab({ onLog }: { onLog: (recipe: any, meal: string) => void }) {
   const [search, setSearch]     = useState("");
-  const [query, setQuery]       = useState("high protein meal");
+  const [query, setQuery]       = useState("");
   const [diet, setDiet]         = useState("");
+  const [cuisine, setCuisine]   = useState("");
   const [mealType, setMealType] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [selected, setSelected] = useState<any | null>(null);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["recipes", query, diet, mealType],
-    queryFn:  () => searchRecipes(query, { diet: diet || undefined, type: mealType || undefined }),
+    queryKey: ["recipes", query, diet, cuisine, mealType],
+    queryFn:  () => searchRecipes(query, {
+      diet: diet || undefined,
+      cuisine: cuisine || undefined,
+      type: mealType || undefined,
+      number: 24,
+    }),
     staleTime: 24 * 60 * 60 * 1000,
     retry: false,
   });
+
 
   const limitReached = (error as any)?.message === "DAILY_LIMIT_REACHED";
 
@@ -1122,10 +1129,23 @@ function RecipesTab({ onLog }: { onLog: (recipe: any, meal: string) => void }) {
                   ))}
                 </div>
               </div>
+              <div>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Cuisine</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {CUISINES.map(c => (
+                    <button key={c || "all"} onClick={() => setCuisine(c)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${cuisine === c ? "gradient-bg text-primary-foreground shadow-md shadow-primary/20" : "bg-secondary text-muted-foreground hover:text-foreground border border-border"}`}>
+                      {c || "Any"}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+
 
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
         {DIETS.map(d => (
