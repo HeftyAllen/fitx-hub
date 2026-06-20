@@ -1371,11 +1371,17 @@ function MealPlanTab({ onLog }: { onLog: (recipe: any, meal: string) => void }) 
   );
 }
 
-/* ────────────────── BARCODE SCAN TAB ────────────────── */
+/* ────────────────── BARCODE SCAN TAB (FatSecret) ────────────────── */
 function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
+  const { user } = useAuth();
+  const uid = user?.uid ?? null;
+
   const [upc, setUpc] = useState("");
   const [scanning, setScanning] = useState(false);
-  const [product, setProduct] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [product, setProduct] = useState<FsFood | null>(null);
+  const [servingIdx, setServingIdx] = useState(0);
+  const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<any>(null);
@@ -1416,52 +1422,74 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
   const doLookup = async (code: string) => {
     setError(null);
     setProduct(null);
+    setServingIdx(0);
+    setQuantity(1);
+    setLoading(true);
     try {
-      const data = await lookupBarcode(code.trim());
-      if (!data || data.status === "failure") { setError("Product not found"); return; }
+      const data = await fsLookupBarcode(code.trim());
+      if (!data) { setError("Product not found in FatSecret database"); return; }
       setProduct(data);
     } catch (e: any) {
-      if (e.message === "DAILY_LIMIT_REACHED") setError("Daily API limit reached");
-      else setError("Lookup failed");
+      setError(e?.message || "Lookup failed");
+    } finally {
+      setLoading(false);
     }
   };
 
   const lookup = () => upc.trim() && doLookup(upc.trim());
 
+  const serving = product?.servings[servingIdx];
+  const macros = serving ? scaleServing(serving, quantity) : null;
 
   const logProduct = (mealId: string) => {
-    if (!product) return;
-    const n = product.nutrition?.nutrients || [];
-    onLog({
-      id: `upc_${product.id || product.upc}_${Date.now()}`,
-      name: product.title,
+    if (!product || !serving || !macros) return;
+    const food: LoggedFood = {
+      id: `fs_${product.food_id}_${serving.serving_id}_${Date.now()}`,
+      name: product.brand_name ? `${product.food_name} (${product.brand_name})` : product.food_name,
       meal: mealId,
-      image: product.image,
-      calories: getNutrient(n, "Calories"),
-      protein:  getNutrient(n, "Protein"),
-      carbs:    getNutrient(n, "Carbohydrates"),
-      fat:      getNutrient(n, "Fat"),
-    });
-    pushRecentFood(null, {
-      id: `upc_${product.id || product.upc}`,
-      name: product.title,
-      image: product.image,
-      calories: getNutrient(n, "Calories"),
-      protein: getNutrient(n, "Protein"),
-      carbs:   getNutrient(n, "Carbohydrates"),
-      fat:     getNutrient(n, "Fat"),
-    });
-    toast.success(`${product.title} logged`);
+      amount: quantity,
+      unit: serving.serving_description,
+      calories: macros.calories,
+      protein: macros.protein,
+      carbs: macros.carbs,
+      fat: macros.fat,
+    };
+    onLog(food);
+    pushRecentFood(uid, food);
+    toast.success(`${food.name} logged to ${MEALS.find(m => m.id === mealId)?.label}`);
     setProduct(null);
     setUpc("");
+  };
+
+  const addToGrocery = async () => {
+    if (!product || !uid) return;
+    try {
+      await addGrocery(uid, {
+        name: product.food_name,
+        brand: product.brand_name,
+        qty: serving?.serving_description,
+        category: "pantry",
+        checked: false,
+        source: "barcode",
+      });
+      toast.success("Added to grocery list");
+    } catch {
+      toast.error("Failed to add");
+    }
   };
 
   return (
     <div className="grid lg:grid-cols-2 gap-5 items-start">
       <div className="glass-card p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <ScanBarcode size={18} className="text-primary" />
-          <h3 className="font-bold text-base">Scan a barcode</h3>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <ScanBarcode size={18} className="text-primary" />
+            <h3 className="font-bold text-base">Scan a barcode</h3>
+          </div>
+          <Link to="/grocery"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-bold text-emerald-400 hover:bg-emerald-500/20 transition-colors">
+            <ShoppingCart size={11} /> Grocery list
+          </Link>
         </div>
 
         <div className="aspect-video bg-secondary rounded-xl overflow-hidden relative flex items-center justify-center">
@@ -1491,10 +1519,12 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
         </div>
 
         <div className="flex gap-2">
-          <input value={upc} onChange={e => setUpc(e.target.value)} placeholder="Type UPC code (e.g. 028400064057)"
+          <input value={upc} onChange={e => setUpc(e.target.value)} placeholder="Type UPC/EAN (e.g. 028400064057)"
             className="flex-1 px-4 py-2.5 rounded-xl bg-secondary text-sm font-medium border border-border focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50" />
-          <button onClick={lookup}
-            className="px-5 py-2.5 rounded-xl gradient-bg text-primary-foreground text-sm font-bold">Look up</button>
+          <button onClick={lookup} disabled={loading}
+            className="px-5 py-2.5 rounded-xl gradient-bg text-primary-foreground text-sm font-bold disabled:opacity-50">
+            {loading ? <Loader2 size={14} className="animate-spin" /> : "Look up"}
+          </button>
         </div>
 
         {error && (
@@ -1511,29 +1541,50 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
           <div className="h-full flex flex-col items-center justify-center text-center py-10">
             <ScanBarcode size={32} className="text-muted-foreground/30 mb-3" />
             <p className="text-sm font-bold text-muted-foreground">Scan or type a UPC</p>
-            <p className="text-xs text-muted-foreground/70 mt-1">Powered by Spoonacular product database</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">Powered by FatSecret — 1.9M+ branded foods</p>
           </div>
         ) : (
           <div className="space-y-4">
             <div className="flex gap-3">
-              {product.image && <img src={product.image} alt="" className="w-20 h-20 rounded-xl object-cover" />}
+              <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Tag size={22} className="text-primary" />
+              </div>
               <div className="flex-1 min-w-0">
-                <h4 className="font-bold text-sm leading-snug">{product.title}</h4>
-                {product.brand && <p className="text-xs text-muted-foreground mt-1">{product.brand}</p>}
+                <h4 className="font-bold text-sm leading-snug">{product.food_name}</h4>
+                {product.brand_name && <p className="text-xs text-muted-foreground mt-1">{product.brand_name}</p>}
               </div>
             </div>
-            {product.nutrition?.nutrients && (
+
+            {product.servings.length > 1 && (
+              <div className="grid grid-cols-[1fr_2fr] gap-2">
+                <input type="number" step="0.25" min={0.25} value={quantity}
+                  onChange={e => setQuantity(Math.max(0.25, Number(e.target.value) || 1))}
+                  className="px-3 py-2 rounded-lg bg-secondary text-sm font-bold focus:outline-none focus:ring-1 focus:ring-primary/50" />
+                <select value={servingIdx} onChange={e => setServingIdx(Number(e.target.value))}
+                  className="px-3 py-2 rounded-lg bg-secondary text-sm focus:outline-none focus:ring-1 focus:ring-primary/50">
+                  {product.servings.map((s, i) => (
+                    <option key={s.serving_id} value={i}>{s.serving_description}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {macros && (
               <div className="grid grid-cols-4 gap-2">
-                {["Calories", "Protein", "Carbohydrates", "Fat"].map((nm, i) => (
-                  <div key={nm} className="text-center py-2 rounded-xl bg-secondary/50">
-                    <p className="text-base font-black" style={{ color: ["#2563eb", "#06b6d4", "#f59e0b", "#8b5cf6"][i] }}>
-                      {getNutrient(product.nutrition.nutrients, nm)}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">{nm.slice(0, 4)}</p>
+                {[
+                  { label: "Cal", value: macros.calories, color: "#2563eb" },
+                  { label: "Pro", value: macros.protein, color: "#06b6d4" },
+                  { label: "Carb", value: macros.carbs, color: "#f59e0b" },
+                  { label: "Fat", value: macros.fat, color: "#8b5cf6" },
+                ].map(m => (
+                  <div key={m.label} className="text-center py-2 rounded-xl bg-secondary/50">
+                    <p className="text-base font-black" style={{ color: m.color }}>{m.value}</p>
+                    <p className="text-[10px] text-muted-foreground">{m.label}</p>
                   </div>
                 ))}
               </div>
             )}
+
             <div className="grid grid-cols-2 gap-2">
               {MEALS.map(m => (
                 <button key={m.id} onClick={() => logProduct(m.id)}
@@ -1542,12 +1593,18 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
                 </button>
               ))}
             </div>
+
+            <button onClick={addToGrocery}
+              className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-colors">
+              <ShoppingCart size={13} /> Add to grocery list
+            </button>
           </div>
         )}
       </div>
     </div>
   );
 }
+
 
 /* ────────────────── MAIN PAGE ────────────────── */
 export default function Nutrition() {
