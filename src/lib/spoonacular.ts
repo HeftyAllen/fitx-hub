@@ -108,12 +108,15 @@ async function spoonFetch<T>(cacheKey: string, url: string): Promise<T> {
 export async function searchRecipes(query: string, filters?: {
   diet?: string; cuisine?: string; maxCalories?: number;
   maxReadyTime?: number; type?: string; intolerances?: string;
+  number?: number; sort?: string;
 }) {
   const params = new URLSearchParams({
     apiKey: KEY,
-    query,
-    number: "12",
+    query: query || "",
+    number: String(filters?.number ?? 24),
     addRecipeNutrition: "true",
+    instructionsRequired: "true",
+    sort: filters?.sort || "popularity",
   });
   if (filters?.diet)         params.set("diet", filters.diet);
   if (filters?.cuisine)      params.set("cuisine", filters.cuisine);
@@ -122,7 +125,7 @@ export async function searchRecipes(query: string, filters?: {
   if (filters?.type)         params.set("type", filters.type);
   if (filters?.intolerances) params.set("intolerances", filters.intolerances);
 
-  const cacheKey = `spoon_cache_search_${query}_${filters?.diet || ""}_${filters?.type || ""}_${filters?.cuisine || ""}_${filters?.intolerances || ""}`;
+  const cacheKey = `spoon_cache_search_${query}_${filters?.diet || ""}_${filters?.type || ""}_${filters?.cuisine || ""}_${filters?.intolerances || ""}_${filters?.number ?? 24}`;
   return spoonFetch<any>(cacheKey, `${BASE}/recipes/complexSearch?${params}`);
 }
 
