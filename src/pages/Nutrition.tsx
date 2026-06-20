@@ -743,7 +743,14 @@ function DiaryTab() {
     return t;
   }, [dayLog]);
 
+  const mealTargets = useMemo(
+    () => distributeMealTargets(MACRO_GOALS.calories, (userProfile as any)?.mealSplit),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [MACRO_GOALS.calories, (userProfile as any)?.mealSplit]
+  );
+
   const itemsByMeal = (mealId: string) => dayLog.foods.filter(f => f.meal === mealId);
+
 
   const addFood = (item: LoggedFood) => {
     const next: DayLog = { ...dayLog, foods: [...dayLog.foods, { ...item, id: `${item.id}_${Date.now()}` }] };
