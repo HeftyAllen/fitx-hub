@@ -3,19 +3,24 @@ import AppLayout from "@/components/layout/AppLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import {
-  searchRecipes, getRecipeById, searchIngredients, getIngredientInfo,
+  searchRecipes, getRecipeById,
   generateMealPlan, canGenerateMealPlan,
-  getDailyUsage, canMakeRequest,
-  getRecentFoods, pushRecentFood, lookupBarcode,
+  getDailyUsage,
+  getRecentFoods, pushRecentFood,
   type RecentFood,
 } from "@/lib/spoonacular";
+import {
+  searchFoods, autocompleteFoods, getFood, lookupBarcode as fsLookupBarcode,
+  scaleServing, type FsFood, type FsServing, type FsSearchHit,
+} from "@/lib/fatsecret";
+import { addGrocery } from "@/lib/grocery";
 import {
   Search, Plus, X, Clock, ChevronDown, ChevronUp, Flame,
   Filter, Bookmark, BookmarkCheck, UtensilsCrossed, Loader2,
   Apple, Beef, Wheat, Droplets, CalendarDays, Target, Info,
   ChefHat, Leaf, Zap, BarChart3, TrendingUp, ArrowRight,
   CheckCircle2, ScanBarcode, History, Copy, Sparkles, RefreshCw,
-  Lock, AlertCircle, Camera,
+  Lock, AlertCircle, Camera, ShoppingCart, Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,17 +32,19 @@ import { format, subDays, addDays, startOfWeek } from "date-fns";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import { computeTargets } from "@/lib/nutrition";
+import { computeTargets, distributeMealTargets } from "@/lib/nutrition";
+import { Link } from "react-router-dom";
 
 /* ────────────────── CONSTANTS ────────────────── */
 const TABS = ["Diary", "Recipes", "Meal Plan", "Barcode Scan"] as const;
 type Tab = typeof TABS[number];
 
+// Meal target is computed dynamically from the user's calorie goal.
 const MEALS = [
-  { id: "breakfast", label: "Breakfast", icon: "☀️", target: 600, color: "#f59e0b" },
-  { id: "lunch",     label: "Lunch",     icon: "🥗", target: 700, color: "#10b981" },
-  { id: "dinner",    label: "Dinner",    icon: "🍽️", target: 700, color: "#8b5cf6" },
-  { id: "snacks",    label: "Snacks",    icon: "🍎", target: 200, color: "#06b6d4" },
+  { id: "breakfast", label: "Breakfast", icon: "☀️", color: "#f59e0b" },
+  { id: "lunch",     label: "Lunch",     icon: "🥗", color: "#10b981" },
+  { id: "dinner",    label: "Dinner",    icon: "🍽️", color: "#8b5cf6" },
+  { id: "snacks",    label: "Snacks",    icon: "🍎", color: "#06b6d4" },
 ];
 
 const DIETS = [
@@ -48,15 +55,27 @@ const DIETS = [
   { value: "paleo",       label: "Paleo" },
   { value: "gluten free", label: "Gluten-Free" },
   { value: "whole30",     label: "Whole30" },
+  { value: "pescetarian", label: "Pescetarian" },
+  { value: "primal",      label: "Primal" },
+  { value: "low fodmap",  label: "Low FODMAP" },
+];
+
+const CUISINES = [
+  "", "italian", "mexican", "chinese", "indian", "japanese", "thai", "mediterranean",
+  "american", "french", "greek", "korean", "middle eastern", "spanish", "vietnamese", "caribbean",
 ];
 
 const MEAL_TYPES = [
   { value: "",          label: "Any meal" },
   { value: "breakfast", label: "Breakfast" },
   { value: "lunch",     label: "Lunch" },
-  { value: "dinner",    label: "Dinner" },
+  { value: "main course", label: "Main" },
+  { value: "side dish", label: "Side" },
   { value: "snack",     label: "Snack" },
   { value: "dessert",   label: "Dessert" },
+  { value: "appetizer", label: "Appetizer" },
+  { value: "salad",     label: "Salad" },
+  { value: "soup",      label: "Soup" },
 ];
 
 const DEFAULT_MACRO_GOALS = { calories: 2200, protein: 150, carbs: 250, fat: 70, fiber: 30 };
