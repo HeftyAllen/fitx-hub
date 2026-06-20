@@ -700,7 +700,7 @@ function MealRow({ meal, target, items, onAdd, onRemove }: {
 
 /* ────────────────── DIARY TAB ────────────────── */
 function DiaryTab() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const uid = user?.uid ?? null;
   const [date, setDate] = useState(new Date());
   const dateStr = format(date, "yyyy-MM-dd");
@@ -830,7 +830,7 @@ function DiaryTab() {
         <div ref={ref} className="space-y-3" data-keep-search-open>
           {MEALS.map(meal => (
             <div key={meal.id} className="relative">
-              <MealRow meal={meal} items={itemsByMeal(meal.id)}
+              <MealRow meal={meal} target={mealTargets[meal.id as keyof typeof mealTargets]} items={itemsByMeal(meal.id)}
                 onAdd={id => setActiveFoodSearch(activeFoodSearch === id ? null : id)}
                 onRemove={removeFood} />
               <AnimatePresence>
