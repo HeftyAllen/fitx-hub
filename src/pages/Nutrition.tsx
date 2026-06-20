@@ -620,15 +620,16 @@ function FoodSearchPanel({ meal, mealId, uid, onClose, onAdd }: {
 }
 
 /* ────────────────── MEAL ROW ────────────────── */
-function MealRow({ meal, items, onAdd, onRemove }: {
+function MealRow({ meal, target, items, onAdd, onRemove }: {
   meal: typeof MEALS[number];
+  target: number;
   items: LoggedFood[];
   onAdd: (mealId: string) => void;
   onRemove: (foodId: string) => void;
 }) {
   const [open, setOpen] = useState(true);
   const totalCals = items.reduce((s, i) => s + (i.calories || 0), 0);
-  const pct = Math.min((totalCals / meal.target) * 100, 100);
+  const pct = target > 0 ? Math.min((totalCals / target) * 100, 100) : 0;
 
   return (
     <div className="glass-card overflow-hidden">
@@ -643,10 +644,10 @@ function MealRow({ meal, items, onAdd, onRemove }: {
           <div className="flex items-center justify-between gap-2">
             <span className="font-bold text-sm">{meal.label}</span>
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-muted-foreground">target {meal.target} cal</span>
+              <span className="text-muted-foreground">target {target} cal</span>
               <span className="px-2 py-0.5 rounded-full font-bold tabular-nums"
                 style={{ background: `${meal.color}20`, color: meal.color }}>
-                {totalCals} / {meal.target}
+                {totalCals} / {target}
               </span>
             </div>
           </div>
@@ -656,6 +657,7 @@ function MealRow({ meal, items, onAdd, onRemove }: {
         </div>
         {open ? <ChevronUp size={15} className="text-muted-foreground flex-shrink-0" /> : <ChevronDown size={15} className="text-muted-foreground flex-shrink-0" />}
       </button>
+
 
       {/* Items */}
       <AnimatePresence>
