@@ -366,123 +366,135 @@ function RecipeDetailModal({ recipe: initialRecipe, onClose, onLogMeal }: {
   );
 }
 
-/* ────────────────── PORTION EDITOR ────────────────── */
-function PortionEditor({ item, mealId, uid, onCancel, onConfirm }: {
-  item: any; mealId: string; uid: string | null;
+/* ────────────────── FATSECRET PORTION EDITOR ────────────────── */
+function FsPortionEditor({ hit, mealId, uid, onCancel, onConfirm }: {
+  hit: FsSearchHit; mealId: string; uid: string | null;
   onCancel: () => void; onConfirm: (food: LoggedFood) => void;
 }) {
-  const [amount, setAmount] = useState<number>(100);
-  const [unit, setUnit] = useState<string>("grams");
-  const [units, setUnits] = useState<string[]>(["grams", "oz", "cup", "tbsp", "tsp", "serving"]);
+  const [quantity, setQuantity] = useState<number>(1);
+  const [servingIdx, setServingIdx] = useState(0);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["ingr-info", item.id, amount, unit],
-    queryFn: () => getIngredientInfo(item.id, amount, unit),
-    enabled: !!item.id,
+  const { data: food, isLoading, error } = useQuery({
+    queryKey: ["fs-food", hit.food_id],
+    queryFn: () => getFood(hit.food_id),
     staleTime: 24 * 60 * 60 * 1000,
-    retry: false,
+    retry: 1,
   });
 
-  useEffect(() => {
-    const possible = (data as any)?.possibleUnits as string[] | undefined;
-    if (possible?.length) {
-      setUnits(Array.from(new Set([...possible, "grams", "oz", "cup", "serving"])));
-    }
-  }, [data]);
-
-  const nutrients = (data as any)?.nutrition?.nutrients || [];
-  const cals    = getNutrient(nutrients, "Calories");
-  const protein = getNutrient(nutrients, "Protein");
-  const carbs   = getNutrient(nutrients, "Carbohydrates");
-  const fat     = getNutrient(nutrients, "Fat");
+  const serving: FsServing | undefined = food?.servings[servingIdx];
+  const macros = serving
+    ? scaleServing(serving, quantity)
+    : { calories: 0, protein: 0, carbs: 0, fat: 0 };
 
   const confirm = () => {
-    const food: LoggedFood = {
-      id:       String(item.id),
-      name:     item.name,
-      meal:     mealId,
-      image:    item.image ? `https://spoonacular.com/cdn/ingredients_100x100/${item.image}` : undefined,
-      amount, unit,
-      calories: cals, protein, carbs, fat,
+    if (!serving || !food) return;
+    const logged: LoggedFood = {
+      id: `${food.food_id}_${serving.serving_id}`,
+      name: food.brand_name ? `${food.food_name} (${food.brand_name})` : food.food_name,
+      meal: mealId,
+      amount: quantity,
+      unit: serving.serving_description,
+      calories: macros.calories,
+      protein: macros.protein,
+      carbs: macros.carbs,
+      fat: macros.fat,
     };
-    onConfirm(food);
-    pushRecentFood(uid, food);
+    onConfirm(logged);
+    pushRecentFood(uid, { ...logged });
   };
 
   return (
     <div className="p-4 space-y-3 border-t border-border bg-secondary/20">
-      <div className="flex items-center gap-3">
-        {item.image && (
-          <img src={`https://spoonacular.com/cdn/ingredients_100x100/${item.image}`} alt="" className="w-10 h-10 rounded-lg object-cover" />
-        )}
-        <div className="min-w-0">
-          <p className="text-sm font-bold capitalize truncate">{item.name}</p>
-          <p className="text-[10px] text-muted-foreground">Edit portion to compute calories & macros</p>
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+          {food?.food_type === "Brand" ? <Tag size={16} className="text-primary" /> : <Apple size={16} className="text-primary" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold capitalize truncate">{hit.food_name}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {hit.brand_name || hit.food_type || "Generic"} · pick a serving
+          </p>
         </div>
       </div>
-      <div className="grid grid-cols-[1fr_1.3fr] gap-2">
-        <input type="number" min={1} value={amount}
-          onChange={e => setAmount(Math.max(1, Number(e.target.value) || 1))}
-          className="px-3 py-2 rounded-lg bg-card text-sm font-bold focus:outline-none focus:ring-1 focus:ring-primary/50" />
-        <select value={unit} onChange={e => setUnit(e.target.value)}
-          className="px-3 py-2 rounded-lg bg-card text-sm font-medium focus:outline-none focus:ring-1 focus:ring-primary/50">
-          {units.map(u => <option key={u} value={u}>{u}</option>)}
-        </select>
-      </div>
-      <div className="grid grid-cols-4 gap-1.5">
-        {[
-          { label: "Cal",  value: cals,    color: "#2563eb", suffix: "" },
-          { label: "P",    value: protein, color: "#06b6d4", suffix: "g" },
-          { label: "C",    value: carbs,   color: "#f59e0b", suffix: "g" },
-          { label: "F",    value: fat,     color: "#8b5cf6", suffix: "g" },
-        ].map(s => (
-          <div key={s.label} className="text-center py-1.5 rounded-lg bg-card">
-            <p className="text-sm font-black tabular-nums" style={{ color: s.color }}>
-              {isLoading ? "…" : `${s.value}${s.suffix}`}
-            </p>
-            <p className="text-[9px] text-muted-foreground uppercase">{s.label}</p>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-6"><Loader2 size={16} className="animate-spin text-primary" /></div>
+      ) : error || !food?.servings.length ? (
+        <p className="text-[11px] text-destructive">Couldn't load servings — try a different food.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-[1fr_1.6fr] gap-2">
+            <input type="number" step="0.25" min={0.25} value={quantity}
+              onChange={e => setQuantity(Math.max(0.25, Number(e.target.value) || 1))}
+              className="px-3 py-2 rounded-lg bg-card text-sm font-bold focus:outline-none focus:ring-1 focus:ring-primary/50" />
+            <select value={servingIdx} onChange={e => setServingIdx(Number(e.target.value))}
+              className="px-3 py-2 rounded-lg bg-card text-sm font-medium focus:outline-none focus:ring-1 focus:ring-primary/50">
+              {food.servings.map((s, i) => (
+                <option key={s.serving_id} value={i}>{s.serving_description}</option>
+              ))}
+            </select>
           </div>
-        ))}
-      </div>
-      {error && (
-        <p className="text-[10px] text-destructive">Couldn't load nutrition for that unit — try grams.</p>
+          <div className="grid grid-cols-4 gap-1.5">
+            {[
+              { label: "Cal",  value: macros.calories, color: "#2563eb", suffix: "" },
+              { label: "P",    value: macros.protein,  color: "#06b6d4", suffix: "g" },
+              { label: "C",    value: macros.carbs,    color: "#f59e0b", suffix: "g" },
+              { label: "F",    value: macros.fat,      color: "#8b5cf6", suffix: "g" },
+            ].map(s => (
+              <div key={s.label} className="text-center py-1.5 rounded-lg bg-card">
+                <p className="text-sm font-black tabular-nums" style={{ color: s.color }}>
+                  {s.value}{s.suffix}
+                </p>
+                <p className="text-[9px] text-muted-foreground uppercase">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </>
       )}
+
       <div className="flex gap-2">
         <button onClick={onCancel} className="flex-1 py-2 rounded-lg bg-secondary text-xs font-semibold">Back</button>
-        <button onClick={confirm} disabled={isLoading || cals === 0}
+        <button onClick={confirm} disabled={isLoading || !serving || macros.calories === 0}
           className="flex-1 py-2 rounded-lg gradient-bg text-primary-foreground text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
-          <Plus size={12} /> Log {cals || 0} cal
+          <Plus size={12} /> Log {macros.calories || 0} cal
         </button>
       </div>
     </div>
   );
 }
 
-/* ────────────────── FOOD SEARCH PANEL ────────────────── */
+/* ────────────────── FOOD SEARCH PANEL (FatSecret) ────────────────── */
 function FoodSearchPanel({ meal, mealId, uid, onClose, onAdd }: {
   meal: string; mealId: string; uid: string | null; onClose: () => void; onAdd: (item: LoggedFood) => void;
 }) {
   const [query, setQuery] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
-  const [pending, setPending] = useState<any | null>(null);
+  const [pending, setPending] = useState<FsSearchHit | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recent = useMemo(() => getRecentFoods(uid, 8), [uid]);
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 50); }, []);
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQ(query.trim().length >= 3 ? query.trim() : ""), 350);
+    const t = setTimeout(() => setDebouncedQ(query.trim().length >= 2 ? query.trim() : ""), 300);
     return () => clearTimeout(t);
   }, [query]);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["ingredients", debouncedQ],
-    queryFn:  () => searchIngredients(debouncedQ),
-    enabled:  debouncedQ.length >= 3,
-    staleTime: 24 * 60 * 60 * 1000,
-    retry: false,
+  // Autocomplete: short queries get FatSecret suggestions.
+  const { data: suggestions } = useQuery({
+    queryKey: ["fs-auto", debouncedQ],
+    queryFn: () => autocompleteFoods(debouncedQ),
+    enabled: debouncedQ.length >= 2 && debouncedQ.length < 4,
+    staleTime: 60_000,
   });
 
-  const limitReached = (error as any)?.message === "DAILY_LIMIT_REACHED";
+  // Full search.
+  const { data: hits, isLoading, error } = useQuery({
+    queryKey: ["fs-search", debouncedQ],
+    queryFn: () => searchFoods(debouncedQ),
+    enabled: debouncedQ.length >= 2,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
 
   const addRecent = (r: RecentFood) => {
     onAdd({
@@ -496,87 +508,114 @@ function FoodSearchPanel({ meal, mealId, uid, onClose, onAdd }: {
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-      className="absolute inset-x-0 top-full mt-2 z-30 bg-card border border-border rounded-2xl shadow-2xl shadow-black/40 overflow-hidden"
-      onMouseDown={e => e.stopPropagation()}
-      onClick={e => e.stopPropagation()}>
-      <div className="p-3 border-b border-border flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input ref={inputRef} type="text" placeholder={`Search food for ${meal}... (3+ chars)`} value={query}
-            onChange={e => setQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-secondary text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/50" />
-        </div>
-        <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground"><X size={14} /></button>
-      </div>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-5 pt-5 pb-3">
+          <DialogTitle className="flex items-center gap-2">
+            <Search size={16} className="text-primary" /> Add food to {meal}
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Search 1.9M+ foods, brands and restaurants powered by FatSecret.
+          </DialogDescription>
+        </DialogHeader>
 
-      {pending ? (
-        <PortionEditor
-          item={pending}
-          mealId={mealId}
-          uid={uid}
-          onCancel={() => setPending(null)}
-          onConfirm={(food) => { onAdd(food); setPending(null); onClose(); }}
-        />
-      ) : (
-      <div className="max-h-72 overflow-y-auto">
-        {!debouncedQ && recent.length > 0 && (
-          <div className="p-2">
-            <p className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <History size={10} /> Recent foods (no API call)
-            </p>
-            {recent.map(r => (
-              <button key={r.id} onClick={() => addRecent(r)}
-                className="w-full flex items-center gap-3 px-3 py-2 hover:bg-secondary/60 transition-colors text-left rounded-xl">
-                <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {r.image ? <img src={r.image} alt="" className="w-full h-full object-cover" /> : <Apple size={12} className="text-muted-foreground" />}
+        <div className="px-5 pb-3">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input ref={inputRef} type="text"
+              placeholder="e.g. banana, Chipotle bowl, Quest bar..." value={query}
+              onChange={e => setQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-secondary text-sm focus:outline-none focus:ring-1 focus:ring-primary/50" />
+          </div>
+          {suggestions && suggestions.length > 0 && hits && hits.length === 0 && (
+            <div className="flex gap-1.5 flex-wrap mt-2">
+              {suggestions.slice(0, 6).map(s => (
+                <button key={s} onClick={() => setQuery(s)}
+                  className="px-2.5 py-1 rounded-full text-[11px] bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground capitalize">
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {pending ? (
+          <FsPortionEditor
+            hit={pending}
+            mealId={mealId}
+            uid={uid}
+            onCancel={() => setPending(null)}
+            onConfirm={(food) => { onAdd(food); setPending(null); onClose(); }}
+          />
+        ) : (
+          <div className="max-h-[55vh] overflow-y-auto border-t border-border">
+            {!debouncedQ && recent.length > 0 && (
+              <div className="p-2">
+                <p className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <History size={10} /> Recent foods
+                </p>
+                {recent.map(r => (
+                  <button key={r.id} onClick={() => addRecent(r)}
+                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-secondary/60 transition-colors text-left rounded-xl">
+                    <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      {r.image ? <img src={r.image} alt="" className="w-full h-full object-cover" /> : <Apple size={12} className="text-muted-foreground" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold capitalize truncate">{r.name}</p>
+                      {r.calories ? <p className="text-[10px] text-muted-foreground">{r.calories} cal · used {r.uses}×</p> : null}
+                    </div>
+                    <Plus size={12} className="text-primary flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!debouncedQ && recent.length === 0 && (
+              <div className="py-10 text-center text-muted-foreground text-xs">
+                Start typing — try "banana", "chicken breast" or a brand name.
+              </div>
+            )}
+
+            {isLoading && (
+              <div className="flex items-center justify-center py-6"><Loader2 size={18} className="animate-spin text-primary" /></div>
+            )}
+
+            {error && (
+              <div className="px-4 py-6 text-center">
+                <AlertCircle size={20} className="mx-auto text-destructive mb-2" />
+                <p className="text-xs font-bold text-destructive">Food search failed</p>
+                <p className="text-[10px] text-muted-foreground mt-1">{(error as Error).message}</p>
+              </div>
+            )}
+
+            {hits?.map((item) => (
+              <button key={item.food_id} onClick={() => setPending(item)}
+                className="w-full flex items-start gap-3 px-4 py-3 hover:bg-secondary/60 transition-colors text-left border-b border-border/40 last:border-0">
+                <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
+                  {item.food_type === "Brand" ? <Tag size={14} className="text-primary" /> : <Apple size={14} className="text-muted-foreground" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold capitalize truncate">{r.name}</p>
-                  {r.calories ? <p className="text-[10px] text-muted-foreground">{r.calories} cal · used {r.uses}×</p> : null}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold capitalize">{item.food_name}</span>
+                    {item.brand_name && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold">{item.brand_name}</span>
+                    )}
+                  </div>
+                  {item.food_description && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">{item.food_description}</p>
+                  )}
                 </div>
-                <Plus size={12} className="text-primary flex-shrink-0" />
+                <ArrowRight size={12} className="text-primary flex-shrink-0 mt-2" />
               </button>
             ))}
-            <div className="border-t border-border/50 my-2" />
+
+            {debouncedQ && !isLoading && !error && hits?.length === 0 && (
+              <div className="py-10 text-center text-muted-foreground text-xs">No results found</div>
+            )}
           </div>
         )}
-
-        {!debouncedQ && recent.length === 0 && (
-          <div className="py-8 text-center text-muted-foreground text-xs">Type 3+ characters to search food...</div>
-        )}
-
-        {isLoading && (
-          <div className="flex items-center justify-center py-6"><Loader2 size={18} className="animate-spin text-primary" /></div>
-        )}
-
-        {limitReached && (
-          <div className="px-4 py-6 text-center">
-            <Lock size={20} className="mx-auto text-destructive mb-2" />
-            <p className="text-xs font-bold text-destructive">Daily API limit reached</p>
-            <p className="text-[10px] text-muted-foreground mt-1">Use recent foods or come back tomorrow.</p>
-          </div>
-        )}
-
-        {data?.results?.map((item: any) => (
-          <button key={item.id} onClick={() => setPending(item)}
-            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/60 transition-colors text-left">
-            <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 overflow-hidden">
-              {item.image
-                ? <img src={`https://spoonacular.com/cdn/ingredients_100x100/${item.image}`} alt={item.name} className="w-full h-full object-cover" />
-                : <Apple size={14} className="text-muted-foreground" />}
-            </div>
-            <span className="text-sm font-medium capitalize flex-1">{item.name}</span>
-            <ArrowRight size={12} className="text-primary flex-shrink-0" />
-          </button>
-        ))}
-
-        {debouncedQ && !isLoading && !limitReached && !data?.results?.length && (
-          <div className="py-8 text-center text-muted-foreground text-xs">No results found</div>
-        )}
-      </div>
-      )}
-    </motion.div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
