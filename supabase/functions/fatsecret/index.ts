@@ -57,10 +57,21 @@ async function callApi(params: Record<string, string>) {
     body: search,
   });
   const text = await res.text();
-  let data: unknown;
+  let data: any;
   try { data = JSON.parse(text); } catch { data = { raw: text }; }
   if (!res.ok) {
     throw new Error(`FatSecret ${res.status}: ${text.slice(0, 200)}`);
+  }
+  // FatSecret returns 200 OK with an error object on API-level failures.
+  if (data && typeof data === "object" && data.error && (data.error.message || data.error.code)) {
+    const code = data.error.code;
+    const msg = String(data.error.message || "FatSecret error");
+    if (code === 21 || /invalid ip/i.test(msg)) {
+      throw new Error(
+        "FatSecret rejected our server IP. Disable IP restrictions in your FatSecret Platform account (Manage IPs → allow all)."
+      );
+    }
+    throw new Error(`FatSecret error ${code ?? ""}: ${msg}`.trim());
   }
   return data;
 }

@@ -52,8 +52,25 @@ export default function Onboarding() {
   // Always show all pace options (lose, maintain, gain) — users can decide their direction freely.
   const visiblePaceOptions = PACE_OPTIONS;
 
+  const maxDob = useMemo(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 16);
+    return d.toISOString().split("T")[0];
+  }, []);
+  const age = useMemo(() => {
+    if (!profile.dob) return null;
+    const b = new Date(profile.dob);
+    if (isNaN(b.getTime())) return null;
+    const now = new Date();
+    let a = now.getFullYear() - b.getFullYear();
+    const m = now.getMonth() - b.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < b.getDate())) a--;
+    return a;
+  }, [profile.dob]);
+  const ageValid = age === null ? false : age >= 16;
+
   const canNext = () => {
-    if (step === 1) return !!(profile.name && profile.dob && profile.gender && profile.height && profile.weight);
+    if (step === 1) return !!(profile.name && profile.dob && profile.gender && profile.height && profile.weight) && ageValid;
     if (step === 2) return !!profile.goalType;
     if (step === 4) return !!profile.experienceLevel;
     return true;
@@ -108,7 +125,13 @@ export default function Onboarding() {
                 <div className="space-y-4">
                   <h2 className="text-xl font-heading font-bold">Basic Profile</h2>
                   <input placeholder="Full Name" value={profile.name} onChange={(e) => update("name", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
-                  <input type="date" value={profile.dob} onChange={(e) => update("dob", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-secondary border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <div>
+                    <label className="text-xs text-muted-foreground ml-1">Date of birth (16+)</label>
+                    <input type="date" max={maxDob} value={profile.dob} onChange={(e) => update("dob", e.target.value)} className="w-full mt-1 px-4 py-3 rounded-xl bg-secondary border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
+                    {profile.dob && !ageValid && (
+                      <p className="text-xs text-destructive mt-1 ml-1">You must be at least 16 years old to use FitX.</p>
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     {["Male", "Female", "Other"].map((g) => (
                       <button key={g} onClick={() => update("gender", g)} className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all ${profile.gender === g ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>{g}</button>
