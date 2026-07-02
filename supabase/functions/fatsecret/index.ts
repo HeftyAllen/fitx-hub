@@ -24,7 +24,7 @@ async function getAccessToken(): Promise<string> {
     throw new Error("FatSecret credentials are not configured");
   }
   const basic = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
-  const body = new URLSearchParams({ grant_type: "client_credentials", scope: "basic barcode" });
+  const body = new URLSearchParams({ grant_type: "client_credentials", scope: "basic" });
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: {
