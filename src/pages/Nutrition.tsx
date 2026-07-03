@@ -371,7 +371,8 @@ function FsPortionEditor({ hit, mealId, uid, onCancel, onConfirm }: {
   hit: FsSearchHit; mealId: string; uid: string | null;
   onCancel: () => void; onConfirm: (food: LoggedFood) => void;
 }) {
-  const [quantity, setQuantity] = useState<number>(1);
+  const [qtyStr, setQtyStr] = useState<string>("1");
+  const quantity = Math.max(0, parseFloat(qtyStr) || 0);
   const [servingIdx, setServingIdx] = useState(0);
 
   const { data: food, isLoading, error } = useQuery({
@@ -424,8 +425,9 @@ function FsPortionEditor({ hit, mealId, uid, onCancel, onConfirm }: {
       ) : (
         <>
           <div className="grid grid-cols-[1fr_1.6fr] gap-2">
-            <input type="number" step="0.25" min={0.25} value={quantity}
-              onChange={e => setQuantity(Math.max(0.25, Number(e.target.value) || 1))}
+            <input type="number" step="0.25" min={0} inputMode="decimal" value={qtyStr}
+              onChange={e => setQtyStr(e.target.value)}
+              onBlur={() => { if (!qtyStr || parseFloat(qtyStr) <= 0) setQtyStr("1"); }}
               className="px-3 py-2 rounded-lg bg-card text-sm font-bold focus:outline-none focus:ring-1 focus:ring-primary/50" />
             <select value={servingIdx} onChange={e => setServingIdx(Number(e.target.value))}
               className="px-3 py-2 rounded-lg bg-card text-sm font-medium focus:outline-none focus:ring-1 focus:ring-primary/50">
@@ -1390,7 +1392,8 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
   const [loading, setLoading] = useState(false);
   const [product, setProduct] = useState<FsFood | null>(null);
   const [servingIdx, setServingIdx] = useState(0);
-  const [quantity, setQuantity] = useState(1);
+  const [qtyStr, setQtyStr] = useState("1");
+  const quantity = Math.max(0, parseFloat(qtyStr) || 0);
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<any>(null);
@@ -1432,7 +1435,7 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
     setError(null);
     setProduct(null);
     setServingIdx(0);
-    setQuantity(1);
+    setQtyStr("1");
     setLoading(true);
     try {
       const data = await fsLookupBarcode(code.trim());
@@ -1566,8 +1569,9 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
 
             {product.servings.length > 0 && (
               <div className="grid grid-cols-[1fr_2fr] gap-2">
-                <input type="number" step="0.25" min={0.25} value={quantity}
-                  onChange={e => setQuantity(Math.max(0.25, Number(e.target.value) || 1))}
+                <input type="number" step="0.25" min={0} inputMode="decimal" value={qtyStr}
+                  onChange={e => setQtyStr(e.target.value)}
+                  onBlur={() => { if (!qtyStr || parseFloat(qtyStr) <= 0) setQtyStr("1"); }}
                   className="px-3 py-2 rounded-lg bg-secondary text-sm font-bold focus:outline-none focus:ring-1 focus:ring-primary/50" />
                 <select value={servingIdx} onChange={e => setServingIdx(Number(e.target.value))}
                   disabled={product.servings.length < 2}
