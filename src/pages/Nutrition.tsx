@@ -1435,7 +1435,7 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
     setError(null);
     setProduct(null);
     setServingIdx(0);
-    setQuantity(1);
+    setQtyStr("1");
     setLoading(true);
     try {
       const data = await fsLookupBarcode(code.trim());
