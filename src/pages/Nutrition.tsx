@@ -784,20 +784,9 @@ function DiaryTab() {
     toast.success(`Copied ${cloned.length} items from yesterday — zero API calls`);
   };
 
-  // close search panel only on explicit outside click (not on scroll/drag).
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      const t = e.target as HTMLElement;
-      if (!ref.current) return;
-      // ignore clicks inside meals area or on scrollbars
-      if (ref.current.contains(t)) return;
-      // ignore clicks inside any sticky right-column controls — only close on backdrop clicks
-      if (t.closest("[data-keep-search-open]")) return;
-      setActiveFoodSearch(null);
-    };
-    document.addEventListener("click", h);
-    return () => document.removeEventListener("click", h);
-  }, []);
+  // FoodSearchPanel is a Dialog and manages its own close via onOpenChange.
+  // No document-level handler here — it would fire on clicks inside the
+  // portalled dialog and unmount the editor mid-interaction.
 
   return (
     <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
@@ -1575,13 +1564,14 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
               </div>
             </div>
 
-            {product.servings.length > 1 && (
+            {product.servings.length > 0 && (
               <div className="grid grid-cols-[1fr_2fr] gap-2">
                 <input type="number" step="0.25" min={0.25} value={quantity}
                   onChange={e => setQuantity(Math.max(0.25, Number(e.target.value) || 1))}
                   className="px-3 py-2 rounded-lg bg-secondary text-sm font-bold focus:outline-none focus:ring-1 focus:ring-primary/50" />
                 <select value={servingIdx} onChange={e => setServingIdx(Number(e.target.value))}
-                  className="px-3 py-2 rounded-lg bg-secondary text-sm focus:outline-none focus:ring-1 focus:ring-primary/50">
+                  disabled={product.servings.length < 2}
+                  className="px-3 py-2 rounded-lg bg-secondary text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-70">
                   {product.servings.map((s, i) => (
                     <option key={s.serving_id} value={i}>{s.serving_description}</option>
                   ))}
