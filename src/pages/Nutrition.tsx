@@ -784,20 +784,9 @@ function DiaryTab() {
     toast.success(`Copied ${cloned.length} items from yesterday — zero API calls`);
   };
 
-  // close search panel only on explicit outside click (not on scroll/drag).
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      const t = e.target as HTMLElement;
-      if (!ref.current) return;
-      // ignore clicks inside meals area or on scrollbars
-      if (ref.current.contains(t)) return;
-      // ignore clicks inside any sticky right-column controls — only close on backdrop clicks
-      if (t.closest("[data-keep-search-open]")) return;
-      setActiveFoodSearch(null);
-    };
-    document.addEventListener("click", h);
-    return () => document.removeEventListener("click", h);
-  }, []);
+  // FoodSearchPanel is a Dialog and manages its own close via onOpenChange.
+  // No document-level handler here — it would fire on clicks inside the
+  // portalled dialog and unmount the editor mid-interaction.
 
   return (
     <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
