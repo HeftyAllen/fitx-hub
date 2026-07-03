@@ -371,7 +371,8 @@ function FsPortionEditor({ hit, mealId, uid, onCancel, onConfirm }: {
   hit: FsSearchHit; mealId: string; uid: string | null;
   onCancel: () => void; onConfirm: (food: LoggedFood) => void;
 }) {
-  const [quantity, setQuantity] = useState<number>(1);
+  const [qtyStr, setQtyStr] = useState<string>("1");
+  const quantity = Math.max(0, parseFloat(qtyStr) || 0);
   const [servingIdx, setServingIdx] = useState(0);
 
   const { data: food, isLoading, error } = useQuery({
