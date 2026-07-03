@@ -1564,13 +1564,14 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
               </div>
             </div>
 
-            {product.servings.length > 1 && (
+            {product.servings.length > 0 && (
               <div className="grid grid-cols-[1fr_2fr] gap-2">
                 <input type="number" step="0.25" min={0.25} value={quantity}
                   onChange={e => setQuantity(Math.max(0.25, Number(e.target.value) || 1))}
                   className="px-3 py-2 rounded-lg bg-secondary text-sm font-bold focus:outline-none focus:ring-1 focus:ring-primary/50" />
                 <select value={servingIdx} onChange={e => setServingIdx(Number(e.target.value))}
-                  className="px-3 py-2 rounded-lg bg-secondary text-sm focus:outline-none focus:ring-1 focus:ring-primary/50">
+                  disabled={product.servings.length < 2}
+                  className="px-3 py-2 rounded-lg bg-secondary text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-70">
                   {product.servings.map((s, i) => (
                     <option key={s.serving_id} value={i}>{s.serving_description}</option>
                   ))}
