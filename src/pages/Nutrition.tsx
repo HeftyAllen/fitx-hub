@@ -425,8 +425,9 @@ function FsPortionEditor({ hit, mealId, uid, onCancel, onConfirm }: {
       ) : (
         <>
           <div className="grid grid-cols-[1fr_1.6fr] gap-2">
-            <input type="number" step="0.25" min={0.25} value={quantity}
-              onChange={e => setQuantity(Math.max(0.25, Number(e.target.value) || 1))}
+            <input type="number" step="0.25" min={0} inputMode="decimal" value={qtyStr}
+              onChange={e => setQtyStr(e.target.value)}
+              onBlur={() => { if (!qtyStr || parseFloat(qtyStr) <= 0) setQtyStr("1"); }}
               className="px-3 py-2 rounded-lg bg-card text-sm font-bold focus:outline-none focus:ring-1 focus:ring-primary/50" />
             <select value={servingIdx} onChange={e => setServingIdx(Number(e.target.value))}
               className="px-3 py-2 rounded-lg bg-card text-sm font-medium focus:outline-none focus:ring-1 focus:ring-primary/50">
