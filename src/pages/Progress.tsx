@@ -167,7 +167,20 @@ export default function Progress() {
 
   async function loadWeightLogs() {
     const snap = await getDocs(query(collection(db, "users", user!.uid, "weightLogs"), orderBy("date", "asc")));
-    setWeightLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const rows = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+
+    // One-time dedupe: multiple auto-seeded "Starting weight" entries were
+    // created by an earlier bug. Keep the earliest, delete the rest.
+    const seededDupes = rows.filter(r => r.seeded === true || r.note === "Starting weight (from onboarding)");
+    if (seededDupes.length > 1) {
+      const keep = seededDupes[0].id;
+      await Promise.all(
+        seededDupes.slice(1).map(r => deleteDoc(doc(db, "users", user!.uid, "weightLogs", r.id)).catch(() => {}))
+      );
+      setWeightLogs(rows.filter(r => r.id === keep || !(r.seeded === true || r.note === "Starting weight (from onboarding)")));
+      return;
+    }
+    setWeightLogs(rows);
   }
 
   async function loadMeasurements() {
