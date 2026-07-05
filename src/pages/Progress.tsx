@@ -137,14 +137,22 @@ export default function Progress() {
     ]).finally(() => setLoadingAll(false));
   }, [user]);
 
-  // Auto-seed a starting weight entry from onboarding if the user has none yet.
+  // Auto-seed a starting weight entry from onboarding — ONLY once, after logs
+  // have loaded, and only if the user has zero entries in Firestore.
+  const seedAttempted = useRef(false);
   useEffect(() => {
     if (!user || !userProfile) return;
+    if (loadingAll) return;              // wait until initial load finishes
+    if (seedAttempted.current) return;   // one attempt per mount
+    if (weightLogs.length > 0) { seedAttempted.current = true; return; }
     const profWeight = parseFloat(String((userProfile as any).weight ?? ""));
-    if (!profWeight || isNaN(profWeight)) return;
-    if (weightLogs.length > 0) return;
+    if (!profWeight || isNaN(profWeight)) { seedAttempted.current = true; return; }
+    seedAttempted.current = true;
     (async () => {
       try {
+        // Double-check server-side to avoid racing with another tab/device.
+        const existing = await getDocs(collection(db, "users", user.uid, "weightLogs"));
+        if (!existing.empty) { await loadWeightLogs(); return; }
         await addDoc(collection(db, "users", user.uid, "weightLogs"), {
           weight: profWeight,
           note: "Starting weight (from onboarding)",
@@ -155,11 +163,24 @@ export default function Progress() {
       } catch (e) { console.warn("seed weight failed", e); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, userProfile, weightLogs.length]);
+  }, [user, userProfile, loadingAll, weightLogs.length]);
 
   async function loadWeightLogs() {
     const snap = await getDocs(query(collection(db, "users", user!.uid, "weightLogs"), orderBy("date", "asc")));
-    setWeightLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const rows = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+
+    // One-time dedupe: multiple auto-seeded "Starting weight" entries were
+    // created by an earlier bug. Keep the earliest, delete the rest.
+    const seededDupes = rows.filter(r => r.seeded === true || r.note === "Starting weight (from onboarding)");
+    if (seededDupes.length > 1) {
+      const keep = seededDupes[0].id;
+      await Promise.all(
+        seededDupes.slice(1).map(r => deleteDoc(doc(db, "users", user!.uid, "weightLogs", r.id)).catch(() => {}))
+      );
+      setWeightLogs(rows.filter(r => r.id === keep || !(r.seeded === true || r.note === "Starting weight (from onboarding)")));
+      return;
+    }
+    setWeightLogs(rows);
   }
 
   async function loadMeasurements() {
