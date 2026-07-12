@@ -89,43 +89,97 @@ export default function Records() {
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-heading font-bold gradient-text">Records & Challenges</h1>
-            <p className="text-xs text-muted-foreground mt-1">Track your bests and conquer challenges</p>
-          </div>
-          {(tab === "prs" || tab === "pbs") && (
-            <Button onClick={() => setShowAddModal(true)} className="gradient-bg text-primary-foreground rounded-xl gap-2">
-              <Plus size={16} /> Add Record
-            </Button>
-          )}
-        </div>
+      <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
+        {/* ===== HERO ===== */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative overflow-hidden rounded-3xl border border-white/[0.06] p-6 md:p-8"
+          style={{
+            background:
+              "radial-gradient(120% 120% at 0% 0%, hsl(var(--warning) / 0.22) 0%, transparent 55%), radial-gradient(120% 120% at 100% 100%, hsl(var(--primary) / 0.28) 0%, transparent 55%), linear-gradient(135deg, hsl(240 20% 10% / 0.9), hsl(240 15% 8% / 0.9))",
+            boxShadow: "0 30px 80px -40px hsl(var(--primary) / 0.55)",
+          }}
+        >
+          <motion.div aria-hidden className="pointer-events-none absolute -top-24 -left-16 w-72 h-72 rounded-full bg-warning/20 blur-3xl"
+            animate={{ x: [0, 25, 0], y: [0, 15, 0] }} transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }} />
+          <motion.div aria-hidden className="pointer-events-none absolute -bottom-24 -right-16 w-80 h-80 rounded-full bg-primary/25 blur-3xl"
+            animate={{ x: [0, -20, 0], y: [0, -10, 0] }} transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }} />
 
-        {/* XP + Level banner */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-4 rounded-2xl flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl gradient-bg flex items-center justify-center text-xl shadow-lg">
-            <Star className="text-white" size={22} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-bold">Level {level}</span>
-              <span className="text-xs text-muted-foreground">{totalXp.toLocaleString()} / {xpForNextLevel.toLocaleString()} XP</span>
+          <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+              {/* Medallion */}
+              <motion.div
+                initial={{ scale: 0.6, rotate: -15, opacity: 0 }}
+                animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                className="relative w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center shadow-2xl flex-shrink-0"
+                style={{
+                  background: "conic-gradient(from 210deg, hsl(var(--warning)), hsl(var(--primary)), hsl(var(--accent)), hsl(var(--warning)))",
+                }}
+              >
+                <div className="absolute inset-1.5 rounded-full bg-background/85 flex items-center justify-center">
+                  <div className="text-center">
+                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Lvl</p>
+                    <p className="text-2xl md:text-3xl font-heading font-black gradient-text leading-none">{level}</p>
+                  </div>
+                </div>
+              </motion.div>
+
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Records & Challenges</p>
+                <h1 className="mt-1 text-2xl md:text-4xl font-heading font-bold leading-tight">
+                  <span className="gradient-text">Trophy Room</span>
+                </h1>
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm">Track your bests. Conquer challenges. Earn XP.</p>
+              </div>
             </div>
-            <div className="h-2 bg-secondary rounded-full overflow-hidden">
-              <motion.div className="h-full gradient-bg rounded-full"
-                initial={{ width: 0 }} animate={{ width: `${(xpProgress / 500) * 100}%` }}
-                transition={{ duration: 1, ease: "easeOut" }} />
+
+            {(tab === "prs" || tab === "pbs") && (
+              <Button onClick={() => setShowAddModal(true)} className="gradient-bg text-primary-foreground rounded-2xl gap-2 shadow-lg h-11 px-5">
+                <Plus size={16} /> Add Record
+              </Button>
+            )}
+          </div>
+
+          {/* XP Progress */}
+          <div className="relative mt-6">
+            <div className="flex items-center justify-between mb-2 text-xs">
+              <span className="text-muted-foreground">
+                <span className="font-semibold text-foreground">{totalXp.toLocaleString()}</span> / {xpForNextLevel.toLocaleString()} XP
+              </span>
+              <span className="text-muted-foreground">Level {level + 1} in {(xpForNextLevel - totalXp).toLocaleString()} XP</span>
+            </div>
+            <div className="h-2.5 bg-black/40 rounded-full overflow-hidden border border-white/[0.05]">
+              <motion.div
+                className="h-full rounded-full relative"
+                style={{ background: "linear-gradient(90deg, hsl(var(--warning)), hsl(var(--primary)), hsl(var(--accent)))" }}
+                initial={{ width: 0 }}
+                animate={{ width: `${(xpProgress / 500) * 100}%` }}
+                transition={{ duration: 1.2, ease: "easeOut" }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse" />
+              </motion.div>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">Completed</p>
-            <p className="text-lg font-bold text-primary">{challenges.filter(c => c.completed).length}</p>
-            <p className="text-xs text-muted-foreground">challenges</p>
+
+          {/* Quick stats */}
+          <div className="relative mt-5 grid grid-cols-3 gap-3">
+            {[
+              { label: "PRs Logged", value: records.length, icon: Trophy, color: "text-warning" },
+              { label: "Completed", value: challenges.filter(c => c.completed).length, icon: Medal, color: "text-primary" },
+              { label: "Active", value: joinedChallenges.filter(c => !c.completed).length, icon: Zap, color: "text-accent" },
+            ].map((s) => (
+              <div key={s.label} className="rounded-2xl bg-black/25 border border-white/[0.05] px-4 py-3">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <s.icon size={11} className={s.color} /> {s.label}
+                </div>
+                <p className="text-xl md:text-2xl font-heading font-bold mt-1">{s.value}</p>
+              </div>
+            ))}
           </div>
-        </motion.div>
+        </motion.section>
+
 
         {/* Tabs */}
         <div className="flex gap-1 p-1 bg-secondary/40 rounded-2xl w-fit border border-white/[0.05]">
