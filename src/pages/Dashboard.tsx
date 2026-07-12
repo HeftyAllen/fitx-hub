@@ -219,103 +219,137 @@ export default function Dashboard() {
     weightHistory,
   }), [user?.uid, userProfile, todayPlan, workoutLogs, todayCalories, weightHistory]);
 
+  const level = Math.floor((workoutLogs.length * 50) / 500) + 1;
+  const xp = workoutLogs.length * 50;
+
   return (
     <AppLayout>
-      <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-5">
-        {/* Top greeting + stats row */}
-        <motion.div variants={fadeUp} initial="hidden" animate="visible" className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <motion.p
-              key={greeting.label}
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-              className="text-sm text-muted-foreground"
-            >
-              {greeting.label}
-            </motion.p>
-            <h1 className="text-2xl md:text-3xl font-heading font-bold">
-              <span className="gradient-text">{name}</span>
-            </h1>
-            <motion.p
-              key={greeting.sub}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, delay: 0.1 }}
-              className="text-xs text-muted-foreground mt-1 max-w-xs"
-            >
-              {greeting.sub}
-            </motion.p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="glass-card px-4 py-2.5 rounded-2xl flex items-center gap-2">
-              <motion.span
-                className="text-lg"
-                animate={{ rotate: [0, -10, 10, -10, 0] }}
-                transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 3 }}
-              >
-                🔥
-              </motion.span>
-              <div>
-                <p className="text-sm font-bold">{streak} Days</p>
-                <p className="text-xs text-muted-foreground">Streak</p>
+      <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-5">
+        {/* ===== HERO ===== */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="relative overflow-hidden rounded-3xl border border-white/[0.06] p-6 md:p-8"
+          style={{
+            background:
+              "radial-gradient(120% 120% at 0% 0%, hsl(var(--primary) / 0.28) 0%, transparent 55%), radial-gradient(120% 120% at 100% 100%, hsl(var(--accent) / 0.22) 0%, transparent 55%), linear-gradient(135deg, hsl(240 20% 10% / 0.9), hsl(240 15% 8% / 0.9))",
+            boxShadow: "0 30px 80px -40px hsl(var(--primary) / 0.5)",
+          }}
+        >
+          {/* aurora blobs */}
+          <motion.div
+            aria-hidden
+            className="pointer-events-none absolute -top-24 -left-16 w-72 h-72 rounded-full bg-primary/30 blur-3xl"
+            animate={{ x: [0, 30, 0], y: [0, 20, 0] }}
+            transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            aria-hidden
+            className="pointer-events-none absolute -bottom-24 -right-16 w-80 h-80 rounded-full bg-accent/25 blur-3xl"
+            animate={{ x: [0, -25, 0], y: [0, -15, 0] }}
+            transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+          />
+
+          <div className="relative flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{greeting.label}</p>
+              <h1 className="mt-1 text-3xl md:text-5xl font-heading font-bold leading-tight">
+                <span className="gradient-text">{name}</span>
+              </h1>
+              <p className="text-sm text-muted-foreground mt-2 max-w-md">{greeting.sub}</p>
+
+              {/* Primary CTA */}
+              <div className="mt-5 flex flex-wrap gap-2">
+                {todayPlan ? (
+                  <Link
+                    to="/workout-session"
+                    state={{ plan: todayPlan }}
+                    className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl gradient-bg text-primary-foreground font-semibold text-sm shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-transform"
+                  >
+                    <Flame size={16} /> Start {todayPlan.name}
+                  </Link>
+                ) : (
+                  <Link
+                    to="/workout-planner"
+                    className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl gradient-bg text-primary-foreground font-semibold text-sm shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-transform"
+                  >
+                    <Plus size={16} /> Plan Today's Workout
+                  </Link>
+                )}
+                <Link
+                  to="/nutrition"
+                  className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] transition-colors text-sm font-medium"
+                >
+                  <UtensilsCrossed size={14} /> Log Meal
+                </Link>
               </div>
             </div>
-            <div className="glass-card px-4 py-2.5 rounded-2xl flex items-center gap-2">
-              <Zap size={18} className="text-warning" />
-              <div>
-                <p className="text-sm font-bold">{workoutLogs.length * 50} XP</p>
-                <p className="text-xs text-muted-foreground">Level {Math.floor((workoutLogs.length * 50) / 500) + 1}</p>
+
+            {/* Streak + Level pills, right side */}
+            <div className="flex gap-3">
+              <div className="flex-1 lg:flex-none min-w-[130px] rounded-2xl bg-white/[0.04] border border-white/[0.08] px-4 py-3 backdrop-blur-sm">
+                <div className="flex items-center gap-2 text-muted-foreground text-[10px] uppercase tracking-wider">
+                  <span className="text-base">🔥</span> Streak
+                </div>
+                <p className="text-2xl font-heading font-bold mt-1">{streak}<span className="text-xs text-muted-foreground font-normal ml-1">days</span></p>
+              </div>
+              <div className="flex-1 lg:flex-none min-w-[130px] rounded-2xl bg-white/[0.04] border border-white/[0.08] px-4 py-3 backdrop-blur-sm">
+                <div className="flex items-center gap-2 text-muted-foreground text-[10px] uppercase tracking-wider">
+                  <Zap size={12} className="text-warning" /> Level {level}
+                </div>
+                <p className="text-2xl font-heading font-bold mt-1">{xp}<span className="text-xs text-muted-foreground font-normal ml-1">xp</span></p>
+                <div className="mt-1.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
+                  <div className="h-full gradient-bg" style={{ width: `${(xp % 500) / 5}%` }} />
+                </div>
               </div>
             </div>
           </div>
-        </motion.div>
 
-        {/* Stat cards row */}
-        <motion.div variants={stagger} initial="hidden" animate="visible" className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard icon={Dumbbell} label="Workouts This Week" value={String(totalWorkoutsThisWeek)} change={totalWorkoutsThisWeek > 0 ? `+${totalWorkoutsThisWeek}` : undefined} color="bg-primary/20 text-primary" />
-          <StatCard icon={Clock} label="Minutes Trained" value={String(totalMinutesThisWeek)} color="bg-accent/20 text-accent" />
-          <StatCard icon={BarChart3} label="Total Volume (kg)" value={totalVolumeThisWeek.toLocaleString()} color="bg-success/20 text-success" />
-          <StatCard icon={Trophy} label="Total PRs" value={String(workoutLogs.length)} color="bg-warning/20 text-warning" />
-        </motion.div>
-
-        {/* Quick Actions — compact horizontal pills (above weekly activity) */}
-        <motion.div variants={fadeUp} initial="hidden" animate="visible" className="glass-card p-3 rounded-2xl">
-          <div className="grid grid-cols-4 gap-2">
+          {/* Compact quick stats strip */}
+          <div className="relative mt-6 grid grid-cols-3 gap-3">
             {[
-              { label: "Log Meal", icon: UtensilsCrossed, to: "/nutrition", color: "text-success" },
-              { label: "Workout", icon: Dumbbell, to: "/workout-planner", color: "text-primary" },
-              { label: "Weight", icon: Scale, to: "/progress", color: "text-accent" },
-              { label: "Add PR", icon: Trophy, to: "/records", color: "text-warning" },
-            ].map(({ label, icon: Icon, to, color }) => (
-              <Link key={label} to={to} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-secondary/40 border border-white/[0.05] hover:border-white/[0.12] transition-all hover:scale-[1.02] active:scale-[0.98]">
-                <Icon size={14} className={color} />
-                <span className="text-xs font-medium">{label}</span>
-              </Link>
+              { label: "Workouts", value: totalWorkoutsThisWeek, sub: "this week", icon: Dumbbell, color: "text-primary" },
+              { label: "Minutes", value: totalMinutesThisWeek, sub: "trained", icon: Clock, color: "text-accent" },
+              { label: "Volume", value: totalVolumeThisWeek.toLocaleString(), sub: "kg lifted", icon: BarChart3, color: "text-success" },
+            ].map((s, i) => (
+              <motion.div
+                key={s.label}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 + i * 0.06 }}
+                className="rounded-2xl bg-black/25 border border-white/[0.05] px-4 py-3"
+              >
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <s.icon size={11} className={s.color} /> {s.label}
+                </div>
+                <p className="text-xl md:text-2xl font-heading font-bold mt-1">{s.value}</p>
+                <p className="text-[10px] text-muted-foreground">{s.sub}</p>
+              </motion.div>
             ))}
           </div>
-        </motion.div>
+        </motion.section>
 
-        {/* Main grid */}
+        {/* ===== MAIN GRID: focused, less clutter ===== */}
         <motion.div variants={stagger} initial="hidden" animate="visible" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Weekly Activity Chart - takes 2 cols */}
+          {/* Weekly Activity — main hero chart */}
           <motion.div variants={fadeUp} className="lg:col-span-2 glass-card p-5 rounded-2xl">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-sm font-heading font-bold uppercase tracking-wider text-muted-foreground">Weekly Activity</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Minutes trained per day</p>
+                <h3 className="text-sm font-heading font-bold">Weekly Activity</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Training minutes this week</p>
               </div>
               <Link to="/calendar" className="text-xs text-primary hover:underline flex items-center gap-1">
-                View Calendar <ChevronRight size={12} />
+                Calendar <ChevronRight size={12} />
               </Link>
             </div>
-            <div className="h-48">
+            <div className="h-52">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={weeklyData}>
                   <defs>
                     <linearGradient id="gradientArea" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#2563EB" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#06B6D4" stopOpacity={0.05} />
+                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
                   <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: "hsl(218 11% 65%)", fontSize: 11 }} />
@@ -325,186 +359,125 @@ export default function Dashboard() {
                     labelStyle={{ color: "hsl(210 20% 98%)" }}
                     itemStyle={{ color: "hsl(210 20% 98%)" }}
                   />
-                  <Area type="monotone" dataKey="minutes" stroke="#2563EB" strokeWidth={2} fill="url(#gradientArea)" />
+                  <Area type="monotone" dataKey="minutes" stroke="hsl(var(--primary))" strokeWidth={2.5} fill="url(#gradientArea)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </motion.div>
 
-          {/* Intelligent Suggestions */}
-          <motion.div
-            variants={fadeUp}
-            className="relative glass-card p-5 rounded-2xl flex flex-col overflow-hidden"
-            style={{
-              background:
-                "linear-gradient(155deg, hsl(var(--primary) / 0.10) 0%, hsl(var(--secondary) / 0.55) 55%, hsl(var(--secondary) / 0.35) 100%)",
-              boxShadow: "0 18px 50px -22px hsl(var(--primary) / 0.55), inset 0 1px 0 hsl(0 0% 100% / 0.04)",
-            }}
-          >
-            {/* ambient glows */}
-            <div className="pointer-events-none absolute -top-16 -right-12 w-48 h-48 rounded-full bg-primary/25 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-20 -left-10 w-56 h-56 rounded-full bg-accent/15 blur-3xl" />
-
-            <div className="relative flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
-                  <Sparkles size={13} className="text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-heading font-bold uppercase tracking-wider">Suggestions</h3>
-                  <p className="text-[10px] text-muted-foreground -mt-0.5">Tuned to your day</p>
-                </div>
-              </div>
-              <span className="text-[10px] text-muted-foreground bg-secondary/60 px-2 py-1 rounded-full border border-white/[0.05]">
-                {suggestions.length}
-              </span>
-            </div>
-
-            {(() => {
-              const [hero, ...rest] = suggestions;
-              return (
-                <div className="relative space-y-3 flex-1">
-                  {/* Featured hero suggestion */}
-                  {hero && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="relative p-4 rounded-xl border border-white/[0.08] bg-gradient-to-br from-background/70 to-secondary/40 backdrop-blur-sm"
-                      style={{ boxShadow: "0 10px 30px -18px hsl(var(--primary) / 0.6)" }}
-                    >
-                      <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
-                      <div className="flex items-start gap-3">
-                        <div className="text-2xl leading-none mt-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
-                          {hero.icon ?? "✨"}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-[10px] uppercase tracking-wider font-bold ${hero.accent ?? "text-primary"}`}>
-                            Featured
-                          </p>
-                          <p className="text-sm font-heading font-bold mt-0.5">{hero.title}</p>
-                          <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{hero.body}</p>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {/* Rest of the suggestions */}
-                  {rest.map((s, i) => (
-                    <motion.div
-                      key={s.id}
-                      initial={{ opacity: 0, x: -6 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.1 + i * 0.06 }}
-                      className="group relative p-3 rounded-xl bg-secondary/40 border border-white/[0.05] hover:border-white/[0.12] hover:bg-secondary/60 transition-all"
-                    >
-                      <div className="flex items-start gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-background/50 border border-white/[0.06] flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                          <span className="text-sm leading-none">{s.icon ?? "💡"}</span>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-xs font-semibold ${s.accent ?? "text-foreground"}`}>{s.title}</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{s.body}</p>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              );
-            })()}
-          </motion.div>
-
-
-
-          {/* Today's Workout */}
-          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl">
+          {/* Today's Workout — prominent */}
+          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground">Today's Workout</h3>
-              <span className="text-xs px-2 py-0.5 rounded-full gradient-bg text-primary-foreground">{todayDayName}</span>
+              <h3 className="text-sm font-heading font-bold">Today</h3>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-muted-foreground uppercase tracking-wider">{todayDayName}</span>
             </div>
             {todayPlan ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-primary/20">
-                    <Dumbbell size={18} className="text-primary" />
+              <div className="flex-1 flex flex-col">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-3 rounded-2xl gradient-bg shadow-lg">
+                    <Dumbbell size={20} className="text-primary-foreground" />
                   </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">{todayPlan.name}</p>
+                  <div className="min-w-0">
+                    <p className="font-heading font-bold text-base truncate">{todayPlan.name}</p>
                     <p className="text-xs text-muted-foreground">{todayPlan.exercises?.length || 0} exercises</p>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1 mb-4">
                   {todayPlan.exercises?.slice(0, 4).map((ex: any, i: number) => (
-                    <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">{ex.name.slice(0, 15)}</span>
+                    <span key={i} className="text-[10px] px-2 py-1 rounded-full bg-white/[0.04] text-muted-foreground">{ex.name.slice(0, 18)}</span>
                   ))}
                 </div>
                 <Link
                   to="/workout-session"
                   state={{ plan: todayPlan }}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl gradient-bg text-primary-foreground text-sm font-medium hover:scale-[0.98] active:scale-[0.96] transition-transform"
+                  className="mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-xl gradient-bg text-primary-foreground text-sm font-semibold hover:scale-[0.98] active:scale-[0.96] transition-transform shadow-lg"
                 >
-                  <Flame size={14} /> Start Workout
+                  <Flame size={14} /> Start Session
                 </Link>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-4 text-center">
-                <Dumbbell size={28} className="text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">Rest Day</p>
-                <Link to="/workout-planner" className="mt-2 text-xs text-primary hover:underline font-medium">
+              <div className="flex-1 flex flex-col items-center justify-center py-4 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mb-3">
+                  <Calendar size={22} className="text-muted-foreground/60" />
+                </div>
+                <p className="text-sm font-medium">Rest Day</p>
+                <p className="text-xs text-muted-foreground mt-0.5 mb-3">Recover and refuel</p>
+                <Link to="/workout-planner" className="text-xs text-primary hover:underline font-medium">
                   Plan a workout →
                 </Link>
               </div>
             )}
           </motion.div>
 
-          {/* Volume Chart */}
-          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl">
-            <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground mb-4">Volume This Week</h3>
-            <div className="h-36">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={weeklyData}>
-                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: "hsl(218 11% 65%)", fontSize: 10 }} />
-                  <YAxis hide />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(240 15% 12%)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", fontSize: "12px" }}
-                    labelStyle={{ color: "hsl(210 20% 98%)" }}
-                    itemStyle={{ color: "hsl(210 20% 98%)" }}
-                  />
-                  <Bar dataKey="volume" radius={[6, 6, 0, 0]} fill="url(#barGrad)" />
-                  <defs>
-                    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#06B6D4" />
-                      <stop offset="100%" stopColor="#2563EB" />
-                    </linearGradient>
-                  </defs>
-                </BarChart>
-              </ResponsiveContainer>
+          {/* Smart Suggestions */}
+          <motion.div
+            variants={fadeUp}
+            className="lg:col-span-2 relative glass-card p-5 rounded-2xl overflow-hidden"
+          >
+            <div className="pointer-events-none absolute -top-16 -right-12 w-48 h-48 rounded-full bg-primary/15 blur-3xl" />
+
+            <div className="relative flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-primary/15 border border-primary/25 flex items-center justify-center">
+                  <Sparkles size={14} className="text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-heading font-bold">For You Today</h3>
+                  <p className="text-[10px] text-muted-foreground -mt-0.5">Smart suggestions tuned to your day</p>
+                </div>
+              </div>
+              <span className="text-[10px] text-muted-foreground bg-white/[0.04] px-2 py-1 rounded-full border border-white/[0.05]">
+                {suggestions.length}
+              </span>
+            </div>
+
+            <div className="relative grid sm:grid-cols-2 gap-2">
+              {suggestions.slice(0, 4).map((s, i) => (
+                <motion.div
+                  key={s.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.06 }}
+                  className="group p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:border-white/[0.12] hover:bg-white/[0.04] transition-all"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-black/25 border border-white/[0.05] flex items-center justify-center flex-shrink-0">
+                      <span className="text-sm leading-none">{s.icon ?? "💡"}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`text-xs font-semibold ${s.accent ?? "text-foreground"}`}>{s.title}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">{s.body}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
             </div>
           </motion.div>
 
-          {/* Water Tracker */}
+          {/* Hydration */}
           <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl">
             <WaterTracker />
           </motion.div>
 
-
-
-
           {/* Recent Workouts */}
-          <motion.div variants={fadeUp} className="lg:col-span-3 glass-card p-5 rounded-2xl">
+          <motion.div variants={fadeUp} className="lg:col-span-2 glass-card p-5 rounded-2xl">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground">Recent Workouts</h3>
-              <Link to="/records" className="text-xs text-primary hover:underline flex items-center gap-1">
+              <h3 className="text-sm font-heading font-bold">Recent Workouts</h3>
+              <Link to="/calendar" className="text-xs text-primary hover:underline flex items-center gap-1">
                 View All <ChevronRight size={12} />
               </Link>
             </div>
             {workoutLogs.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No workouts logged yet. Start your first workout!</p>
+              <div className="text-center py-8">
+                <Dumbbell size={26} className="mx-auto text-muted-foreground/30 mb-2" />
+                <p className="text-sm text-muted-foreground">No workouts yet — let's fix that.</p>
+              </div>
             ) : (
               <div className="space-y-2">
                 {workoutLogs.slice(0, 4).map((log: any, i: number) => {
                   const logDate = log.date?.toDate ? log.date.toDate() : new Date(log.date?.seconds * 1000);
                   return (
-                    <div key={log.id || i} className="flex items-center gap-3 p-3 rounded-xl bg-secondary/30 border border-white/[0.04]">
+                    <div key={log.id || i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:border-white/[0.1] transition-colors">
                       <div className="p-2 rounded-lg bg-primary/10">
                         <Dumbbell size={14} className="text-primary" />
                       </div>
@@ -523,83 +496,41 @@ export default function Dashboard() {
             )}
           </motion.div>
 
-
-
           {/* Active Challenges */}
-          <motion.div variants={fadeUp} className="lg:col-span-2 glass-card p-5 rounded-2xl">
+          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground">Active Challenges</h3>
+              <h3 className="text-sm font-heading font-bold">Challenges</h3>
               <Link to="/records" className="text-xs text-primary hover:underline flex items-center gap-1">
-                View All <ChevronRight size={12} />
+                All <ChevronRight size={12} />
               </Link>
             </div>
             {challengesLoading ? (
               <div className="space-y-2">
-                {[1, 2].map(i => <div key={i} className="h-12 rounded-xl bg-secondary/30 shimmer" />)}
+                {[1, 2].map(i => <div key={i} className="h-12 rounded-xl bg-white/[0.03] shimmer" />)}
               </div>
             ) : challenges.filter(c => c.joined && !c.completed).length === 0 ? (
               <div className="text-center py-5">
                 <Zap size={24} className="mx-auto text-muted-foreground/30 mb-2" />
                 <p className="text-xs text-muted-foreground mb-2">No active challenges</p>
-                <Link to="/records" className="text-xs text-primary hover:underline font-medium">Join a Challenge →</Link>
+                <Link to="/records" className="text-xs text-primary hover:underline font-medium">Join one →</Link>
               </div>
             ) : (
               <div className="space-y-2">
                 {challenges.filter(c => c.joined && !c.completed).slice(0, 3).map(c => {
                   const pct = Math.min((c.progress / c.target) * 100, 100);
                   return (
-                    <div key={c.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-secondary/30 border border-white/[0.04]">
-                      <span className="text-lg flex-shrink-0">{c.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium truncate">{c.name}</p>
-                          <span className="text-xs text-primary font-medium ml-1 flex-shrink-0">{Math.round(pct)}%</span>
-                        </div>
-                        <div className="h-1.5 bg-secondary rounded-full overflow-hidden mt-1">
-                          <div className={`h-full bg-gradient-to-r ${c.color} rounded-full`} style={{ width: `${pct}%` }} />
-                        </div>
+                    <div key={c.id} className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-base flex-shrink-0">{c.icon}</span>
+                        <p className="text-xs font-medium truncate flex-1">{c.name}</p>
+                        <span className="text-[10px] text-primary font-semibold">{Math.round(pct)}%</span>
                       </div>
-                      <div className="flex items-center gap-0.5 text-xs text-muted-foreground flex-shrink-0">
-                        <Zap size={10} className="text-warning" />{c.xpReward}
+                      <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
+                        <div className={`h-full bg-gradient-to-r ${c.color} rounded-full`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
                 })}
-              </div>
-            )}
-          </motion.div>
-
-          {/* Recent PRs */}
-          <motion.div variants={fadeUp} className="glass-card p-5 rounded-2xl">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground">Recent PRs</h3>
-              <Link to="/records" className="text-xs text-primary hover:underline flex items-center gap-1">
-                Add <ChevronRight size={12} />
-              </Link>
-            </div>
-            {recentPRs.length === 0 ? (
-              <div className="text-center py-5">
-                <Trophy size={24} className="mx-auto text-muted-foreground/30 mb-2" />
-                <p className="text-xs text-muted-foreground mb-2">No PRs yet</p>
-                <Link to="/records" className="text-xs text-primary hover:underline font-medium">Log your first PR →</Link>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {recentPRs.map((pr: any) => (
-                  <div key={pr.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-secondary/30 border border-white/[0.04]">
-                    <div className="p-1.5 rounded-lg bg-warning/10">
-                      <Award size={13} className="text-warning" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium capitalize truncate">{pr.exerciseName}</p>
-                      <p className="text-[10px] text-muted-foreground capitalize">{pr.category}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-sm font-bold gradient-text">{pr.value}</span>
-                      <span className="text-xs text-muted-foreground ml-0.5">{pr.unit}</span>
-                    </div>
-                  </div>
-                ))}
               </div>
             )}
           </motion.div>
