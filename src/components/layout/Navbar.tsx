@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import logo from "@/assets/logo.png";
+import logoFallback from "@/assets/logo.png";
+import { useBrand } from "@/contexts/SiteSettingsContext";
 import {
   LayoutDashboard, Dumbbell, UtensilsCrossed, TrendingUp,
   Trophy, Calendar, Award, Settings, LogOut, Bell, ShieldCheck,
@@ -24,6 +25,7 @@ export default function Navbar() {
   const { pathname } = useLocation();
   const { user, userProfile, logout } = useAuth();
   const { isAdmin } = useAdmin();
+  const brand = useBrand(logoFallback);
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<NotifCategory | "all">("all");
@@ -53,7 +55,9 @@ export default function Navbar() {
       {/* ── Desktop Navbar ── */}
       <nav className="hidden md:flex fixed top-0 left-0 right-0 z-50 h-16 items-center justify-between px-6 bg-background/80 backdrop-blur-xl border-b border-border">
         <Link to="/dashboard" className="flex items-center gap-2">
-          <img src={logo} alt="FitX Journey" className="h-9 w-auto" />
+          {brand.logo
+            ? <img src={brand.logo} alt={brand.name} className="h-9 w-auto max-w-[160px] object-contain" />
+            : <span className="text-lg font-black tracking-tight">{brand.name}</span>}
         </Link>
 
         <div className="flex items-center gap-1">
