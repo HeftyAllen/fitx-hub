@@ -4,15 +4,25 @@ import { db } from "@/lib/firebase";
 
 export interface SiteSettings {
   businessName?: string;
+  tagline?: string;
   supportEmail?: string;
   logoUrl?: string;
+  faviconUrl?: string;
   primaryHsl?: string;
+  accentHsl?: string;
+  radius?: number;          // rem
   maintenanceMode?: boolean;
   maintenanceMessage?: string;
   signupEnabled?: boolean;
+  announcementBanner?: string;
 }
 
 const SiteSettingsContext = createContext<SiteSettings>({});
+
+function setVar(name: string, value?: string | null) {
+  if (value) document.documentElement.style.setProperty(name, value);
+  else document.documentElement.style.removeProperty(name);
+}
 
 export function SiteSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<SiteSettings>({});
@@ -24,17 +34,29 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
     return unsub;
   }, []);
 
-  // Apply primary color globally
+  // Apply theme tokens globally (affects every page instantly)
   useEffect(() => {
-    if (settings.primaryHsl) {
-      document.documentElement.style.setProperty("--primary", settings.primaryHsl);
-    } else {
-      document.documentElement.style.removeProperty("--primary");
+    setVar("--primary", settings.primaryHsl);
+    setVar("--ring", settings.primaryHsl);
+    setVar("--sidebar-primary", settings.primaryHsl);
+    setVar("--accent", settings.accentHsl);
+    setVar("--radius", settings.radius != null ? `${settings.radius}rem` : null);
+  }, [settings.primaryHsl, settings.accentHsl, settings.radius]);
+
+  // Title + favicon
+  useEffect(() => {
+    if (settings.businessName) document.title = settings.businessName;
+    const href = settings.faviconUrl || settings.logoUrl;
+    if (href) {
+      let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = "icon";
+        document.head.appendChild(link);
+      }
+      link.href = href;
     }
-    if (settings.businessName) {
-      document.title = settings.businessName;
-    }
-  }, [settings.primaryHsl, settings.businessName]);
+  }, [settings.businessName, settings.faviconUrl, settings.logoUrl]);
 
   return (
     <SiteSettingsContext.Provider value={settings}>
@@ -49,3 +71,14 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
 }
 
 export const useSiteSettings = () => useContext(SiteSettingsContext);
+
+/** Brand name + logo helper so every surface stays in sync with admin settings. */
+export function useBrand(fallbackLogo?: string) {
+  const s = useSiteSettings();
+  return {
+    name: s.businessName || "FitX Journey",
+    tagline: s.tagline || "",
+    logo: s.logoUrl || fallbackLogo,
+    supportEmail: s.supportEmail || "",
+  };
+}
