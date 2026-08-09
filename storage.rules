@@ -26,7 +26,7 @@ service firebase.storage {
     // Public assets — read-all, admin write
     match /public/{allPaths=**} {
       allow read:  if true;
-      allow write: if isAdmin();
+      allow write: if isFullAdmin();
     }
 
     // Default deny
