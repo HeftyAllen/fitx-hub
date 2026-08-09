@@ -1,10 +1,17 @@
 import { Navigate } from "react-router-dom";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useAuth } from "@/contexts/AuthContext";
+import { landingPath, type AdminSection } from "@/lib/permissions";
 
-export default function AdminRoute({ children }: { children: React.ReactNode }) {
+export default function AdminRoute({
+  children,
+  section,
+}: {
+  children: React.ReactNode;
+  section?: AdminSection;
+}) {
   const { user, loading: authLoading } = useAuth();
-  const { loading, isAdmin } = useAdmin();
+  const { loading, isAdmin, role, can } = useAdmin();
 
   if (authLoading || loading) {
     return (
@@ -15,5 +22,6 @@ export default function AdminRoute({ children }: { children: React.ReactNode }) 
   }
   if (!user) return <Navigate to="/auth" replace />;
   if (!isAdmin) return <Navigate to="/dashboard" replace />;
+  if (section && !can(section)) return <Navigate to={landingPath(role)} replace />;
   return <>{children}</>;
 }
