@@ -9,6 +9,11 @@ service firebase.storage {
         && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
     }
 
+    function isFullAdmin() {
+      return isSignedIn()
+        && firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // Per-user uploads: users/{uid}/...
     match /users/{uid}/{allPaths=**} {
       allow read:  if request.auth.uid == uid || isAdmin();
