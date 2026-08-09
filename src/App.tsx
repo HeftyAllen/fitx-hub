@@ -102,14 +102,14 @@ function AppRoutes() {
 
         {/* Admin */}
         <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
-          <Route index element={<AdminOverview />} />
-          <Route path="users" element={<AdminUsers />} />
-          <Route path="content" element={<AdminContent />} />
-          <Route path="activity" element={<AdminActivity />} />
-          <Route path="announcements" element={<AdminAnnouncements />} />
-          <Route path="support" element={<AdminSupport />} />
-          <Route path="settings" element={<AdminSettings />} />
-          <Route path="reports" element={<AdminReports />} />
+          <Route index element={<AdminRoute section="overview"><AdminOverview /></AdminRoute>} />
+          <Route path="users" element={<AdminRoute section="users"><AdminUsers /></AdminRoute>} />
+          <Route path="content" element={<AdminRoute section="content"><AdminContent /></AdminRoute>} />
+          <Route path="activity" element={<AdminRoute section="activity"><AdminActivity /></AdminRoute>} />
+          <Route path="announcements" element={<AdminRoute section="announcements"><AdminAnnouncements /></AdminRoute>} />
+          <Route path="support" element={<AdminRoute section="support"><AdminSupport /></AdminRoute>} />
+          <Route path="settings" element={<AdminRoute section="settings"><AdminSettings /></AdminRoute>} />
+          <Route path="reports" element={<AdminRoute section="reports"><AdminReports /></AdminRoute>} />
         </Route>
 
         <Route path="*" element={<NotFound />} />
