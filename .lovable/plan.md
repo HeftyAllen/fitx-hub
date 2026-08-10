@@ -1,85 +1,33 @@
-# Dashboard & Nutrition Overhaul — Phase 1
+# Fix: published site keeps showing the old Dashboard/Admin UI
 
-## Pre-work: Secrets & Backend
+## What's actually happening
 
-Right now the app is Firebase-only (client SDK) with API keys baked into the bundle. FatSecret OAuth2 requires a **server-side** token exchange — the Client Secret cannot ship in the browser.
+The new code *is* live. I fetched the published bundle at fitxjourney.lovable.app and it contains the new Records "Trophy Room" markup, so the deploy succeeded.
 
-**Required:** Enable **Lovable Cloud** so we get an edge-function runtime + secret storage. Without it, FatSecret cannot be integrated securely.
+What you're seeing is the app's offline service worker (the PWA cache) serving the previously cached app shell from your browser/installed app. The app registers `/sw.js` with `registerType: "autoUpdate"`, but a new version only takes over on a later visit — so right after publishing you keep getting the old screen until every tab of the site is closed.
 
-You should also **rotate the FatSecret Client Secret you posted in chat** — treat the one you sent as burned.
+Quick confirmation you can do now: open the published site in a private window (or on a device that never visited it). If the new dashboard appears there, the diagnosis is confirmed and the fix below is what's needed.
 
-Once Cloud is on, I'll store `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` via the secrets tool and proxy all FatSecret calls through an edge function (`/fatsecret-proxy`) that caches OAuth tokens.
+## What to change
 
----
+1. Add an explicit update flow instead of silent auto-update:
+   - Use the PWA register hook to detect when a new version is ready.
+   - Show a small toast/banner: "A new version is available - Reload", which activates the waiting service worker and reloads the page.
+   - Also check for updates periodically (e.g. on window focus) so returning users pick up new deploys.
 
-## Workstream A — Dashboard Redesign
+2. Stop the cached HTML shell from pinning old builds:
+   - Keep hashed assets precached, but let navigations revalidate against the network first so a fresh publish is picked up on the next load rather than the load after.
 
-1. Remove "Today's Macros" card from `Dashboard.tsx`.
-2. Compact "Quick Actions" — move to top, reduce padding, single horizontal row on desktop / 2-row grid on mobile.
-3. Remove standalone "Daily Motivation" card.
-4. New **Suggestions card** (see Workstream B).
-5. Sync fix pass: Active Challenges, Recent Workouts, Volume This Week, Today's Workout — all read from the same Firestore collections used elsewhere (audit + dedupe).
+3. Clean up stale caches on activation so old asset caches from prior deploys don't linger.
 
-## Workstream B — Intelligent Suggestions Engine
+## Technical notes
 
-New module `src/lib/suggestions.ts` producing a ranked list of insight cards:
-- **Motivation** — quote bank (`src/lib/quotes.ts`, ~150 entries), deterministic daily pick by date+uid hash, last-7-days exclusion.
-- **Workout calorie prediction** — MET-based estimator using today's planned exercises (sets × reps × est. MET × bodyweight).
-- **Nutrition suggestion** — branches on `goalType` + today's workout intensity.
-- **Recovery alert** — streak detector on workout logs (≥6 consecutive days → warn).
-- **Calorie compliance** — time-of-day aware (after 6pm, flag >300 kcal gap).
-- **Performance insights** — PR detection, volume trend over last 4 weeks.
-- **Plateau detection** — 3–4 week weight stagnation vs. goal direction.
+- `vite.config.ts`: keep `VitePWA` but switch to `registerType: "prompt"` with `injectRegister: null`, and configure Workbox so `index.html` is served network-first (leave hashed `assets/*` as cache-first precache).
+- New `src/components/PwaUpdatePrompt.tsx`: uses `useRegisterSW` from `virtual:pwa-register/react`, renders the reload prompt, calls `updateServiceWorker(true)`, and polls `registration.update()` on focus/interval.
+- Mount it in `src/App.tsx` alongside `OfflineBanner`.
+- Add `"vite-plugin-pwa/client"` to `types` in `tsconfig.app.json` for the virtual module typing.
+- No changes to Dashboard, Records, or Admin code — those are already correct and deployed.
 
-Rendered in `Dashboard.tsx` as a single carousel/stack with up to 4 active suggestions, motivation always pinned.
+## After the change
 
-## Workstream C — Onboarding & Goal Targets
-
-- Add weight-pace selector to `Onboarding.tsx` (lose/gain 0.25, 0.5, 1.0 kg/wk + maintain).
-- Update `src/lib/nutrition.ts` `computeTargets` to use pace (1 kg/wk ≈ ±1100 kcal/day, 0.5 ≈ ±550, etc.) instead of fixed deltas.
-- Persist `weeklyPace` and `nutritionPreference` (high-protein / balanced / low-carb / high-carb / higher-fat / custom split) on profile.
-- All consumers (Dashboard, Nutrition, MealPlanner, Suggestions, Progress) read from one helper.
-
-## Workstream D — Nutrition Module Fixes
-
-- Fix **Copy Yesterday**: pull full `foodLog/{yesterday}` doc, write to today preserving meal buckets + macros.
-- **Meal target distribution**: default 25/30/30/15 split (breakfast/lunch/dinner/snack), user-adjustable in goals dialog, totals must equal daily target.
-- Surface per-meal target + progress in each meal section.
-
-## Workstream E — FatSecret Migration (Food Logging + Barcode)
-
-- Edge function `fatsecret-proxy` with endpoints: `search`, `barcode`, `food` (details), `autocomplete`.
-- Client `src/lib/fatsecret.ts` wraps the proxy.
-- Replace Spoonacular calls in `Nutrition.tsx` food search + portion editor.
-- Replace ZXing → FatSecret barcode lookup on scan.
-- Keep Spoonacular for **recipes only** (Workstream F).
-- Map FatSecret servings into portion editor (branded, generic, restaurant where available).
-
-## Workstream F — Recipes & Meal Planning
-
-- Broaden Spoonacular search params (drop overly strict filters, raise `number` to 24, add cuisine/meal-type/keyword).
-- Reliable diet filters: Paleo, Vegan, Vegetarian, Whole30, Keto, Mediterranean, High-Protein, Low-Carb.
-- **Saved presets** under `users/{uid}/recipePresets`.
-- Meal plan generator auto-seeds from onboarding (calories, diet, intolerances) with manual override.
-
-## Workstream G — Barcode + Grocery List
-
-- Remove dedicated UPC page.
-- Unified scan workflow inside Nutrition: scan → show product → buttons "Add to Diary" + "Add to Grocery List".
-- New page `src/pages/GroceryList.tsx` backed by `users/{uid}/groceryList`.
-
----
-
-## Suggested Execution Order
-
-Because each workstream is large, I recommend shipping in **three sub-phases** rather than one mega-commit:
-
-1. **Phase 1a** — Cloud enablement + FatSecret edge function + Onboarding pace/goals refactor + nutrition targets sync. (Foundations everything else depends on.)
-2. **Phase 1b** — Dashboard redesign + Suggestions engine + sync fixes.
-3. **Phase 1c** — Nutrition fixes (Copy Yesterday, meal targets), FatSecret swap in Food Log + Barcode, Grocery List, recipe filter improvements.
-
-## Confirmations needed before I start
-
-1. **Approve enabling Lovable Cloud?** (Required for FatSecret.)
-2. **Confirm you've rotated the FatSecret secret** you pasted — I'll request the new one via a secure form, not chat.
-3. **Proceed sub-phase by sub-phase** (1a → 1b → 1c) as above, or do you want me to attempt it all in one pass?
+You'll need to publish once more. That publish is the last one that requires a manual hard refresh (or closing all tabs) — from then on every deploy surfaces the "new version available" prompt automatically.
