@@ -46,41 +46,65 @@ export default function AdminLayout() {
     }
   };
 
+  const GROUPS: { label?: string; items: AdminSection[] }[] = [
+    { items: ["overview"] },
+    { label: "Manage", items: ["users", "content", "activity"] },
+    { label: "Engage", items: ["announcements", "support"] },
+    { label: "Insights", items: ["reports"] },
+    { items: ["settings"] },
+  ];
+
   const nav = (
-    <nav className="flex flex-col gap-1 flex-1">
-      {sections.map((s) => {
-        const { label, icon: Icon, end } = SECTION_META[s];
+    <nav className="flex flex-col gap-4 flex-1">
+      {GROUPS.map((g, gi) => {
+        const visible = g.items.filter((s) => sections.includes(s));
+        if (!visible.length) return null;
         return (
-          <NavLink
-            key={s}
-            to={SECTION_PATH[s]}
-            end={end}
-            onClick={() => setMobileOpen(false)}
-            className={({ isActive }) =>
-              `group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                isActive
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <motion.span
-                    layoutId="admin-active"
-                    className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full bg-primary"
-                  />
-                )}
-                <Icon size={16} />
-                {label}
-              </>
+          <div key={gi} className={gi === GROUPS.length - 1 ? "mt-auto pt-3 border-t border-border/60" : ""}>
+            {g.label && (
+              <p className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground/70">
+                {g.label}
+              </p>
             )}
-          </NavLink>
+            <div className="flex flex-col gap-0.5">
+              {visible.map((s) => {
+                const { label, icon: Icon, end } = SECTION_META[s];
+                return (
+                  <NavLink
+                    key={s}
+                    to={SECTION_PATH[s]}
+                    end={end}
+                    onClick={() => setMobileOpen(false)}
+                    className={({ isActive }) =>
+                      `group relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        isActive
+                          ? "bg-primary/12 text-primary"
+                          : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {isActive && (
+                          <motion.span
+                            layoutId="admin-active"
+                            className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-primary"
+                          />
+                        )}
+                        <Icon size={15} />
+                        {label}
+                      </>
+                    )}
+                  </NavLink>
+                );
+              })}
+            </div>
+          </div>
         );
       })}
     </nav>
   );
+
 
   const sidebarInner = (
     <>
