@@ -108,30 +108,25 @@ export default function AdminLayout() {
 
   const sidebarInner = (
     <>
-      <Link to="/" className="flex items-center gap-2 mb-5">
+      <Link to="/" className="flex items-center gap-2 mb-4">
         {brand.logo
-          ? <img src={brand.logo} alt={brand.name} className="h-8 w-auto max-w-[140px] object-contain" />
+          ? <img src={brand.logo} alt={brand.name} className="h-7 w-auto max-w-[130px] object-contain" />
           : <span className="font-black tracking-tight">{brand.name}</span>}
       </Link>
 
-      <div className="px-3 py-3 mb-4 rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/20">
-        <div className="flex items-center gap-2">
-          <ShieldCheck size={18} className="text-primary shrink-0" />
-          <div className="min-w-0">
-            <div className="text-sm font-bold truncate">{roleMeta?.label ?? "Console"}</div>
-            <div className="text-[10px] text-muted-foreground leading-tight">{roleMeta?.blurb}</div>
-          </div>
-        </div>
+      <div className="mb-4 flex items-center gap-2 px-1">
+        <ShieldCheck size={15} className="text-primary shrink-0" />
+        <span className="text-xs font-semibold truncate">{roleMeta?.label ?? "Console"}</span>
         {!canWrite && (
-          <Badge variant="outline" className="mt-2 text-[10px] gap-1">
-            <Eye size={10} /> View only
+          <Badge variant="outline" className="ml-auto text-[9px] gap-1 px-1.5">
+            <Eye size={9} /> View only
           </Badge>
         )}
       </div>
 
       {nav}
 
-      <div className="mt-4 pt-4 border-t border-border space-y-2">
+      <div className="mt-4 pt-3 border-t border-border space-y-2">
         <Link to="/dashboard" className="flex items-center gap-2 px-3 text-xs text-muted-foreground hover:text-foreground">
           <Home size={13} /> Back to app
         </Link>
@@ -144,6 +139,7 @@ export default function AdminLayout() {
       </div>
     </>
   );
+
 
   return (
     <div className="min-h-screen bg-background text-foreground">
