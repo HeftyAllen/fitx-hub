@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   collection, doc, onSnapshot, serverTimestamp, setDoc, deleteDoc, query, orderBy,
 } from "firebase/firestore";
@@ -9,15 +9,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Trash2, Plus, Eye, EyeOff, Dumbbell, UtensilsCrossed, Search, Sparkles,
-  Image as ImageIcon, Loader2, Send,
+  Trash2, Plus, Eye, EyeOff, Dumbbell, UtensilsCrossed, Search,
+  Loader2, Send, X, Save, Flame, Activity,
 } from "lucide-react";
 import { logActivity } from "@/lib/activity";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { searchRecipes } from "@/lib/spoonacular";
+import { searchExercises, getExercisesByBodyPart } from "@/lib/api";
 
 type LibType = "workouts" | "mealPlans";
+
+interface Item { name: string; meta?: string; detail?: string }
+interface Day { title: string; items: Item[] }
 
 interface LibraryPlan {
   id: string;
@@ -28,55 +32,130 @@ interface LibraryPlan {
   imageUrl?: string;
   source?: string;
   createdAt?: any;
-  createdBy?: string;
+}
+
+const BODY_PARTS = ["all", "chest", "back", "shoulders", "upper arms", "upper legs", "waist", "cardio"];
+const DIETS = ["", "high protein", "vegetarian", "vegan", "keto", "low carb"];
+
+/* Offline catalogues so the builder always works even if a provider quota is hit */
+const EX_FALLBACK: Item[] = [
+  { name: "Bench press", meta: "Chest" },
+  { name: "Bent-over row", meta: "Back" },
+  { name: "Overhead press", meta: "Shoulders" },
+  { name: "Romanian deadlift", meta: "Hamstrings" },
+  { name: "Lat pulldown", meta: "Back" },
+  { name: "Goblet squat", meta: "Quads" },
+];
+const MEAL_FALLBACK: Item[] = [
+  { name: "Grilled chicken salad", meta: "420 kcal" },
+  { name: "Greek yogurt parfait", meta: "280 kcal" },
+  { name: "Salmon and quinoa bowl", meta: "510 kcal" },
+  { name: "Veggie stir-fry", meta: "390 kcal" },
+  { name: "Overnight oats", meta: "340 kcal" },
+  { name: "Turkey chili", meta: "460 kcal" },
+];
+
+function dayToString(d: Day, i: number) {
+  const head = d.title?.trim() || `Day ${i + 1}`;
+  const body = d.items.map(it => (it.meta ? `${it.name} (${it.meta})` : it.name)).join(", ");
+  return body ? `Day ${i + 1} — ${head}: ${body}` : `Day ${i + 1} — ${head}`;
 }
 
 export default function AdminContent() {
   const { user } = useAuth();
   const [tab, setTab] = useState<LibType>("workouts");
   const [plans, setPlans] = useState<LibraryPlan[]>([]);
+
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
-  const [daysText, setDaysText] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [days, setDays] = useState<Day[]>([{ title: "", items: [] }]);
+  const [activeDay, setActiveDay] = useState(0);
 
-  // Spoonacular import (meal plans only)
-  const [spQuery, setSpQuery] = useState("");
-  const [spResults, setSpResults] = useState<any[]>([]);
-  const [spLoading, setSpLoading] = useState(false);
+  const [q, setQ] = useState("");
+  const [filter, setFilter] = useState("");
+  const [results, setResults] = useState<Item[]>([]);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const q = query(collection(db, `library_${tab}`), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
-      setPlans(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
-    });
+    const unsub = onSnapshot(
+      query(collection(db, `library_${tab}`), orderBy("createdAt", "desc")),
+      snap => setPlans(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))),
+    );
     return unsub;
   }, [tab]);
 
-  const published = plans.filter(p => p.status === "published").length;
+  // reset builder when switching library
+  useEffect(() => {
+    setDays([{ title: "", items: [] }]); setActiveDay(0);
+    setTitle(""); setDesc(""); setQ(""); setFilter("");
+    setResults(tab === "workouts" ? EX_FALLBACK : MEAL_FALLBACK);
+  }, [tab]);
 
-  async function createPlan(extra: Partial<LibraryPlan> = {}, statusOverride?: "draft" | "published") {
-    const t = (extra.title ?? title).trim();
-    if (!t) { toast.error("Title required"); return; }
-    const days = (extra.days ?? daysText.split("\n").map(s => s.trim()).filter(Boolean)) as string[];
+  const published = plans.filter(p => p.status === "published").length;
+  const totalItems = useMemo(() => days.reduce((n, d) => n + d.items.length, 0), [days]);
+
+  async function runSearch() {
+    setBusy(true);
+    try {
+      if (tab === "workouts") {
+        const raw = q.trim()
+          ? await searchExercises(q.trim())
+          : await getExercisesByBodyPart(filter || "chest");
+        const list: Item[] = (Array.isArray(raw) ? raw : []).slice(0, 20).map((e: any) => ({
+          name: String(e.name ?? "").replace(/\b\w/g, c => c.toUpperCase()),
+          meta: e.bodyPart ?? e.target,
+          detail: e.equipment,
+        })).filter(i => i.name);
+        setResults(list.length ? list : EX_FALLBACK);
+      } else {
+        const data = await searchRecipes(q.trim() || "high protein", filter ? { diet: filter } : {});
+        const list: Item[] = (data?.results ?? []).slice(0, 20).map((r: any) => {
+          const cals = r.nutrition?.nutrients?.find((n: any) => n.name === "Calories")?.amount;
+          return { name: r.title, meta: cals ? `${Math.round(cals)} kcal` : undefined, detail: r.image };
+        });
+        setResults(list.length ? list : MEAL_FALLBACK);
+      }
+    } catch (e: any) {
+      toast.error(e?.message === "DAILY_LIMIT_REACHED" ? "API limit reached — using offline catalogue" : "Search failed — using offline catalogue");
+      setResults(tab === "workouts" ? EX_FALLBACK : MEAL_FALLBACK);
+    } finally { setBusy(false); }
+  }
+
+  function addItem(it: Item) {
+    setDays(prev => prev.map((d, i) => i === activeDay
+      ? { ...d, items: [...d.items, tab === "workouts" ? { ...it, detail: it.detail ?? "4x8" } : it] }
+      : d));
+  }
+  function removeItem(dayIdx: number, itemIdx: number) {
+    setDays(prev => prev.map((d, i) => i === dayIdx ? { ...d, items: d.items.filter((_, j) => j !== itemIdx) } : d));
+  }
+  function setItemDetail(dayIdx: number, itemIdx: number, detail: string) {
+    setDays(prev => prev.map((d, i) => i === dayIdx
+      ? { ...d, items: d.items.map((it, j) => j === itemIdx ? { ...it, detail } : it) } : d));
+  }
+
+  async function save(status: "draft" | "published") {
+    if (!title.trim()) { toast.error("Give the plan a title"); return; }
+    if (!totalItems) { toast.error("Add at least one item from the library"); return; }
     const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     try {
       await setDoc(doc(db, `library_${tab}`, id), {
-        title: t,
-        description: (extra.description ?? desc).trim() || null,
-        days,
-        imageUrl: extra.imageUrl ?? (imageUrl.trim() || null),
-        source: extra.source ?? "custom",
-        status: statusOverride ?? "draft",
+        title: title.trim(),
+        description: desc.trim() || null,
+        days: days.map(dayToString),
+        plan: days,
+        imageUrl: null,
+        source: tab === "workouts" ? "exercisedb" : "spoonacular",
+        status,
         createdAt: serverTimestamp(),
         createdBy: user?.uid ?? null,
       });
-      logActivity("library.plan.create", { id, type: tab, title: t });
-      if (statusOverride === "published") logActivity("library.plan.publish", { id, type: tab });
-      if (!extra.title) { setTitle(""); setDesc(""); setDaysText(""); setImageUrl(""); }
-      toast.success(statusOverride === "published" ? "Published to all users" : "Draft created");
+      logActivity("library.plan.create", { id, type: tab, title: title.trim() });
+      if (status === "published") logActivity("library.plan.publish", { id, type: tab });
+      setTitle(""); setDesc(""); setDays([{ title: "", items: [] }]); setActiveDay(0);
+      toast.success(status === "published" ? "Published to every member" : "Draft saved");
     } catch (e: any) {
-      toast.error(e?.message || "Failed to create");
+      toast.error(e?.message || "Failed to save");
     }
   }
 
@@ -94,42 +173,17 @@ export default function AdminContent() {
     toast.success("Deleted");
   }
 
-  async function runSpoonacular() {
-    if (!spQuery.trim()) return;
-    setSpLoading(true);
-    try {
-      const data = await searchRecipes(spQuery.trim(), {});
-      setSpResults(data?.results ?? []);
-    } catch (e: any) {
-      toast.error(e.message === "DAILY_LIMIT_REACHED" ? "API limit reached" : "Search failed");
-    } finally { setSpLoading(false); }
-  }
-
-  async function importSpoonacular(r: any, publish: boolean) {
-    const cals = r.nutrition?.nutrients?.find((n: any) => n.name === "Calories")?.amount;
-    const description = [
-      r.readyInMinutes ? `${r.readyInMinutes} min` : null,
-      r.servings ? `${r.servings} servings` : null,
-      cals ? `${Math.round(cals)} cal` : null,
-    ].filter(Boolean).join(" · ");
-    const days = (r.analyzedInstructions?.[0]?.steps || [])
-      .slice(0, 7)
-      .map((s: any, i: number) => `Step ${i + 1}: ${s.step}`);
-    await createPlan({
-      title: r.title,
-      description: description || r.summary?.replace(/<[^>]+>/g, "").slice(0, 200) || "",
-      days: days.length ? days : [`Recipe ID ${r.id} — see Spoonacular for full instructions.`],
-      imageUrl: r.image,
-      source: "spoonacular",
-    }, publish ? "published" : "draft");
-  }
+  const isWorkout = tab === "workouts";
+  const ItemIcon = isWorkout ? Activity : Flame;
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-end justify-between flex-wrap gap-3">
+    <div className="space-y-8">
+      <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold">Content Library</h1>
-          <p className="text-sm text-muted-foreground">Author, import & publish plans that appear in every user's Library.</p>
+          <h1 className="text-3xl font-black tracking-tight">Content library</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Search {isWorkout ? "ExerciseDB" : "Spoonacular"} and drop results straight into a plan.
+          </p>
         </div>
         <div className="flex gap-2">
           <Badge variant="outline">{plans.length} total</Badge>
@@ -139,118 +193,154 @@ export default function AdminContent() {
 
       <div className="flex gap-2">
         {([
-          { v: "workouts" as LibType, label: "Workout Plans", icon: Dumbbell },
-          { v: "mealPlans" as LibType, label: "Meal Plans",   icon: UtensilsCrossed },
+          { v: "workouts" as LibType, label: "Workout plans", icon: Dumbbell },
+          { v: "mealPlans" as LibType, label: "Meal plans", icon: UtensilsCrossed },
         ]).map(t => (
           <button key={t.v} onClick={() => setTab(t.v)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
               tab === t.v ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
             }`}>
-            <t.icon size={14} /> {t.label}
+            <t.icon size={15} /> {t.label}
           </button>
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Manual authoring */}
-        <Card className="p-6 space-y-3">
-          <div className="font-semibold text-sm flex items-center gap-2"><Plus size={16} /> New {tab === "workouts" ? "workout" : "meal"} plan</div>
-          <Input placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
-          <Textarea placeholder="Short description shown to users" value={desc} onChange={e => setDesc(e.target.value)} rows={2} />
-          <Input placeholder="Cover image URL (optional)" value={imageUrl} onChange={e => setImageUrl(e.target.value)} />
-          <Textarea
-            placeholder={tab === "workouts"
-              ? "One day per line\nDay 1 — Push: Bench 4x8, OHP 3x10\nDay 2 — Pull: Rows 4x8"
-              : "One day per line\nDay 1 — High protein: oats, chicken bowl, salmon\nDay 2 — Cut: eggs, tuna salad, steak & rice"}
-            value={daysText} onChange={e => setDaysText(e.target.value)} rows={5}
-          />
-          <div className="flex gap-2">
-            <Button onClick={() => createPlan()}><Plus size={14} className="mr-1" /> Save draft</Button>
-            <Button variant="default" className="bg-primary" onClick={() => createPlan({}, "published")}>
-              <Send size={14} className="mr-1" /> Publish now
-            </Button>
-          </div>
-        </Card>
+      {/* BUILDER */}
+      <Card className="p-5 md:p-6 space-y-5">
+        <div className="flex items-center gap-2 text-lg font-bold">
+          <Plus size={18} /> New {isWorkout ? "workout" : "meal"} plan
+        </div>
 
-        {/* Spoonacular import — meal plans only */}
-        {tab === "mealPlans" ? (
-          <Card className="p-6 space-y-3">
-            <div className="font-semibold text-sm flex items-center gap-2">
-              <Sparkles size={16} className="text-amber-400" /> Import from Spoonacular
-            </div>
-            <p className="text-xs text-muted-foreground">Search the live recipe API and push any result straight to every user's library.</p>
-            <div className="flex gap-2">
-              <Input placeholder="e.g. high protein dinner" value={spQuery}
-                onChange={e => setSpQuery(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && runSpoonacular()} />
-              <Button onClick={runSpoonacular} disabled={spLoading}>
-                {spLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-              </Button>
-            </div>
-            <div className="max-h-[340px] overflow-y-auto divide-y divide-border -mx-2 px-2">
-              {spResults.map(r => (
-                <div key={r.id} className="flex gap-3 py-2 items-start">
-                  {r.image
-                    ? <img src={r.image} alt="" className="w-14 h-14 object-cover rounded-lg flex-shrink-0" />
-                    : <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center"><ImageIcon size={16} /></div>}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium leading-snug line-clamp-2">{r.title}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {r.readyInMinutes ? `${r.readyInMinutes}m · ` : ""}{r.servings ? `${r.servings} servings` : ""}
-                    </p>
-                    <div className="flex gap-1 mt-1.5">
-                      <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => importSpoonacular(r, false)}>
-                        Save draft
-                      </Button>
-                      <Button size="sm" className="h-6 text-[10px] px-2" onClick={() => importSpoonacular(r, true)}>
-                        Publish
-                      </Button>
-                    </div>
+        <div className="space-y-3">
+          <Input placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
+          <Textarea placeholder="Short description shown to users" rows={2}
+            value={desc} onChange={e => setDesc(e.target.value)} />
+        </div>
+
+        {/* day tabs */}
+        {days.length > 1 && (
+          <div className="flex gap-1.5 flex-wrap">
+            {days.map((d, i) => (
+              <button key={i} onClick={() => setActiveDay(i)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  activeDay === i ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}>
+                Day {i + 1}
+                <span className="ml-1.5 opacity-60">{d.items.length}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {days.map((d, di) => (
+          <div key={di} className={di === activeDay ? "space-y-2" : "hidden"}>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Day {di + 1}</p>
+            <Input
+              placeholder={isWorkout ? "Push — chest, shoulders, triceps" : "High protein day"}
+              value={d.title}
+              onChange={e => setDays(prev => prev.map((x, i) => i === di ? { ...x, title: e.target.value } : x))}
+            />
+            <div className="divide-y divide-border rounded-xl border border-border">
+              {d.items.map((it, ii) => (
+                <div key={ii} className="flex items-center gap-2 px-3 py-2">
+                  <ItemIcon size={14} className="text-primary shrink-0" />
+                  <span className="text-sm font-semibold truncate">{it.name}</span>
+                  {it.meta && <span className="text-[11px] text-muted-foreground truncate">{it.meta}</span>}
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {isWorkout && (
+                      <Input className="h-7 w-16 text-center text-xs" value={it.detail ?? ""}
+                        onChange={e => setItemDetail(di, ii, e.target.value)} />
+                    )}
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeItem(di, ii)}>
+                      <X size={13} />
+                    </Button>
                   </div>
                 </div>
               ))}
-              {spResults.length === 0 && !spLoading && (
-                <p className="text-xs text-muted-foreground text-center py-6">Search above to pull live recipes.</p>
+              {d.items.length === 0 && (
+                <p className="px-3 py-4 text-xs text-muted-foreground text-center">
+                  Nothing yet — add {isWorkout ? "exercises" : "meals"} from the search below.
+                </p>
               )}
-            </div>
-          </Card>
-        ) : (
-          <Card className="p-6 space-y-3">
-            <div className="font-semibold text-sm flex items-center gap-2"><Dumbbell size={16} /> Tips</div>
-            <p className="text-xs text-muted-foreground">
-              Use one day per line. Format suggestion:<br />
-              <code className="text-[10px] bg-muted px-1 rounded">Day N — Focus: Exercise sets×reps, …</code>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Published plans appear under <strong>Workout → Coach Library</strong> for every signed-in user.
-            </p>
-          </Card>
-        )}
-      </div>
 
+              {/* provider search */}
+              <div className="p-3 space-y-2 bg-secondary/30">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input className="pl-9" placeholder={isWorkout ? "Search ExerciseDB…" : "Search Spoonacular…"}
+                      value={q} onChange={e => setQ(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && runSearch()} />
+                  </div>
+                  <select
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    value={filter} onChange={e => setFilter(e.target.value)}
+                  >
+                    {(isWorkout ? BODY_PARTS : DIETS).map(o => (
+                      <option key={o} value={o === "all" ? "" : o}>
+                        {o === "" ? "All diets" : o === "all" ? "All body parts" : o}
+                      </option>
+                    ))}
+                  </select>
+                  <Button onClick={runSearch} disabled={busy}>
+                    {busy ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                  </Button>
+                </div>
+                <div className="max-h-[280px] overflow-y-auto divide-y divide-border rounded-lg bg-background">
+                  {results.map((r, i) => (
+                    <div key={`${r.name}-${i}`} className="flex items-center gap-2 px-3 py-2">
+                      <ItemIcon size={13} className="text-muted-foreground shrink-0" />
+                      <span className="text-sm font-semibold truncate">{r.name}</span>
+                      {r.meta && <span className="text-[11px] text-muted-foreground truncate">{r.meta}</span>}
+                      <Button size="sm" variant="outline" className="ml-auto h-7 text-[11px] px-2"
+                        onClick={() => addItem(r)}>
+                        <Plus size={11} className="mr-1" /> Add
+                      </Button>
+                    </div>
+                  ))}
+                  {results.length === 0 && (
+                    <p className="px-3 py-4 text-xs text-muted-foreground text-center">No results — try another term.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button variant="outline" onClick={() => { setDays(p => [...p, { title: "", items: [] }]); setActiveDay(days.length); }}>
+            <Plus size={14} className="mr-1" /> Add day
+          </Button>
+          <div className="flex-1" />
+          <Button variant="outline" onClick={() => save("draft")}><Save size={14} className="mr-1" /> Save draft</Button>
+          <Button onClick={() => save("published")}><Send size={14} className="mr-1" /> Publish now</Button>
+        </div>
+      </Card>
+
+      {/* LIST */}
       <Card>
         <div className="p-4 border-b border-border text-sm font-semibold flex items-center justify-between">
-          <span>{tab === "workouts" ? "Workout" : "Meal"} library ({plans.length})</span>
-          <span className="text-xs font-normal text-muted-foreground">Toggle the eye to publish/unpublish.</span>
+          <span>{isWorkout ? "Workout" : "Meal"} library ({plans.length})</span>
+          <span className="text-xs font-normal text-muted-foreground">Toggle the eye to publish or unpublish.</span>
         </div>
         <ul className="divide-y divide-border">
           {plans.map(p => (
             <li key={p.id} className="p-4 flex items-start gap-3">
-              {p.imageUrl
-                ? <img src={p.imageUrl} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
-                : <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                    {tab === "workouts" ? <Dumbbell size={16} /> : <UtensilsCrossed size={16} />}
-                  </div>}
+              <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center shrink-0 text-primary">
+                {isWorkout ? <Dumbbell size={16} /> : <UtensilsCrossed size={16} />}
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant={p.status === "published" ? "default" : "outline"}>{p.status}</Badge>
-                  {p.source === "spoonacular" && <Badge variant="secondary" className="text-[10px]">API</Badge>}
-                  <span className="font-medium">{p.title}</span>
-                  <span className="text-xs text-muted-foreground">{p.days?.length || 0} day{(p.days?.length || 0) === 1 ? "" : "s"}</span>
+                  {p.source && <Badge variant="secondary" className="text-[10px]">{p.source}</Badge>}
+                  <span className="font-semibold">{p.title}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {p.days?.length || 0} day{(p.days?.length || 0) === 1 ? "" : "s"}
+                  </span>
                 </div>
                 {p.description && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{p.description}</p>}
               </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex items-center gap-1 shrink-0">
                 <Button size="sm" variant="ghost" onClick={() => togglePublish(p)}
                   title={p.status === "published" ? "Unpublish" : "Publish"}>
                   {p.status === "published" ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -262,7 +352,7 @@ export default function AdminContent() {
             </li>
           ))}
           {plans.length === 0 && (
-            <li className="p-6 text-center text-sm text-muted-foreground">No plans yet — create one above or import from Spoonacular.</li>
+            <li className="p-6 text-center text-sm text-muted-foreground">No plans yet — build one above.</li>
           )}
         </ul>
       </Card>
