@@ -62,61 +62,57 @@ export default function AdminOverview() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      {/* HERO */}
-      <div className="relative overflow-hidden rounded-3xl border border-border p-6 md:p-8">
-        <div className="absolute inset-0 -z-10 opacity-70"
-          style={{ background: "radial-gradient(900px 300px at 10% -20%, hsl(var(--primary)/0.35), transparent 60%), radial-gradient(700px 280px at 95% 130%, hsl(var(--accent)/0.3), transparent 60%)" }} />
-        <Badge variant="outline" className="mb-2 gap-1 text-[10px]">
+    <div className="space-y-8">
+      {/* HEADER */}
+      <header>
+        <Badge variant="outline" className="mb-3 gap-1 text-[10px]">
           <Sparkles size={10} /> {roleMeta?.label ?? "Console"}
         </Badge>
-        <h1 className="text-3xl md:text-4xl font-black tracking-tight">
+        <h1 className="text-4xl md:text-5xl font-black tracking-tight">
           Welcome back{user?.email ? `, ${user.email.split("@")[0]}` : ""}
         </h1>
-        <p className="text-sm text-muted-foreground mt-1 max-w-xl">
+        <p className="text-sm text-muted-foreground mt-2 max-w-md">
           {roleMeta?.blurb}. {canWrite ? "You can publish changes from here." : "You have read-only visibility."}
         </p>
-      </div>
+      </header>
 
       {/* STATS */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-px rounded-2xl overflow-hidden border border-border bg-border">
         {(loading ? Array.from({ length: 6 }).map(() => ({ label: "", value: "", icon: Activity } as Stat)) : stats).map((s, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-            <Card className="p-4 h-full hover:border-primary/40 transition-colors">
-              <div className="flex items-start justify-between mb-3">
-                <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <s.icon size={16} className={s.tone ?? "text-primary"} />
-                </div>
-                {s.sub && <span className="text-[10px] text-muted-foreground">{s.sub}</span>}
-              </div>
-              <div className={`text-2xl font-black ${s.tone ?? ""}`}>{loading ? "…" : s.value}</div>
-              <div className="text-xs text-muted-foreground mt-1">{s.label || "Loading"}</div>
-            </Card>
-          </motion.div>
+          <div key={i} className="bg-card p-5">
+            <div className="flex items-start justify-between mb-6">
+              <s.icon size={16} className={s.tone ?? "text-primary"} />
+              {s.sub && <span className="text-[10px] text-muted-foreground">{s.sub}</span>}
+            </div>
+            <div className={`text-3xl font-black tracking-tight ${s.tone ?? ""}`}>{loading ? "…" : s.value}</div>
+            <div className="text-xs text-muted-foreground mt-1">{s.label || "Loading"}</div>
+          </div>
         ))}
       </div>
 
       {/* ROLE-SCOPED QUICK ACTIONS */}
       <div>
-        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Your workspace</p>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {sections.filter(s => s !== "overview").map(s => {
+        <p className="text-sm text-muted-foreground mb-3">Your workspace</p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {sections.filter(s => s !== "overview").map((s, i) => {
             const m = ACTION_META[s];
             return (
-              <Link key={s} to={SECTION_PATH[s]}>
-                <Card className="p-4 h-full group hover:border-primary/50 transition-all hover:-translate-y-0.5">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-secondary flex items-center justify-center text-primary">
-                      <m.icon size={17} />
+              <motion.div key={s} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
+                <Link to={SECTION_PATH[s]}>
+                  <Card className="p-4 h-full group hover:border-primary/50 hover:bg-secondary/30 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-lg bg-secondary flex items-center justify-center text-primary shrink-0">
+                        <m.icon size={16} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold">{m.label}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{m.desc}</p>
+                      </div>
+                      <ArrowRight size={15} className="text-muted-foreground/50 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold">{m.label}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{m.desc}</p>
-                    </div>
-                    <ArrowRight size={15} className="text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-                  </div>
-                </Card>
-              </Link>
+                  </Card>
+                </Link>
+              </motion.div>
             );
           })}
         </div>
@@ -130,7 +126,7 @@ export default function AdminOverview() {
       )}
 
       {canWrite && (
-        <Card className="p-6">
+        <Card className="p-5">
           <h2 className="font-bold mb-2 text-sm">Quick tips</h2>
           <ul className="text-sm text-muted-foreground space-y-1 list-disc pl-5">
             <li>Upload a logo in <strong>Brand & system</strong> — it swaps across the whole app instantly.</li>
@@ -145,3 +141,4 @@ export default function AdminOverview() {
     </div>
   );
 }
+
