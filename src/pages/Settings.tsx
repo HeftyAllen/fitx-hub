@@ -248,6 +248,9 @@ export default function Settings() {
     navigate("/");
   };
 
+  const [tab, setTab] = useState<"profile" | "metrics" | "prefs" | "notif" | "appearance" | "account">("profile");
+
+
   const initials = profile.name ? profile.name.split(" ").map(p => p[0]).join("").toUpperCase().slice(0, 2)
     : user?.email?.[0]?.toUpperCase() || "U";
 
