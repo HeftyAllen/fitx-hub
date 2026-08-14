@@ -10,7 +10,9 @@ import { toast } from "sonner";
 import {
   Camera, User, Ruler, Bell, Palette, LogOut,
   Save, Loader2, ChevronDown, Moon, Sun, Shield,
+  SlidersHorizontal, Copy, ChevronRight,
 } from "lucide-react";
+
 
 const GOALS = ["Lose Weight", "Build Muscle", "Improve Endurance", "Stay Active", "Athletic Performance", "General Health"];
 const ACTIVITY_LEVELS = ["Sedentary", "Lightly Active", "Moderately Active", "Very Active", "Elite Athlete"];
