@@ -181,11 +181,22 @@ export default function Settings() {
       notifications: { ...prev.notifications, [key]: value },
     }));
 
+  /** Keys the admin directory reads from users/{uid} — keep them mirrored. */
+  const mirrorForAdmin = async (data: Partial<ProfileData>) => {
+    if (!user) return;
+    const mirror: any = {};
+    if ("name" in data) mirror.name = data.name ?? null;
+    if ("photoURL" in data) mirror.photoURL = data.photoURL ?? null;
+    if (Object.keys(mirror).length === 0) return;
+    await setDoc(doc(db, "users", user.uid), mirror, { merge: true });
+  };
+
   const saveSection = async (section: string, setSaving: (v: boolean) => void, data: Partial<ProfileData>) => {
     if (!user) return;
     setSaving(true);
     try {
       await setDoc(doc(db, "users", user.uid, "profile", "data"), data, { merge: true });
+      await mirrorForAdmin(data);
       await refreshProfile();
       setSavedSection(section);
       toast.success("Changes saved");
@@ -196,6 +207,7 @@ export default function Settings() {
       setSaving(false);
     }
   };
+
 
   const handlePhotoClick = () => fileInputRef.current?.click();
 
