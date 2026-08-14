@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc,
+  collection, deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { Card } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -42,6 +42,8 @@ interface UserRow {
   createdAt?: any;
   lastLoginAt?: any;
   suspended?: boolean;
+  photoURL?: string;
+  memberCode?: string;
   role?: string; // from admins/{uid}
 }
 
@@ -133,6 +135,19 @@ export default function AdminUsers() {
   const [inviteFor, setInviteFor] = useState<UserRow | null>(null);
   const [inviteRole, setInviteRole] = useState<Role>("moderator");
   const [deleteFor, setDeleteFor] = useState<UserRow | null>(null);
+  const [profileFor, setProfileFor] = useState<(UserRow & { role?: string }) | null>(null);
+  const [profileData, setProfileData] = useState<any | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  // Full profile loader for the drawer
+  useEffect(() => {
+    if (!profileFor) { setProfileData(null); return; }
+    setProfileLoading(true);
+    getDoc(doc(db, "users", profileFor.uid, "profile", "data"))
+      .then(snap => setProfileData(snap.exists() ? snap.data() : {}))
+      .catch(() => setProfileData({}))
+      .finally(() => setProfileLoading(false));
+  }, [profileFor]);
 
   // Live admins map
   useEffect(() => {
@@ -158,6 +173,8 @@ export default function AdminUsers() {
             createdAt: data.createdAt,
             lastLoginAt: data.lastLoginAt,
             suspended: !!data.suspended,
+            photoURL: data.photoURL,
+            memberCode: data.memberCode,
           };
         });
         out.sort((a, b) => {
@@ -190,7 +207,8 @@ export default function AdminUsers() {
       .filter(r => !q
         || r.email?.toLowerCase().includes(q)
         || r.name?.toLowerCase().includes(q)
-        || r.uid.toLowerCase().includes(q));
+        || r.uid.toLowerCase().includes(q)
+        || r.memberCode?.toLowerCase().includes(q));
   }, [withRoles, search, filter]);
 
   const stats = useMemo(() => ({
@@ -257,7 +275,7 @@ export default function AdminUsers() {
 
   function exportCsv() {
     const csv = Papa.unparse(filtered.map(r => ({
-      uid: r.uid, email: r.email, name: r.name, role: r.role ?? "",
+      uid: r.uid, memberCode: r.memberCode ?? "", email: r.email, name: r.name, role: r.role ?? "",
       lastLogin: fmtDate(r.lastLoginAt),
       suspended: r.suspended ? "yes" : "no",
     })));
@@ -278,6 +296,12 @@ export default function AdminUsers() {
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuLabel className="truncate text-xs">{r.email ?? r.uid}</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => setProfileFor(r)}>
+          <UserCog size={14} /> View profile
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => { navigator.clipboard?.writeText(r.memberCode ?? r.uid); toast.success("Member ID copied"); }}>
+          <Copy size={14} /> Copy member ID
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => { navigator.clipboard?.writeText(r.uid); toast.success("UID copied"); }}>
           <Copy size={14} /> Copy UID
         </DropdownMenuItem>
@@ -448,6 +472,7 @@ export default function AdminUsers() {
                       <div className="flex items-center gap-3">
                         <div className="relative">
                           <Avatar className="h-9 w-9 border border-border">
+                            {r.photoURL && <AvatarImage src={r.photoURL} alt={r.name || r.email || "Member"} />}
                             <AvatarFallback className="bg-primary/15 text-xs font-bold text-primary">
                               {initials(r)}
                             </AvatarFallback>
@@ -461,6 +486,7 @@ export default function AdminUsers() {
                         <div className="min-w-0">
                           <div className="truncate font-semibold">{r.name || r.email?.split("@")[0] || r.uid.slice(0, 8)}</div>
                           <div className="truncate text-xs text-muted-foreground">{r.email ?? r.uid}</div>
+                          <div className="mt-0.5 font-mono text-[10px] text-muted-foreground/70">{r.memberCode ?? r.uid.slice(0, 10)}</div>
                         </div>
                       </div>
                     </td>
@@ -520,6 +546,7 @@ export default function AdminUsers() {
               <div className="flex items-start gap-3">
                 <div className="relative">
                   <Avatar className="h-10 w-10 border border-border">
+                    {r.photoURL && <AvatarImage src={r.photoURL} alt={r.name || r.email || "Member"} />}
                     <AvatarFallback className="bg-primary/15 text-xs font-bold text-primary">{initials(r)}</AvatarFallback>
                   </Avatar>
                   <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card ${online ? "bg-success" : "bg-muted-foreground/40"}`} />
@@ -569,6 +596,59 @@ export default function AdminUsers() {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setInviteFor(null)}>Cancel</Button>
             <Button onClick={sendInvite} className="gap-2"><Send size={14} /> Send invite</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Profile viewer */}
+      <Dialog open={!!profileFor} onOpenChange={(o) => !o && setProfileFor(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <Avatar className="h-10 w-10 border border-border">
+                {profileFor?.photoURL && <AvatarImage src={profileFor.photoURL} alt="Member avatar" />}
+                <AvatarFallback className="bg-primary/15 text-xs font-bold text-primary">
+                  {profileFor ? initials(profileFor) : "?"}
+                </AvatarFallback>
+              </Avatar>
+              <span className="min-w-0">
+                <span className="block truncate">{profileFor?.name || profileFor?.email || profileFor?.uid}</span>
+                <span className="block font-mono text-[11px] font-normal text-muted-foreground">
+                  {profileFor?.memberCode ?? profileFor?.uid}
+                </span>
+              </span>
+            </DialogTitle>
+            <DialogDescription>Read-only snapshot of this member's stored profile.</DialogDescription>
+          </DialogHeader>
+
+          {profileLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {[
+                ["Email", profileFor?.email ?? "—"],
+                ["Access", profileFor?.role ? (ROLE_META[profileFor.role as AdminRole]?.label ?? profileFor.role) : "Member"],
+                ["Status", profileFor?.suspended ? "Suspended" : "Active"],
+                ["Joined", fmtDate(profileFor?.createdAt)],
+                ["Last seen", fmtRelative(profileFor?.lastLoginAt)],
+                ["Goal", profileData?.goal ?? profileData?.goalType ?? "—"],
+                ["Activity level", profileData?.activityLevel ?? "—"],
+                ["Units", profileData?.units ?? "metric"],
+                ["Height", profileData?.height ?? "—"],
+                ["Weight", profileData?.weight ?? "—"],
+                ["Gender", profileData?.gender ?? "—"],
+                ["Daily calories", profileData?.targets?.calories ?? profileData?.calorieTarget ?? "—"],
+              ].map(([k, v]) => (
+                <div key={String(k)} className="rounded-xl border border-border bg-secondary/40 p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{k}</div>
+                  <div className="mt-0.5 truncate font-medium">{String(v)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setProfileFor(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
