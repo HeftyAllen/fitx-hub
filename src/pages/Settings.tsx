@@ -228,6 +228,8 @@ export default function Settings() {
       const newProfile = { ...profile, photoURL: url };
       setProfile(newProfile);
       await setDoc(doc(db, "users", user.uid, "profile", "data"), { photoURL: url }, { merge: true });
+      await setDoc(doc(db, "users", user.uid), { photoURL: url }, { merge: true });
+
       await refreshProfile();
       toast.success("Profile photo updated");
     } catch (err: any) {
