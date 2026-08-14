@@ -24,18 +24,35 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+/** Short human-friendly member code, e.g. FX-7K2Q4M — searchable by admins. */
+function makeMemberCode(uid: string) {
+  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let hash = 0;
+  for (let i = 0; i < uid.length; i++) hash = (hash * 31 + uid.charCodeAt(i)) >>> 0;
+  let out = "";
+  for (let i = 0; i < 6; i++) {
+    out += alphabet[hash % alphabet.length];
+    hash = Math.floor(hash / alphabet.length) + (i + 1) * 7919;
+  }
+  return `FX-${out}`;
+}
+
 async function syncUserDoc(user: User) {
   try {
     const profRef = doc(db, "users", user.uid, "profile", "data");
     const indexRef = doc(db, "users", user.uid);
-    const profSnap = await getDoc(profRef);
+    const [profSnap, indexSnap] = await Promise.all([getDoc(profRef), getDoc(indexRef)]);
+    const existing = { ...(profSnap.data() ?? {}), ...(indexSnap.data() ?? {}) } as any;
 
     const summary: any = {
       email: user.email ?? null,
-      name: user.displayName ?? null,
-      photoURL: user.photoURL ?? null,
+      // never clobber a name/photo the member set themselves in Settings
+      name: existing.name ?? user.displayName ?? null,
+      photoURL: existing.photoURL ?? user.photoURL ?? null,
       providerId: user.providerData?.[0]?.providerId ?? "password",
       lastLoginAt: serverTimestamp(),
+      uid: user.uid,
+      memberCode: existing.memberCode ?? makeMemberCode(user.uid),
     };
     if (!profSnap.exists()) summary.createdAt = serverTimestamp();
 
@@ -47,6 +64,7 @@ async function syncUserDoc(user: User) {
     console.warn("[auth] syncUserDoc failed", e);
   }
 }
+
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
