@@ -25,7 +25,17 @@
   <meta name="theme-color" content="#0F172A">
   <link rel="apple-touch-icon" href="/placeholder.svg">
   <link rel="icon" href="/favicon.ico">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('fitx-theme');
+        document.documentElement.classList.toggle('dark', t !== 'light');
+        document.documentElement.style.colorScheme = t === 'light' ? 'light' : 'dark';
+      } catch (e) {}
+    })();
+  </script>
 </head>
+
 
   <body>
     <div id="root"></div>
