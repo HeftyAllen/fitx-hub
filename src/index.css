@@ -128,8 +128,37 @@
 
 @layer components {
   .glass-card {
-    @apply bg-card/80 backdrop-blur-xl rounded-2xl border border-white/[0.08];
+    @apply bg-card/80 backdrop-blur-xl rounded-2xl border border-border;
   }
+
+  /* Light-mode compatibility: remap legacy white overlays to ink overlays */
+  :root:not(.dark) .bg-white\/5,
+  :root:not(.dark) .bg-white\/\[0\.02\],
+  :root:not(.dark) .bg-white\/\[0\.03\],
+  :root:not(.dark) .bg-white\/\[0\.04\],
+  :root:not(.dark) .bg-white\/\[0\.05\],
+  :root:not(.dark) .bg-white\/\[0\.06\],
+  :root:not(.dark) .bg-white\/\[0\.07\],
+  :root:not(.dark) .bg-white\/\[0\.08\],
+  :root:not(.dark) .bg-white\/10,
+  :root:not(.dark) .bg-white\/20 {
+    background-color: hsl(220 20% 12% / 0.045);
+  }
+
+  :root:not(.dark) .border-white\/5,
+  :root:not(.dark) .border-white\/10,
+  :root:not(.dark) .border-white\/20,
+  :root:not(.dark) .border-white\/30,
+  :root:not(.dark) .border-white\/\[0\.04\],
+  :root:not(.dark) .border-white\/\[0\.05\],
+  :root:not(.dark) .border-white\/\[0\.06\],
+  :root:not(.dark) .border-white\/\[0\.08\],
+  :root:not(.dark) .border-white\/\[0\.1\],
+  :root:not(.dark) .border-white\/\[0\.12\],
+  :root:not(.dark) .border-white\/\[0\.15\] {
+    border-color: hsl(220 20% 12% / 0.12);
+  }
+
 
   .gradient-text {
     @apply bg-clip-text text-transparent;
