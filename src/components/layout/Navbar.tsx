@@ -5,11 +5,12 @@ import logoFallback from "@/assets/logo.png";
 import { useBrand } from "@/contexts/SiteSettingsContext";
 import {
   LayoutDashboard, Dumbbell, UtensilsCrossed, TrendingUp,
-  Trophy, Calendar, Award, Settings, LogOut, Bell, ShieldCheck,
+  Trophy, Calendar, Award, Settings, LogOut, Bell, ShieldCheck, Sun, Moon,
 } from "lucide-react";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
 import { useNotifications, type NotifCategory } from "@/hooks/useNotifications";
 import { useAdmin } from "@/hooks/useAdmin";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const navLinks = [
   { to: "/dashboard",       label: "Dashboard", icon: LayoutDashboard },
@@ -22,6 +23,7 @@ const navLinks = [
 ];
 
 export default function Navbar() {
+  const { theme, toggleTheme } = useTheme();
   const { pathname } = useLocation();
   const { user, userProfile, logout } = useAuth();
   const { isAdmin } = useAdmin();
