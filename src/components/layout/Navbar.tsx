@@ -97,6 +97,15 @@ export default function Navbar() {
             )}
           </button>
 
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+          >
+            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+
           {/* Avatar → Settings */}
           <Link to="/settings" aria-label="Settings"
             className="w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-sm font-bold text-primary-foreground hover:scale-105 transition-transform overflow-hidden">
