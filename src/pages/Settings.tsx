@@ -140,6 +140,7 @@ function SaveButton({ onClick, saving, saved }: { onClick: () => void; saving: b
 }
 
 export default function Settings() {
+  const { theme, setTheme } = useTheme();
   const { user, userProfile, logout, refreshProfile } = useAuth();
   const navigate = useNavigate();
 
@@ -149,6 +150,7 @@ export default function Settings() {
   const [metricsSaving, setMetricsSaving] = useState(false);
   const [prefSaving, setPrefSaving] = useState(false);
   const [notifSaving, setNotifSaving] = useState(false);
+  const [appearanceSaving, setAppearanceSaving] = useState(false);
   const [savedSection, setSavedSection] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
