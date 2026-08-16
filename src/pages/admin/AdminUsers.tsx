@@ -602,29 +602,29 @@ export default function AdminUsers() {
 
       {/* Profile viewer */}
       <Dialog open={!!profileFor} onOpenChange={(o) => !o && setProfileFor(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <Avatar className="h-10 w-10 border border-border">
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden gap-0">
+          <DialogHeader className="space-y-0 border-b border-border px-5 py-4">
+            <DialogTitle className="flex items-center gap-3 text-sm">
+              <Avatar className="h-9 w-9 border border-border">
                 {profileFor?.photoURL && <AvatarImage src={profileFor.photoURL} alt="Member avatar" />}
-                <AvatarFallback className="bg-primary/15 text-xs font-bold text-primary">
+                <AvatarFallback className="bg-primary/15 text-[11px] font-bold text-primary">
                   {profileFor ? initials(profileFor) : "?"}
                 </AvatarFallback>
               </Avatar>
               <span className="min-w-0">
-                <span className="block truncate">{profileFor?.name || profileFor?.email || profileFor?.uid}</span>
-                <span className="block font-mono text-[11px] font-normal text-muted-foreground">
+                <span className="block truncate text-sm font-semibold">{profileFor?.name || profileFor?.email || profileFor?.uid}</span>
+                <span className="block font-mono text-[10px] font-normal text-muted-foreground">
                   {profileFor?.memberCode ?? profileFor?.uid}
                 </span>
               </span>
             </DialogTitle>
-            <DialogDescription>Read-only snapshot of this member's stored profile.</DialogDescription>
+            <DialogDescription className="sr-only">Read-only profile snapshot</DialogDescription>
           </DialogHeader>
 
           {profileLoading ? (
-            <Skeleton className="h-40 w-full" />
+            <div className="p-5"><Skeleton className="h-40 w-full" /></div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="max-h-[60vh] overflow-y-auto divide-y divide-border">
               {[
                 ["Email", profileFor?.email ?? "—"],
                 ["Access", profileFor?.role ? (ROLE_META[profileFor.role as AdminRole]?.label ?? profileFor.role) : "Member"],
@@ -639,19 +639,20 @@ export default function AdminUsers() {
                 ["Gender", profileData?.gender ?? "—"],
                 ["Daily calories", profileData?.targets?.calories ?? profileData?.calorieTarget ?? "—"],
               ].map(([k, v]) => (
-                <div key={String(k)} className="rounded-xl border border-border bg-secondary/40 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{k}</div>
-                  <div className="mt-0.5 truncate font-medium">{String(v)}</div>
+                <div key={String(k)} className="flex items-center justify-between gap-4 px-5 py-2.5">
+                  <span className="text-xs text-muted-foreground">{k}</span>
+                  <span className="truncate text-xs font-medium">{String(v)}</span>
                 </div>
               ))}
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setProfileFor(null)}>Close</Button>
+          <DialogFooter className="border-t border-border px-5 py-3">
+            <Button size="sm" variant="secondary" onClick={() => setProfileFor(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteFor} onOpenChange={(o) => !o && setDeleteFor(null)}>

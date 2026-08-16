@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import AppLayout from "@/components/layout/AppLayout";
 import { motion } from "framer-motion";
 import { doc, setDoc, getDoc } from "firebase/firestore";
@@ -139,6 +140,7 @@ function SaveButton({ onClick, saving, saved }: { onClick: () => void; saving: b
 }
 
 export default function Settings() {
+  const { theme, setTheme } = useTheme();
   const { user, userProfile, logout, refreshProfile } = useAuth();
   const navigate = useNavigate();
 
@@ -148,6 +150,7 @@ export default function Settings() {
   const [metricsSaving, setMetricsSaving] = useState(false);
   const [prefSaving, setPrefSaving] = useState(false);
   const [notifSaving, setNotifSaving] = useState(false);
+  const [appearanceSaving, setAppearanceSaving] = useState(false);
   const [savedSection, setSavedSection] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -163,6 +166,7 @@ export default function Settings() {
           ...data,
           notifications: { ...defaultProfile.notifications, ...(data.notifications || {}) },
         }));
+        if (data.theme === "light" || data.theme === "dark") setTheme(data.theme);
       } else if (userProfile) {
         setProfile(prev => ({
           ...prev,
@@ -467,28 +471,39 @@ export default function Settings() {
 
             {tab === "appearance" && (
               <section>
-                <SectionHeader label="Appearance" desc="Choose your preferred theme" />
+                <SectionHeader label="Appearance" desc="Switch between light and dark across the whole app" />
                 <div className="glass-card p-5">
-                  <div className="flex gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     {([
-                      { val: "dark", icon: Moon, label: "Dark" },
-                      { val: "light", icon: Sun, label: "Light" },
-                    ] as const).map(({ val, icon: Icon, label }) => (
+                      { val: "dark", icon: Moon, label: "Dark", hint: "Low-light focus" },
+                      { val: "light", icon: Sun, label: "Light", hint: "Bright and clean" },
+                    ] as const).map(({ val, icon: Icon, label, hint }) => (
                       <button
                         key={val}
-                        onClick={() => set("theme")(val)}
-                        className={`flex-1 flex flex-col items-center gap-2 py-4 rounded-xl border text-sm font-semibold transition-all ${
-                          profile.theme === val
-                            ? "gradient-bg text-primary-foreground border-transparent shadow-lg shadow-primary/20"
-                            : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                        onClick={() => { set("theme")(val); setTheme(val); }}
+                        className={`flex items-center gap-3 p-4 rounded-xl border text-left transition-all ${
+                          theme === val
+                            ? "border-primary bg-primary/10 shadow-lg shadow-primary/10"
+                            : "bg-secondary border-border hover:border-primary/40"
                         }`}
                       >
-                        <Icon size={20} />
-                        {label}
+                        <span className={`p-2 rounded-lg ${theme === val ? "gradient-bg text-primary-foreground" : "bg-background text-muted-foreground"}`}>
+                          <Icon size={16} />
+                        </span>
+                        <span>
+                          <span className="block text-sm font-semibold">{label}</span>
+                          <span className="block text-xs text-muted-foreground">{hint}</span>
+                        </span>
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-3 text-center">Theme preference is saved to your profile</p>
+                  <div className="flex justify-end mt-4">
+                    <SaveButton
+                      onClick={() => saveSection("appearance", setAppearanceSaving, { theme })}
+                      saving={appearanceSaving}
+                      saved={savedSection === "appearance"}
+                    />
+                  </div>
                 </div>
               </section>
             )}

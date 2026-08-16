@@ -5,11 +5,12 @@ import logoFallback from "@/assets/logo.png";
 import { useBrand } from "@/contexts/SiteSettingsContext";
 import {
   LayoutDashboard, Dumbbell, UtensilsCrossed, TrendingUp,
-  Trophy, Calendar, Award, Settings, LogOut, Bell, ShieldCheck,
+  Trophy, Calendar, Award, Settings, LogOut, Bell, ShieldCheck, Sun, Moon,
 } from "lucide-react";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
 import { useNotifications, type NotifCategory } from "@/hooks/useNotifications";
 import { useAdmin } from "@/hooks/useAdmin";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const navLinks = [
   { to: "/dashboard",       label: "Dashboard", icon: LayoutDashboard },
@@ -22,6 +23,7 @@ const navLinks = [
 ];
 
 export default function Navbar() {
+  const { theme, toggleTheme } = useTheme();
   const { pathname } = useLocation();
   const { user, userProfile, logout } = useAuth();
   const { isAdmin } = useAdmin();
@@ -95,6 +97,15 @@ export default function Navbar() {
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
+          </button>
+
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+          >
+            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
           </button>
 
           {/* Avatar → Settings */}
