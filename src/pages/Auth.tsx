@@ -63,6 +63,7 @@ export default function Auth() {
 
   const handleGoogle = async () => {
     setError("");
+    setLoading(true);
     try {
       await signInWithGoogle();
       logActivity("auth.login", { method: "google" });
@@ -70,7 +71,16 @@ export default function Auth() {
       if (uid) await routeAfterAuth(uid, auth.currentUser?.email);
       else navigate("/dashboard", { replace: true });
     } catch (err: any) {
-      setError(err.message || "Google sign in failed");
+      const code = err?.code || "";
+      if (code === "auth/unauthorized-domain") {
+        setError(`This domain (${window.location.hostname}) isn't authorised in Firebase Auth settings yet.`);
+      } else if (code === "auth/account-exists-with-different-credential") {
+        setError("An account with this email already exists — sign in with your email and password instead.");
+      } else {
+        setError(err?.message || "Google sign in failed");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
