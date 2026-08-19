@@ -134,7 +134,7 @@ const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, tra
 
 export default function Dashboard() {
   const { user, userProfile } = useAuth();
-  const name = userProfile?.name || user?.displayName || "Athlete";
+  const name = displayName(userProfile?.name, user?.displayName, user?.email);
   const [greeting] = useState(() => getDynamicGreeting());
   const [workoutLogs, setWorkoutLogs] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
