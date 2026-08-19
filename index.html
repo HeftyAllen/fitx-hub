@@ -28,7 +28,7 @@
   <script>
     (function () {
       try {
-        var t = localStorage.getItem('fitx-theme');
+        var t = localStorage.getItem('fitx-theme:guest');
         document.documentElement.classList.toggle('dark', t !== 'light');
         document.documentElement.style.colorScheme = t === 'light' ? 'light' : 'dark';
       } catch (e) {}

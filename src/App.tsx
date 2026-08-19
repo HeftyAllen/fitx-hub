@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { SiteSettingsProvider } from "@/contexts/SiteSettingsContext";
 import { AnimatePresence } from "framer-motion";
 import OfflineBanner from "@/components/OfflineBanner";
+import ThemeSync from "@/components/ThemeSync";
 import AdminInviteBanner from "@/components/AdminInviteBanner";
 import AdminRoute from "@/components/admin/AdminRoute";
 import { useAdmin } from "@/hooks/useAdmin";
@@ -125,6 +126,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+        <AuthProvider>
+          <ThemeSync />
           <SiteSettingsProvider>
             <OfflineBanner />
             <AdminInviteBanner />
