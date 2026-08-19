@@ -126,7 +126,6 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-        <AuthProvider>
           <ThemeSync />
           <SiteSettingsProvider>
             <OfflineBanner />
