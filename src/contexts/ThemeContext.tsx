@@ -1,25 +1,36 @@
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef } from "react";
 
 export type Theme = "dark" | "light";
 
-const STORAGE_KEY = "fitx-theme";
+const BASE_KEY = "fitx-theme";
+const DEFAULT_THEME: Theme = "dark";
+
+/** Theme is stored per identity so one member's choice never leaks to the next person on the device. */
+const keyFor = (scope: string | null) => `${BASE_KEY}:${scope ?? "guest"}`;
 
 interface ThemeCtx {
   theme: Theme;
   setTheme: (t: Theme) => void;
   toggleTheme: () => void;
+  /** Bind the theme store to a user id (or null for guest/signed-out). */
+  bindUser: (uid: string | null) => void;
 }
 
-const ThemeContext = createContext<ThemeCtx>({ theme: "dark", setTheme: () => {}, toggleTheme: () => {} });
+const ThemeContext = createContext<ThemeCtx>({
+  theme: DEFAULT_THEME,
+  setTheme: () => {},
+  toggleTheme: () => {},
+  bindUser: () => {},
+});
 
-function readInitial(): Theme {
+function read(scope: string | null): Theme {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(keyFor(scope));
     if (stored === "light" || stored === "dark") return stored;
   } catch {
     /* ignore */
   }
-  return "dark";
+  return DEFAULT_THEME;
 }
 
 function apply(theme: Theme) {
@@ -31,12 +42,24 @@ function apply(theme: Theme) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(readInitial);
+  const [scope, setScope] = useState<string | null>(null);
+  const [theme, setThemeState] = useState<Theme>(() => read(null));
+  const scopeRef = useRef<string | null>(null);
+
+  const bindUser = useCallback((uid: string | null) => {
+    setScope((prev) => (prev === uid ? prev : uid));
+  }, []);
+
+  // When identity changes, load that identity's preference (default dark, never inherited).
+  useEffect(() => {
+    scopeRef.current = scope;
+    setThemeState(read(scope));
+  }, [scope]);
 
   useEffect(() => {
     apply(theme);
     try {
-      localStorage.setItem(STORAGE_KEY, theme);
+      localStorage.setItem(keyFor(scopeRef.current), theme);
     } catch {
       /* ignore */
     }
@@ -46,7 +69,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const toggleTheme = useCallback(() => setThemeState((t) => (t === "dark" ? "light" : "dark")), []);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>{children}</ThemeContext.Provider>
+    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, bindUser }}>{children}</ThemeContext.Provider>
   );
 }
 
