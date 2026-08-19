@@ -26,8 +26,22 @@ const GREETINGS = [
 ];
 
 function getDynamicGreeting() {
-  const hourSlot = Math.floor(Date.now() / (1000 * 60 * 30));
-  return GREETINGS[hourSlot % GREETINGS.length];
+  const h = new Date().getHours();
+  const label = h < 5 ? "Still up," : h < 12 ? "Good morning," : h < 17 ? "Good afternoon," : h < 22 ? "Good evening," : "Late one,";
+  const slot = Math.floor(Date.now() / (1000 * 60 * 30));
+  return { label, sub: GREETINGS[slot % GREETINGS.length].sub };
+}
+
+/** Prefer a real name, then Google display name, then a tidy handle from the email. */
+function displayName(profileName?: string | null, authName?: string | null, email?: string | null) {
+  const first = (s?: string | null) => (s || "").trim().split(/\s+/)[0];
+  const fromProfile = first(profileName);
+  if (fromProfile) return fromProfile;
+  const fromAuth = first(authName);
+  if (fromAuth) return fromAuth;
+  const handle = (email || "").split("@")[0].replace(/[._\-+\d]+/g, " ").trim();
+  if (handle) return handle.charAt(0).toUpperCase() + handle.slice(1);
+  return "Athlete";
 }
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -120,7 +134,7 @@ const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, tra
 
 export default function Dashboard() {
   const { user, userProfile } = useAuth();
-  const name = userProfile?.name || user?.displayName || "Athlete";
+  const name = displayName(userProfile?.name, user?.displayName, user?.email);
   const [greeting] = useState(() => getDynamicGreeting());
   const [workoutLogs, setWorkoutLogs] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);

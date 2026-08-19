@@ -5,6 +5,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -78,6 +80,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Completes a Google redirect sign-in (used when popups are blocked, e.g. in the preview iframe).
+    getRedirectResult(auth)
+      .then((cred) => { if (cred?.user) syncUserDoc(cred.user); })
+      .catch((e) => console.warn("[auth] redirect result", e));
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       if (user) {
@@ -103,8 +110,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
-    const cred = await signInWithPopup(auth, googleProvider);
-    await syncUserDoc(cred.user);
+    googleProvider.setCustomParameters({ prompt: "select_account" });
+    try {
+      const cred = await signInWithPopup(auth, googleProvider);
+      await syncUserDoc(cred.user);
+    } catch (e: any) {
+      const code = e?.code || "";
+      // Popups are commonly blocked inside iframes / strict browsers — fall back to a full redirect.
+      if (
+        code === "auth/popup-blocked" ||
+        code === "auth/popup-closed-by-user" ||
+        code === "auth/cancelled-popup-request" ||
+        code === "auth/operation-not-supported-in-this-environment" ||
+        code === "auth/web-storage-unsupported"
+      ) {
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
+      throw e;
+    }
   };
 
   const logout = async () => {
