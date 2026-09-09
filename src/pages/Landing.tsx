@@ -166,8 +166,9 @@ export default function Landing() {
               className="mt-7 font-heading text-[13vw] leading-[0.9] sm:text-6xl md:text-7xl font-black tracking-[-0.03em]"
             >
               Your whole fitness
-              <br />
-              journey, <span className="text-muted-foreground">in one place.</span>
+              <br className="hidden sm:block" />
+              {" "}journey,
+              <span className="block text-muted-foreground">in one place.</span>
             </motion.h1>
 
             <motion.p variants={reveal} className="mt-7 text-base md:text-lg text-muted-foreground max-w-xl leading-relaxed">
