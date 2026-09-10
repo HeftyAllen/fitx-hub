@@ -152,6 +152,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await fetchProfile(user.uid);
   };
 
+  /** Sends the Firebase password-reset email; the link opens Firebase's hosted reset page. */
+  const sendReset = async (email: string) => {
+    await sendPasswordResetEmail(auth, email.trim(), {
+      url: `${window.location.origin}/auth`,
+      handleCodeInApp: false,
+    });
+  };
+
+  const sendVerification = async () => {
+    const current = auth.currentUser;
+    if (!current) throw new Error("You need to be signed in.");
+    await sendEmailVerification(current, { url: `${window.location.origin}/dashboard` });
+  };
+
+  /** Re-authenticates the member — required by Firebase before password change or deletion. */
+  const reauth = async (currentPassword?: string) => {
+    const current = auth.currentUser;
+    if (!current) throw new Error("You need to be signed in.");
+    const isPassword = current.providerData.some((p) => p.providerId === "password");
+    if (isPassword) {
+      if (!currentPassword) throw new Error("Enter your current password to continue.");
+      const cred = EmailAuthProvider.credential(current.email ?? "", currentPassword);
+      await reauthenticateWithCredential(current, cred);
+    } else {
+      await reauthenticateWithPopup(current, googleProvider);
+    }
+    return current;
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    const current = await reauth(currentPassword);
+    await updatePassword(current, newPassword);
+  };
+
+  const deleteAccount = async (currentPassword?: string) => {
+    const current = await reauth(currentPassword);
+    // Mark the member document so admins keep an audit trail of the deletion.
+    try {
+      await setDoc(doc(db, "users", current.uid), { deletedAt: serverTimestamp(), deleted: true }, { merge: true });
+    } catch (e) {
+      console.warn("[auth] delete marker failed", e);
+    }
+    await deleteUser(current);
+    setUserProfile(null);
+  };
+
   // Onboarding considered complete when profile has a goalType.
   const needsOnboarding = !!user && (!userProfile || !userProfile.goalType);
 
@@ -159,7 +205,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       user, loading, userProfile, needsOnboarding,
       signIn, signUp, signInWithGoogle, logout, refreshProfile,
+      sendReset, sendVerification, changePassword, deleteAccount,
     }}>
+
       {children}
     </AuthContext.Provider>
   );
