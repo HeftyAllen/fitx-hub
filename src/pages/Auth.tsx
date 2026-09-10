@@ -64,6 +64,33 @@ export default function Auth() {
     }
   };
 
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (!email.trim()) { setError("Enter your email first"); return; }
+    setLoading(true);
+    try {
+      await sendReset(email);
+      setNotice(`We've sent a reset link to ${email.trim()}. Check your inbox (and spam folder).`);
+    } catch (err: any) {
+      const code = err?.code || "";
+      if (code === "auth/user-not-found") {
+        // Don't confirm whether an account exists.
+        setNotice(`We've sent a reset link to ${email.trim()}. Check your inbox (and spam folder).`);
+      } else if (code === "auth/invalid-email") {
+        setError("That email doesn't look right");
+      } else if (code === "auth/too-many-requests") {
+        setError("Too many attempts — please wait a few minutes and try again");
+      } else {
+        setError(err?.message || "Couldn't send the reset email");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
   const handleGoogle = async () => {
     setError("");
     setLoading(true);
@@ -101,14 +128,17 @@ export default function Auth() {
           <div className="flex flex-col items-center gap-4">
             <img src={logo} alt="FitX Journey" className="h-16 w-auto" />
             <h1 className="text-2xl font-heading font-bold">
-              {isSignUp ? "Create Account" : "Welcome Back"}
+              {mode === "reset" ? "Reset Password" : isSignUp ? "Create Account" : "Welcome Back"}
             </h1>
-            <p className="text-muted-foreground text-sm">
-              {isSignUp ? "Start your fitness journey today" : "Log in to continue your journey"}
+            <p className="text-muted-foreground text-sm text-center">
+              {mode === "reset"
+                ? "We'll email you a secure link to set a new password"
+                : isSignUp ? "Start your fitness journey today" : "Log in to continue your journey"}
             </p>
+
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={mode === "reset" ? handleReset : handleSubmit} className="space-y-4">
             <div>
               <input
                 type="email"
@@ -119,28 +149,45 @@ export default function Auth() {
                 required
               />
             </div>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 pr-12 rounded-xl bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-                required
-                minLength={6}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
+            {mode === "credentials" && (
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 pr-12 rounded-xl bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                  required
+                  minLength={6}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            )}
+
+            {mode === "credentials" && !isSignUp && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => { setMode("reset"); setError(""); setNotice(""); }}
+                  className="text-xs text-primary hover:underline font-medium"
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
 
             {error && (
               <p className="text-destructive text-sm text-center">{error}</p>
+            )}
+            {notice && (
+              <p className="text-sm text-center text-primary">{notice}</p>
             )}
 
             <button
@@ -148,9 +195,20 @@ export default function Auth() {
               disabled={loading}
               className="w-full py-3 rounded-xl gradient-bg text-primary-foreground font-semibold text-sm hover:scale-[0.98] active:scale-[0.96] transition-transform glow-pulse disabled:opacity-50"
             >
-              {loading ? "Loading..." : isSignUp ? "Sign Up" : "Sign In"}
+              {loading ? "Loading..." : mode === "reset" ? "Send reset link" : isSignUp ? "Sign Up" : "Sign In"}
             </button>
+
+            {mode === "reset" && (
+              <button
+                type="button"
+                onClick={() => { setMode("credentials"); setError(""); setNotice(""); }}
+                className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Back to sign in
+              </button>
+            )}
           </form>
+
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
