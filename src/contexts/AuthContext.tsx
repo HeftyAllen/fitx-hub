@@ -8,6 +8,13 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut,
+  sendPasswordResetEmail,
+  sendEmailVerification,
+  updatePassword,
+  deleteUser,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  EmailAuthProvider,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
@@ -22,9 +29,14 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  sendReset: (email: string) => Promise<void>;
+  sendVerification: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  deleteAccount: (currentPassword?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
 
 /** Short human-friendly member code, e.g. FX-7K2Q4M — searchable by admins. */
 function makeMemberCode(uid: string) {
@@ -106,8 +118,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await syncUserDoc(cred.user);
+    // Kick off email verification so members can confirm their address.
+    try {
+      await sendEmailVerification(cred.user, { url: `${window.location.origin}/dashboard` });
+    } catch (e) {
+      console.warn("[auth] verification email failed", e);
+    }
     return cred.user;
   };
+
 
   const signInWithGoogle = async () => {
     googleProvider.setCustomParameters({ prompt: "select_account" });
@@ -140,6 +159,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await fetchProfile(user.uid);
   };
 
+  /** Sends the Firebase password-reset email; the link opens Firebase's hosted reset page. */
+  const sendReset = async (email: string) => {
+    await sendPasswordResetEmail(auth, email.trim(), {
+      url: `${window.location.origin}/auth`,
+      handleCodeInApp: false,
+    });
+  };
+
+  const sendVerification = async () => {
+    const current = auth.currentUser;
+    if (!current) throw new Error("You need to be signed in.");
+    await sendEmailVerification(current, { url: `${window.location.origin}/dashboard` });
+  };
+
+  /** Re-authenticates the member — required by Firebase before password change or deletion. */
+  const reauth = async (currentPassword?: string) => {
+    const current = auth.currentUser;
+    if (!current) throw new Error("You need to be signed in.");
+    const isPassword = current.providerData.some((p) => p.providerId === "password");
+    if (isPassword) {
+      if (!currentPassword) throw new Error("Enter your current password to continue.");
+      const cred = EmailAuthProvider.credential(current.email ?? "", currentPassword);
+      await reauthenticateWithCredential(current, cred);
+    } else {
+      await reauthenticateWithPopup(current, googleProvider);
+    }
+    return current;
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    const current = await reauth(currentPassword);
+    await updatePassword(current, newPassword);
+  };
+
+  const deleteAccount = async (currentPassword?: string) => {
+    const current = await reauth(currentPassword);
+    // Mark the member document so admins keep an audit trail of the deletion.
+    try {
+      await setDoc(doc(db, "users", current.uid), { deletedAt: serverTimestamp(), deleted: true }, { merge: true });
+    } catch (e) {
+      console.warn("[auth] delete marker failed", e);
+    }
+    await deleteUser(current);
+    setUserProfile(null);
+  };
+
   // Onboarding considered complete when profile has a goalType.
   const needsOnboarding = !!user && (!userProfile || !userProfile.goalType);
 
@@ -147,7 +212,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       user, loading, userProfile, needsOnboarding,
       signIn, signUp, signInWithGoogle, logout, refreshProfile,
+      sendReset, sendVerification, changePassword, deleteAccount,
     }}>
+
       {children}
     </AuthContext.Provider>
   );
