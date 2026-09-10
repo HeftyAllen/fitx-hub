@@ -118,8 +118,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await syncUserDoc(cred.user);
+    // Kick off email verification so members can confirm their address.
+    try {
+      await sendEmailVerification(cred.user, { url: `${window.location.origin}/dashboard` });
+    } catch (e) {
+      console.warn("[auth] verification email failed", e);
+    }
     return cred.user;
   };
+
 
   const signInWithGoogle = async () => {
     googleProvider.setCustomParameters({ prompt: "select_account" });
