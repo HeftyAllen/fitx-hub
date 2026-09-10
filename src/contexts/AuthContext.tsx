@@ -8,6 +8,13 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut,
+  sendPasswordResetEmail,
+  sendEmailVerification,
+  updatePassword,
+  deleteUser,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  EmailAuthProvider,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
@@ -22,9 +29,14 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  sendReset: (email: string) => Promise<void>;
+  sendVerification: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  deleteAccount: (currentPassword?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
 
 /** Short human-friendly member code, e.g. FX-7K2Q4M — searchable by admins. */
 function makeMemberCode(uid: string) {
