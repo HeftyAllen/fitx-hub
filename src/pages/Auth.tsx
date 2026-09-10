@@ -15,10 +15,13 @@ export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const [mode, setMode] = useState<"credentials" | "reset">("credentials");
+  const { signIn, signUp, signInWithGoogle, sendReset } = useAuth();
   const navigate = useNavigate();
+
 
   const ADMIN_EMAILS = ["admin1@gmail.com", "admin101@gmail.com"];
 
