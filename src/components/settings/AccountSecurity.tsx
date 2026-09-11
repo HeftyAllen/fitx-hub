@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { auth } from "@/lib/firebase";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -22,11 +22,11 @@ const rowClass = "w-full flex items-center gap-4 px-5 py-4 text-left transition-
 const iconWrap = "p-2.5 rounded-xl shrink-0";
 
 export default function AccountSecurity() {
-  const { user, sendVerification, changePassword, deleteAccount, logout } = useAuth();
+  const { user, sendVerification, changePassword, deleteAccount } = useAuth();
   const navigate = useNavigate();
 
   const usesPassword = !!user?.providerData?.some((p) => p.providerId === "password");
-  const verified = !!auth.currentUser?.emailVerified;
+  const verified = !!user?.emailVerified;
 
   const [verifySending, setVerifySending] = useState(false);
   const [verifySent, setVerifySent] = useState(false);
@@ -111,14 +111,15 @@ export default function AccountSecurity() {
             </p>
           </div>
           {!verified && (
-            <button
+            <Button
               onClick={handleVerify}
               disabled={verifySending}
-              className="shrink-0 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity inline-flex items-center gap-1.5"
+              size="sm"
+              className="shrink-0 text-xs"
             >
               {verifySending && <Loader2 size={13} className="animate-spin" />}
               {verifySent ? "Resend" : "Send link"}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -126,7 +127,12 @@ export default function AccountSecurity() {
       {/* Change password */}
       {usesPassword && (
         <div>
-          <button onClick={() => setPwOpen(v => !v)} className={`${rowClass} hover:bg-secondary/50`}>
+          <Button
+            variant="ghost"
+            onClick={() => setPwOpen(v => !v)}
+            aria-expanded={pwOpen}
+            className={`${rowClass} h-auto rounded-none justify-start hover:bg-secondary/50`}
+          >
             <div className={`${iconWrap} bg-secondary`}>
               <KeyRound size={17} className="text-muted-foreground" />
             </div>
@@ -135,7 +141,7 @@ export default function AccountSecurity() {
               <p className="text-xs text-muted-foreground mt-0.5">You'll confirm your current one first</p>
             </div>
             <ChevronRight size={16} className={`text-muted-foreground transition-transform ${pwOpen ? "rotate-90" : ""}`} />
-          </button>
+          </Button>
           <AnimatePresence initial={false}>
             {pwOpen && (
               <motion.form
@@ -156,14 +162,16 @@ export default function AccountSecurity() {
                       required
                       autoComplete="current-password"
                     />
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon"
                       onClick={() => setShowPw(v => !v)}
                       aria-label={showPw ? "Hide passwords" : "Show passwords"}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     >
                       {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
+                    </Button>
                   </div>
                   <input
                     type={showPw ? "text" : "password"}
@@ -186,14 +194,13 @@ export default function AccountSecurity() {
                     autoComplete="new-password"
                   />
                   <div className="flex justify-end">
-                    <button
+                    <Button
                       type="submit"
                       disabled={pwSaving}
-                      className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity inline-flex items-center gap-2"
                     >
                       {pwSaving && <Loader2 size={14} className="animate-spin" />}
                       Update password
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </motion.form>
@@ -204,7 +211,12 @@ export default function AccountSecurity() {
 
       {/* Delete account */}
       <div>
-        <button onClick={() => setDelOpen(v => !v)} className={`${rowClass} hover:bg-destructive/10 group`}>
+        <Button
+          variant="ghost"
+          onClick={() => setDelOpen(v => !v)}
+          aria-expanded={delOpen}
+          className={`${rowClass} h-auto rounded-none justify-start hover:bg-destructive/10 group`}
+        >
           <div className={`${iconWrap} bg-destructive/10`}>
             <Trash2 size={17} className="text-destructive" />
           </div>
@@ -213,7 +225,7 @@ export default function AccountSecurity() {
             <p className="text-xs text-muted-foreground mt-0.5">Permanently removes your sign-in and stops all access</p>
           </div>
           <ChevronRight size={16} className={`text-muted-foreground transition-transform ${delOpen ? "rotate-90" : ""}`} />
-        </button>
+        </Button>
         <AnimatePresence initial={false}>
           {delOpen && (
             <motion.form
@@ -247,21 +259,21 @@ export default function AccountSecurity() {
                   required
                 />
                 <div className="flex justify-end gap-2">
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => { setDelOpen(false); setDelPw(""); setDelConfirm(""); }}
-                    className="px-4 py-2.5 rounded-xl bg-secondary border border-border text-sm font-medium hover:bg-secondary/70 transition-colors"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
+                    variant="destructive"
                     disabled={deleting}
-                    className="px-4 py-2.5 rounded-xl bg-destructive text-destructive-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity inline-flex items-center gap-2"
                   >
                     {deleting && <Loader2 size={14} className="animate-spin" />}
                     Delete forever
-                  </button>
+                  </Button>
                 </div>
               </div>
             </motion.form>

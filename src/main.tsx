@@ -4,7 +4,11 @@ import "./index.css";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 
-createRoot(document.getElementById("root")!).render(
+const root = document.getElementById("root");
+
+if (!root) throw new Error("App root was not found");
+
+createRoot(root).render(
   <ErrorBoundary>
     <ThemeProvider>
       <App />
