@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import AppLayout from "@/components/layout/AppLayout";
+import AccountSecurity from "@/components/settings/AccountSecurity";
 import { motion } from "framer-motion";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -540,6 +541,8 @@ export default function Settings() {
                       </button>
                     </div>
                   )}
+
+                  <AccountSecurity />
 
                   <a href="/support" className="w-full flex items-center gap-4 px-5 py-4 hover:bg-primary/5 transition-colors group text-left">
                     <div className="p-2.5 rounded-xl bg-primary/10 group-hover:bg-primary/15 transition-colors">
