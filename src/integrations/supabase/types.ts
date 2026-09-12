@@ -14,7 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      push_subscriptions: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          firebase_uid: string
+          id: string
+          last_seen_at: string
+          platform: string
+          preferences: Json
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          firebase_uid: string
+          id?: string
+          last_seen_at?: string
+          platform?: string
+          preferences?: Json
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          firebase_uid?: string
+          id?: string
+          last_seen_at?: string
+          platform?: string
+          preferences?: Json
+          token?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
