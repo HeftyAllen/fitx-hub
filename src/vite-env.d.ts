@@ -1,1 +1,8 @@
 /// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_WEB_API_KEY?: string;
+  readonly VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_PROJECT_ID?: string;
+  readonly VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_APP_ID?: string;
+  readonly VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_VAPID_KEY?: string;
+}
