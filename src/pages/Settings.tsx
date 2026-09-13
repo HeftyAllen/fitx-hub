@@ -4,6 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import AppLayout from "@/components/layout/AppLayout";
 import AccountSecurity from "@/components/settings/AccountSecurity";
+import PushNotifications from "@/components/settings/PushNotifications";
+import { syncPushPreferences } from "@/lib/pushNotifications";
 import { motion } from "framer-motion";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -205,6 +207,9 @@ export default function Settings() {
       await setDoc(doc(db, "users", user.uid, "profile", "data"), data, { merge: true });
       await mirrorForAdmin(data);
       await refreshProfile();
+      if (section === "notif" && data.notifications) {
+        await syncPushPreferences(data.notifications as unknown as Record<string, boolean>).catch(() => undefined);
+      }
       setSavedSection(section);
       toast.success("Changes saved");
       setTimeout(() => setSavedSection(null), 2500);
@@ -459,6 +464,7 @@ export default function Settings() {
                     label="Progress Milestones" desc="Celebrate hitting new PRs and milestone moments" />
                   <Toggle checked={profile.notifications.weeklyReport} onChange={setNotif("weeklyReport")}
                     label="Weekly Summary" desc="A weekly digest of your workouts, nutrition and progress" />
+                  <PushNotifications preferences={profile.notifications as unknown as Record<string, boolean>} />
                 </div>
                 <div className="flex justify-end mt-3">
                   <SaveButton
@@ -513,28 +519,28 @@ export default function Settings() {
               <section>
                 <SectionHeader label="Account" desc="Manage your account and security" />
                 <div className="glass-card divide-y divide-border overflow-hidden">
-                  <div className="flex items-center gap-4 px-5 py-4">
-                    <div className="p-2.5 rounded-xl bg-secondary">
+                  <div className="flex min-w-0 items-start gap-3 px-4 py-4 sm:px-5">
+                    <div className="shrink-0 rounded-xl bg-secondary p-2.5">
                       <Shield size={17} className="text-muted-foreground" />
                     </div>
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">Signed in as</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{user?.email}</p>
+                      <p className="mt-0.5 break-all text-xs text-muted-foreground">{user?.email}</p>
                     </div>
                   </div>
 
                   {memberCode && (
-                    <div className="flex items-center gap-4 px-5 py-4">
-                      <div className="p-2.5 rounded-xl bg-secondary">
+                    <div className="flex min-w-0 items-start gap-3 px-4 py-4 sm:px-5">
+                      <div className="shrink-0 rounded-xl bg-secondary p-2.5">
                         <User size={17} className="text-muted-foreground" />
                       </div>
-                      <div className="flex-1">
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium">Member ID</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 font-mono">{memberCode}</p>
+                        <p className="mt-0.5 break-all font-mono text-xs text-muted-foreground">{memberCode}</p>
                       </div>
                       <button
                         onClick={() => { navigator.clipboard?.writeText(memberCode); toast.success("Member ID copied"); }}
-                        className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                        className="shrink-0 rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                         aria-label="Copy member ID"
                       >
                         <Copy size={15} />
@@ -544,23 +550,23 @@ export default function Settings() {
 
                   <AccountSecurity />
 
-                  <a href="/support" className="w-full flex items-center gap-4 px-5 py-4 hover:bg-primary/5 transition-colors group text-left">
-                    <div className="p-2.5 rounded-xl bg-primary/10 group-hover:bg-primary/15 transition-colors">
+                  <a href="/support" className="flex w-full min-w-0 items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-primary/5 group sm:px-5">
+                    <div className="shrink-0 rounded-xl bg-primary/10 p-2.5 transition-colors group-hover:bg-primary/15">
                       <Shield size={17} className="text-primary" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold">Help &amp; Support</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Open a ticket — we reply in-app</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">Open a ticket — we reply in-app</p>
                     </div>
                   </a>
 
-                  <button onClick={handleLogout} className="w-full flex items-center gap-4 px-5 py-4 hover:bg-destructive/10 transition-colors group text-left">
-                    <div className="p-2.5 rounded-xl bg-destructive/10 group-hover:bg-destructive/15 transition-colors">
+                  <button onClick={handleLogout} className="flex w-full min-w-0 items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-destructive/10 group sm:px-5">
+                    <div className="shrink-0 rounded-xl bg-destructive/10 p-2.5 transition-colors group-hover:bg-destructive/15">
                       <LogOut size={17} className="text-destructive" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-destructive">Sign Out</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">You'll need to sign in again to access your data</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">You'll need to sign in again to access your data</p>
                     </div>
                   </button>
                 </div>

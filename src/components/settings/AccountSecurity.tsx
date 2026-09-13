@@ -18,7 +18,7 @@ function friendly(err: any) {
   return err?.message || "Something went wrong.";
 }
 
-const rowClass = "w-full flex items-center gap-4 px-5 py-4 text-left transition-colors";
+const rowClass = "w-full min-w-0 flex flex-wrap items-center gap-3 px-4 sm:px-5 py-4 text-left transition-colors";
 const iconWrap = "p-2.5 rounded-xl shrink-0";
 
 export default function AccountSecurity() {

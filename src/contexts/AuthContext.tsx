@@ -18,6 +18,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
+import { unregisterPushBeforeSignOut } from "@/lib/pushNotifications";
 
 interface AuthContextType {
   user: User | null;
@@ -151,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    await unregisterPushBeforeSignOut();
     await signOut(auth);
     setUserProfile(null);
   };
