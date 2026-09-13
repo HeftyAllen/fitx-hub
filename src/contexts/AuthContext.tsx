@@ -151,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    await unregisterPushBeforeSignOut();
     await signOut(auth);
     setUserProfile(null);
   };

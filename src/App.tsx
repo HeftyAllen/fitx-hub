@@ -8,6 +8,7 @@ import { SiteSettingsProvider } from "@/contexts/SiteSettingsContext";
 import { AnimatePresence } from "framer-motion";
 import OfflineBanner from "@/components/OfflineBanner";
 import ThemeSync from "@/components/ThemeSync";
+import PushListener from "@/components/PushListener";
 import AdminInviteBanner from "@/components/AdminInviteBanner";
 import AdminRoute from "@/components/admin/AdminRoute";
 import { useAdmin } from "@/hooks/useAdmin";
@@ -127,6 +128,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <ThemeSync />
+          <PushListener />
           <SiteSettingsProvider>
             <OfflineBanner />
             <AdminInviteBanner />
