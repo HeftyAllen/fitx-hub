@@ -18,6 +18,30 @@ import { logActivity } from "@/lib/activity";
 import { useAdmin } from "@/hooks/useAdmin";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { auth } from "@/lib/firebase";
+import { supabase } from "@/integrations/supabase/client";
+
+/** Fires a real device push for a broadcast; the in-app announcement is already saved. */
+async function sendPush(payload: { title: string; body: string; audience: Audience; path?: string }) {
+  try {
+    const user = auth.currentUser;
+    if (!user) return;
+    const idToken = await user.getIdToken();
+    const { data, error } = await supabase.functions.invoke("push-broadcast", {
+      body: {
+        idToken,
+        title: payload.title.slice(0, 80),
+        body: payload.body.slice(0, 400),
+        audience: payload.audience,
+        path: payload.path?.startsWith("/") ? payload.path : undefined,
+      },
+    });
+    if (error) throw error;
+    if (data?.delivered) toast.success(`Push delivered to ${data.delivered} device${data.delivered === 1 ? "" : "s"}`);
+  } catch (e) {
+    console.warn("[push-broadcast] failed", e);
+  }
+}
 
 type Severity = "info" | "success" | "warning" | "critical";
 type Audience = "all" | "active" | "admins";
@@ -97,6 +121,7 @@ export default function AdminAnnouncements() {
       });
       logActivity("admin.announcement.send", { title, severity, audience });
       toast.success("Broadcast sent to every notification center");
+      void sendPush({ title: title.trim(), body: body.trim(), audience, path: ctaUrl.trim() });
       setTitle(""); setBody(""); setCtaLabel(""); setCtaUrl(""); setPinned(false);
     } catch (e: any) { toast.error(e.message); }
     finally { setSaving(false); }
