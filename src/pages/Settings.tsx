@@ -4,6 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import AppLayout from "@/components/layout/AppLayout";
 import AccountSecurity from "@/components/settings/AccountSecurity";
+import PushNotifications from "@/components/settings/PushNotifications";
+import { syncPushPreferences } from "@/lib/pushNotifications";
 import { motion } from "framer-motion";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -459,6 +461,7 @@ export default function Settings() {
                     label="Progress Milestones" desc="Celebrate hitting new PRs and milestone moments" />
                   <Toggle checked={profile.notifications.weeklyReport} onChange={setNotif("weeklyReport")}
                     label="Weekly Summary" desc="A weekly digest of your workouts, nutrition and progress" />
+                  <PushNotifications preferences={profile.notifications as unknown as Record<string, boolean>} />
                 </div>
                 <div className="flex justify-end mt-3">
                   <SaveButton
