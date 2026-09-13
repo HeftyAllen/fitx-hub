@@ -207,6 +207,9 @@ export default function Settings() {
       await setDoc(doc(db, "users", user.uid, "profile", "data"), data, { merge: true });
       await mirrorForAdmin(data);
       await refreshProfile();
+      if (section === "notif" && data.notifications) {
+        await syncPushPreferences(data.notifications as unknown as Record<string, boolean>).catch(() => undefined);
+      }
       setSavedSection(section);
       toast.success("Changes saved");
       setTimeout(() => setSavedSection(null), 2500);
