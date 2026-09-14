@@ -18,8 +18,10 @@ function friendly(err: any) {
   return err?.message || "Something went wrong.";
 }
 
-const rowClass = "w-full min-w-0 flex flex-wrap items-center gap-3 px-4 sm:px-5 py-4 text-left transition-colors";
+const rowClass = "w-full min-w-0 flex items-start gap-3 px-4 sm:px-5 py-4 text-left transition-colors";
 const iconWrap = "p-2.5 rounded-xl shrink-0";
+const rowTitle = "text-sm font-medium leading-snug";
+const rowDesc = "text-xs text-muted-foreground mt-0.5 leading-relaxed";
 
 export default function AccountSecurity() {
   const { user, sendVerification, changePassword, deleteAccount } = useAuth();
