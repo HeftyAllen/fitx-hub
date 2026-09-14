@@ -18,8 +18,10 @@ function friendly(err: any) {
   return err?.message || "Something went wrong.";
 }
 
-const rowClass = "w-full min-w-0 flex flex-wrap items-center gap-3 px-4 sm:px-5 py-4 text-left transition-colors";
+const rowClass = "w-full min-w-0 flex items-start gap-3 px-4 sm:px-5 py-4 text-left transition-colors";
 const iconWrap = "p-2.5 rounded-xl shrink-0";
+const rowTitle = "text-sm font-medium leading-snug";
+const rowDesc = "text-xs text-muted-foreground mt-0.5 leading-relaxed";
 
 export default function AccountSecurity() {
   const { user, sendVerification, changePassword, deleteAccount } = useAuth();
@@ -101,26 +103,26 @@ export default function AccountSecurity() {
               : <MailWarning size={17} className="text-muted-foreground" />}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">{verified ? "Email verified" : "Verify your email"}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className={rowTitle}>{verified ? "Email verified" : "Verify your email"}</p>
+            <p className={rowDesc}>
               {verified
                 ? "Your address is confirmed — password resets will reach you."
                 : verifySent
                   ? "Link sent. Open it, then reload this page."
                   : "Confirm your address so you can recover your account."}
             </p>
+            {!verified && (
+              <Button
+                onClick={handleVerify}
+                disabled={verifySending}
+                size="sm"
+                className="mt-3 w-full text-xs sm:w-auto"
+              >
+                {verifySending && <Loader2 size={13} className="animate-spin" />}
+                {verifySent ? "Resend link" : "Send link"}
+              </Button>
+            )}
           </div>
-          {!verified && (
-            <Button
-              onClick={handleVerify}
-              disabled={verifySending}
-              size="sm"
-              className="shrink-0 text-xs"
-            >
-              {verifySending && <Loader2 size={13} className="animate-spin" />}
-              {verifySent ? "Resend" : "Send link"}
-            </Button>
-          )}
         </div>
       )}
 
@@ -136,11 +138,11 @@ export default function AccountSecurity() {
             <div className={`${iconWrap} bg-secondary`}>
               <KeyRound size={17} className="text-muted-foreground" />
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium">Change password</p>
-              <p className="text-xs text-muted-foreground mt-0.5">You'll confirm your current one first</p>
+            <div className="flex-1 min-w-0">
+              <p className={rowTitle}>Change password</p>
+              <p className={rowDesc}>You'll confirm your current one first</p>
             </div>
-            <ChevronRight size={16} className={`text-muted-foreground transition-transform ${pwOpen ? "rotate-90" : ""}`} />
+            <ChevronRight size={16} className={`shrink-0 mt-0.5 text-muted-foreground transition-transform ${pwOpen ? "rotate-90" : ""}`} />
           </Button>
           <AnimatePresence initial={false}>
             {pwOpen && (
@@ -151,7 +153,7 @@ export default function AccountSecurity() {
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden"
               >
-                <div className="px-5 pb-5 space-y-3">
+                <div className="px-4 pb-5 space-y-3 sm:px-5">
                   <div className="relative">
                     <input
                       type={showPw ? "text" : "password"}
@@ -193,10 +195,11 @@ export default function AccountSecurity() {
                     minLength={6}
                     autoComplete="new-password"
                   />
-                  <div className="flex justify-end">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                     <Button
                       type="submit"
                       disabled={pwSaving}
+                      className="w-full sm:w-auto"
                     >
                       {pwSaving && <Loader2 size={14} className="animate-spin" />}
                       Update password
@@ -220,11 +223,11 @@ export default function AccountSecurity() {
           <div className={`${iconWrap} bg-destructive/10`}>
             <Trash2 size={17} className="text-destructive" />
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-destructive">Delete account</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Permanently removes your sign-in and stops all access</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold leading-snug text-destructive">Delete account</p>
+            <p className={rowDesc}>Permanently removes your sign-in and stops all access</p>
           </div>
-          <ChevronRight size={16} className={`text-muted-foreground transition-transform ${delOpen ? "rotate-90" : ""}`} />
+          <ChevronRight size={16} className={`shrink-0 mt-0.5 text-muted-foreground transition-transform ${delOpen ? "rotate-90" : ""}`} />
         </Button>
         <AnimatePresence initial={false}>
           {delOpen && (
