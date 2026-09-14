@@ -195,10 +195,11 @@ export default function AccountSecurity() {
                     minLength={6}
                     autoComplete="new-password"
                   />
-                  <div className="flex justify-end">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                     <Button
                       type="submit"
                       disabled={pwSaving}
+                      className="w-full sm:w-auto"
                     >
                       {pwSaving && <Loader2 size={14} className="animate-spin" />}
                       Update password
@@ -222,11 +223,11 @@ export default function AccountSecurity() {
           <div className={`${iconWrap} bg-destructive/10`}>
             <Trash2 size={17} className="text-destructive" />
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-destructive">Delete account</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Permanently removes your sign-in and stops all access</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold leading-snug text-destructive">Delete account</p>
+            <p className={rowDesc}>Permanently removes your sign-in and stops all access</p>
           </div>
-          <ChevronRight size={16} className={`text-muted-foreground transition-transform ${delOpen ? "rotate-90" : ""}`} />
+          <ChevronRight size={16} className={`shrink-0 mt-0.5 text-muted-foreground transition-transform ${delOpen ? "rotate-90" : ""}`} />
         </Button>
         <AnimatePresence initial={false}>
           {delOpen && (
