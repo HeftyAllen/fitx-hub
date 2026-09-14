@@ -103,26 +103,26 @@ export default function AccountSecurity() {
               : <MailWarning size={17} className="text-muted-foreground" />}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">{verified ? "Email verified" : "Verify your email"}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className={rowTitle}>{verified ? "Email verified" : "Verify your email"}</p>
+            <p className={rowDesc}>
               {verified
                 ? "Your address is confirmed — password resets will reach you."
                 : verifySent
                   ? "Link sent. Open it, then reload this page."
                   : "Confirm your address so you can recover your account."}
             </p>
+            {!verified && (
+              <Button
+                onClick={handleVerify}
+                disabled={verifySending}
+                size="sm"
+                className="mt-3 w-full text-xs sm:w-auto"
+              >
+                {verifySending && <Loader2 size={13} className="animate-spin" />}
+                {verifySent ? "Resend link" : "Send link"}
+              </Button>
+            )}
           </div>
-          {!verified && (
-            <Button
-              onClick={handleVerify}
-              disabled={verifySending}
-              size="sm"
-              className="shrink-0 text-xs"
-            >
-              {verifySending && <Loader2 size={13} className="animate-spin" />}
-              {verifySent ? "Resend" : "Send link"}
-            </Button>
-          )}
         </div>
       )}
 
