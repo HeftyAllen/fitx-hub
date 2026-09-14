@@ -138,11 +138,11 @@ export default function AccountSecurity() {
             <div className={`${iconWrap} bg-secondary`}>
               <KeyRound size={17} className="text-muted-foreground" />
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium">Change password</p>
-              <p className="text-xs text-muted-foreground mt-0.5">You'll confirm your current one first</p>
+            <div className="flex-1 min-w-0">
+              <p className={rowTitle}>Change password</p>
+              <p className={rowDesc}>You'll confirm your current one first</p>
             </div>
-            <ChevronRight size={16} className={`text-muted-foreground transition-transform ${pwOpen ? "rotate-90" : ""}`} />
+            <ChevronRight size={16} className={`shrink-0 mt-0.5 text-muted-foreground transition-transform ${pwOpen ? "rotate-90" : ""}`} />
           </Button>
           <AnimatePresence initial={false}>
             {pwOpen && (
@@ -153,7 +153,7 @@ export default function AccountSecurity() {
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden"
               >
-                <div className="px-5 pb-5 space-y-3">
+                <div className="px-4 pb-5 space-y-3 sm:px-5">
                   <div className="relative">
                     <input
                       type={showPw ? "text" : "password"}
