@@ -238,7 +238,7 @@ export default function AccountSecurity() {
               exit={{ height: 0, opacity: 0 }}
               className="overflow-hidden"
             >
-              <div className="px-5 pb-5 space-y-3">
+              <div className="px-4 pb-5 space-y-3 sm:px-5">
                 <p className="text-xs text-muted-foreground">
                   This can't be undone. You'll be signed out immediately and won't be able to sign in again with this email.
                 </p>
@@ -261,11 +261,12 @@ export default function AccountSecurity() {
                   className={inputClass}
                   required
                 />
-                <div className="flex justify-end gap-2">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                   <Button
                     type="button"
                     variant="secondary"
                     onClick={() => { setDelOpen(false); setDelPw(""); setDelConfirm(""); }}
+                    className="w-full sm:w-auto"
                   >
                     Cancel
                   </Button>
@@ -273,6 +274,7 @@ export default function AccountSecurity() {
                     type="submit"
                     variant="destructive"
                     disabled={deleting}
+                    className="w-full sm:w-auto"
                   >
                     {deleting && <Loader2 size={14} className="animate-spin" />}
                     Delete forever
