@@ -19,6 +19,7 @@ import {
 import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
 import { unregisterPushBeforeSignOut } from "@/lib/pushNotifications";
+import { appRouteUrl } from "@/lib/app-paths";
 
 interface AuthContextType {
   user: User | null;
@@ -128,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await syncUserDoc(cred.user);
     // Kick off email verification so members can confirm their address.
     try {
-      await sendEmailVerification(cred.user, { url: `${window.location.origin}/dashboard` });
+      await sendEmailVerification(cred.user, { url: appRouteUrl("/dashboard") });
     } catch (e) {
       console.warn("[auth] verification email failed", e);
     }
@@ -171,7 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /** Sends the Firebase password-reset email; the link opens Firebase's hosted reset page. */
   const sendReset = async (email: string) => {
     await sendPasswordResetEmail(auth, email.trim(), {
-      url: `${window.location.origin}/auth`,
+      url: appRouteUrl("/auth"),
       handleCodeInApp: false,
     });
   };
@@ -179,7 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sendVerification = async () => {
     const current = auth.currentUser;
     if (!current) throw new Error("You need to be signed in.");
-    await sendEmailVerification(current, { url: `${window.location.origin}/dashboard` });
+    await sendEmailVerification(current, { url: appRouteUrl("/dashboard") });
   };
 
   /** Re-authenticates the member — required by Firebase before password change or deletion. */

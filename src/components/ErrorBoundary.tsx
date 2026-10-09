@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from "react";
 import { RefreshCw, Home, AlertTriangle } from "lucide-react";
+import { appRoute } from "@/lib/app-paths";
 
 interface Props { children: ReactNode }
 interface State { error: Error | null }
@@ -46,7 +47,7 @@ export default class ErrorBoundary extends Component<Props, State> {
               <RefreshCw size={15} /> Reload
             </button>
             <button
-              onClick={() => { window.location.href = "/"; }}
+              onClick={() => { window.location.href = appRoute(); }}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-secondary border border-border text-sm font-medium hover:bg-secondary/70 transition-colors"
             >
               <Home size={15} /> Home

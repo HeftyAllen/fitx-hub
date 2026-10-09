@@ -1,1 +1,1 @@
-importScripts('/offline-worker.js');
+importScripts(new URL('offline-worker.js', self.registration.scope).href);

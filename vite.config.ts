@@ -3,7 +3,10 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { createHash } from "node:crypto";
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ mode }) => {
+  const base = mode === "pages" ? "/fitx-hub/" : "/";
+  return {
+  base,
   server: {
     host: "::",
     port: 8080,
@@ -19,12 +22,13 @@ export default defineConfig(({ mode }) => ({
       apply: "build",
       generateBundle(_, bundle) {
         const assets = [
-          "/index.html",
-          "/manifest.webmanifest",
-          "/favicon.ico",
+          `${base}index.html`,
+          `${base}manifest.webmanifest`,
+          `${base}favicon.ico`,
+          `${base}placeholder.svg`,
           ...Object.keys(bundle)
             .filter((name) => name.startsWith("assets/"))
-            .map((name) => `/${name}`),
+            .map((name) => `${base}${name}`),
         ];
         const build = createHash("sha256")
           .update(JSON.stringify(assets))
@@ -35,6 +39,14 @@ export default defineConfig(({ mode }) => ({
           fileName: "offline-assets.js",
           source: `self.FITX_BUILD=${JSON.stringify(build)};self.FITX_ASSETS=${JSON.stringify(assets)};`,
         });
+        if (mode === "pages") {
+          this.emitFile({
+            type: "asset",
+            fileName: "404.html",
+            source: `<!doctype html><meta charset="utf-8"><title>Opening FitX Journey</title><script>var base=${JSON.stringify(base)};var route=location.pathname.startsWith(base)?location.pathname.slice(base.length):"";location.replace(base+"#/"+route+location.search+location.hash);</script><a href="${base}">Open FitX Journey</a>`,
+          });
+          this.emitFile({ type: "asset", fileName: ".nojekyll", source: "" });
+        }
       },
     },
   ],
@@ -51,4 +63,5 @@ export default defineConfig(({ mode }) => ({
       "@tanstack/query-core",
     ],
   },
-}));
+  };
+});

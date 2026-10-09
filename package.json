@@ -6,11 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:pages": "vite build --mode pages",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:pages": "npm run build:pages && node tests/pages-smoke.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test:rules": "firebase emulators:exec --project demo-fitx-workspaces --only firestore,storage \"node --test tests/firestore.rules.test.mjs\"",
     "test:e2e": "firebase emulators:exec --project demo-fitx-workspaces --only auth,firestore \"vite build --mode e2e && playwright test\""

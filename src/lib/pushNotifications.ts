@@ -2,6 +2,7 @@ import { deleteToken, getMessaging, getToken, isSupported, onMessage } from "fir
 import { auth } from "@/lib/firebase";
 import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_BRAND } from "@/lib/site-settings";
+import { APP_BASE, appAsset } from "@/lib/app-paths";
 
 const appId = import.meta.env.VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_APP_ID;
 const vapidKey = import.meta.env.VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_VAPID_KEY;
@@ -47,7 +48,7 @@ export async function enablePush(preferences: PushPreferences): Promise<PushStat
   if (permission !== "granted") return "denied";
 
   const query = new URLSearchParams(firebaseConfig).toString();
-  const registration = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?${query}`, { scope: "/" });
+  const registration = await navigator.serviceWorker.register(`${appAsset("firebase-messaging-sw.js")}?${query}`, { scope: APP_BASE });
   const token = await getToken(getMessaging(), { vapidKey, serviceWorkerRegistration: registration });
   if (!token) return "denied";
   await invoke("register", token, preferences);

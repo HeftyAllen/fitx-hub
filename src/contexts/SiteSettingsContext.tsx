@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { doc, onSnapshot } from "firebase/firestore";
 import { MotionConfig } from "framer-motion";
 import { db } from "@/lib/firebase";
+import { appAsset } from "@/lib/app-paths";
 import { useTheme } from "./ThemeContext";
 import { contrastForeground, DEFAULT_SETTINGS, hslToHex, normalizeSiteSettings, type SiteSettings } from "@/lib/site-settings";
 export type { SiteSettings } from "@/lib/site-settings";
@@ -55,7 +56,7 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
     updateMeta("theme-color", hslToHex(primary));
     let icon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
     if (!icon) { icon = document.createElement("link"); icon.rel = "icon"; document.head.append(icon); }
-    icon.href = settings.faviconUrl || (theme === "dark" && settings.darkLogoUrl) || settings.logoUrl || "/favicon.ico";
+    icon.href = settings.faviconUrl || (theme === "dark" && settings.darkLogoUrl) || settings.logoUrl || appAsset("favicon.ico");
     const publishManifest = () => navigator.serviceWorker?.controller?.postMessage({ type: "FITX_BRAND", manifest: {
       name: settings.businessName || DEFAULT_SETTINGS.businessName,
       short_name: settings.shortName || (settings.businessName || DEFAULT_SETTINGS.businessName).slice(0, 20),
@@ -66,7 +67,7 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
     const refreshManifest = (event: MessageEvent) => {
       if (event.data?.type !== "FITX_BRAND_UPDATED") return;
       const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-      if (manifest) manifest.href = `/manifest.webmanifest?brand=${encodeURIComponent(settings.businessName)}&color=${hslToHex(primary).slice(1)}`;
+      if (manifest) manifest.href = `${appAsset("manifest.webmanifest")}?brand=${encodeURIComponent(settings.businessName)}&color=${hslToHex(primary).slice(1)}`;
     };
     publishManifest();
     navigator.serviceWorker?.addEventListener("controllerchange", publishManifest);

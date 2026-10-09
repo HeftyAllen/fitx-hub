@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useBrand } from "@/contexts/SiteSettingsContext";
@@ -556,7 +556,7 @@ export default function Settings() {
 
                   <AccountSecurity />
 
-                  <a href="/support" className="flex w-full min-w-0 items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-primary/5 group sm:px-5">
+                  <Link to="/support" className="flex w-full min-w-0 items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-primary/5 group sm:px-5">
                     <div className="shrink-0 rounded-xl bg-primary/10 p-2.5 transition-colors group-hover:bg-primary/15">
                       <Shield size={17} className="text-primary" />
                     </div>
@@ -564,7 +564,7 @@ export default function Settings() {
                       <p className="text-sm font-semibold">Help &amp; Support</p>
                       <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">Open a ticket — we reply in-app</p>
                     </div>
-                  </a>
+                  </Link>
 
                   <button onClick={handleLogout} className="flex w-full min-w-0 items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-destructive/10 group sm:px-5">
                     <div className="shrink-0 rounded-xl bg-destructive/10 p-2.5 transition-colors group-hover:bg-destructive/15">
