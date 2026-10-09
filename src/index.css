@@ -258,3 +258,19 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* Role workspaces share layout primitives, with a distinct visual identity. */
+.workspace-shell { --workspace-hue: 221; }
+.workspace-shell[data-role="moderator"] { --workspace-hue: 199; }
+.workspace-shell[data-role="staff"] { --workspace-hue: 263; }
+.workspace-shell[data-role="coach"] { --workspace-hue: 160; }
+.workspace-shell[data-role="readonly"] { --workspace-hue: 36; }
+.workspace-accent { color: hsl(var(--workspace-hue, 221) 70% 45%); }
+.dark .workspace-accent { color: hsl(var(--workspace-hue, 221) 80% 68%); }
+.workspace-nav-active { color: hsl(var(--workspace-hue, 221) 70% 45%); background: hsl(var(--workspace-hue, 221) 70% 50% / .1); }
+.dark .workspace-nav-active { color: hsl(var(--workspace-hue, 221) 80% 72%); }
+.workspace-hero { background: linear-gradient(115deg, hsl(var(--card)), hsl(var(--workspace-hue, 221) 70% 50% / .1)); }
+.workspace-button { background: hsl(var(--workspace-hue, 221) 65% 38%); color: white; }
+.workspace-button:hover { background: hsl(var(--workspace-hue, 221) 65% 32%); }
+.workspace-card { border: 1px solid hsl(var(--border)); border-radius: 1.25rem; background: hsl(var(--card)); box-shadow: 0 3px 12px hsl(var(--foreground) / .025); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }

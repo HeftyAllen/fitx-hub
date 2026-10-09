@@ -38,6 +38,7 @@ export default function AdminReports() {
   const [activity, setActivity] = useState<Bucket[]>([]);
   const [topActions, setTopActions] = useState<{ action: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -45,15 +46,14 @@ export default function AdminReports() {
         const usersSnap = await getDocs(collection(db, "users"));
         const buckets: Record<string, number> = {};
         for (const u of usersSnap.docs) {
-          const profSnap = await getDocs(query(collection(db, "users", u.id, "profile")));
-          const data = profSnap.docs.find(p => p.id === "data")?.data() ?? {};
+          const data = u.data();
           const ts = data.createdAt?.toDate?.();
-          if (!ts) continue;
+          if (!ts || ts.getTime() < Date.now() - 30 * 86400000) continue;
           const day = ts.toISOString().slice(0, 10);
           buckets[day] = (buckets[day] ?? 0) + 1;
         }
         setSignups(Object.entries(buckets).sort().slice(-30).map(([day, count]) => ({ day, count })));
-      } catch { /* noop */ }
+      } catch { setError(true); }
 
       try {
         const snap = await getDocs(query(collection(db, "activityLogs"), orderBy("createdAt", "desc"), limit(1000)));
@@ -67,7 +67,7 @@ export default function AdminReports() {
         });
         setActivity(Object.entries(dayB).sort().map(([day, count]) => ({ day, count })));
         setTopActions(Object.entries(actB).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([action, count]) => ({ action, count })));
-      } catch { /* noop */ }
+      } catch { setError(true); }
 
       setLoading(false);
     })();
@@ -95,12 +95,13 @@ export default function AdminReports() {
     <div className="space-y-6">
       <header>
         <h1 className="text-3xl font-black tracking-tight md:text-4xl">Reports</h1>
-        <p className="text-sm text-muted-foreground">Trends and exportable analytics.</p>
+        <p className="text-sm text-muted-foreground">Signups in the last 30 days and activity from the latest 1,000 recorded events.</p>
       </header>
 
+      {error && <p role="alert" className="text-sm text-destructive">Some report data could not load. Figures below may be incomplete.</p>}
       {/* Headline stats — no chrome, just numbers */}
       <div className="grid grid-cols-2 gap-6 md:grid-cols-3">
-        <Stat label="Total events" value={totals.totalEvents} loading={loading} />
+        <Stat label="Loaded events" value={totals.totalEvents} loading={loading} />
         <Stat label="Active days" value={totals.activeDays} loading={loading} />
         <Stat
           label="Peak day"

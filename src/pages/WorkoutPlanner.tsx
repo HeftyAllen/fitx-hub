@@ -10,13 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, Timestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, Timestamp, onSnapshot } from "firebase/firestore";
 import { searchExercises, getExercisesByBodyPart, getExercisesByEquipment } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useChallenges } from "@/hooks/useChallenges";
 import { LibrarySection } from "@/pages/Library";
+import { loadWorkoutDraft, clearWorkoutDraft } from "@/lib/offline/drafts";
 
 interface ExerciseInPlan {
   id: string;
@@ -70,8 +71,19 @@ export default function WorkoutPlanner() {
   const [editingPlan, setEditingPlan] = useState<WorkoutPlan | null>(null);
   const [activeTab, setActiveTab] = useState<"plans" | "library" | "coach">("plans");
   const { challenges } = useChallenges();
+  const [draft, setDraft] = useState(() => user ? loadWorkoutDraft(user.uid) : null);
 
-  useEffect(() => { if (user) fetchPlans(); }, [user]);
+  useEffect(() => {
+    setPlans([]);
+    if (!user) { setLoading(false); return; }
+    setLoading(true);
+    return onSnapshot(collection(db, "users", user.uid, "workoutPlans"), { includeMetadataChanges: true }, snap => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as WorkoutPlan));
+      data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setPlans(data);
+      setLoading(false);
+    }, () => { setLoading(false); toast.error("Could not load workout plans. Reconnect and try again."); });
+  }, [user]);
 
   const fetchPlans = async () => {
     if (!user) return;
@@ -106,6 +118,7 @@ export default function WorkoutPlanner() {
     <AppLayout>
       <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-5">
         {/* Header */}
+        {draft && <div className="workspace-card p-4 flex flex-wrap gap-4 items-center justify-between"><div><p className="font-semibold text-sm">Continue {draft.plan.name}</p><p className="text-xs text-muted-foreground mt-1">Your sets and notes were saved on this device.</p></div><div className="flex gap-2"><Button variant="outline" onClick={() => { if (user) clearWorkoutDraft(user.uid); setDraft(null); }}>Discard draft</Button><Button onClick={() => navigate("/workout-session")}>Resume workout</Button></div></div>}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl md:text-3xl font-heading font-bold gradient-text">Workout Planner</h1>

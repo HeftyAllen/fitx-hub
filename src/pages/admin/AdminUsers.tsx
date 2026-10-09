@@ -33,6 +33,7 @@ import { logActivity } from "@/lib/activity";
 import { toast } from "sonner";
 import Papa from "papaparse";
 import { ROLE_META, type AdminRole } from "@/lib/permissions";
+import { useOnline } from "@/hooks/useOnline";
 import { useAdmin } from "@/hooks/useAdmin";
 
 interface UserRow {
@@ -47,7 +48,7 @@ interface UserRow {
   role?: string; // from admins/{uid}
 }
 
-const ROLES = ["admin", "moderator", "staff", "readonly"] as const;
+const ROLES = ["admin", "moderator", "staff", "coach", "readonly"] as const;
 type Role = typeof ROLES[number];
 
 type FilterKey = "all" | "staff" | "online" | "suspended";
@@ -126,7 +127,8 @@ function StatTile({
 }
 
 export default function AdminUsers() {
-  const { canManageSystem } = useAdmin();
+  const { role: currentRole, canManageSystem, canPerform } = useAdmin();
+  const online = useOnline();
   const [rows, setRows] = useState<UserRow[]>([]);
   const [admins, setAdmins] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
@@ -223,6 +225,7 @@ export default function AdminUsers() {
   };
 
   async function setRole(uid: string, role: string | null) {
+    if (!canManageSystem || !online) return;
     try {
       if (role === null || role === "none") {
         await deleteDoc(doc(db, "admins", uid));
@@ -237,7 +240,7 @@ export default function AdminUsers() {
   }
 
   async function sendInvite() {
-    if (!inviteFor) return;
+    if (!inviteFor || !canManageSystem || !online) return;
     try {
       const id = `inv_${Date.now()}`;
       await setDoc(doc(db, "users", inviteFor.uid, "adminInvites", id), {
@@ -255,6 +258,7 @@ export default function AdminUsers() {
   }
 
   async function suspend(uid: string, suspended: boolean) {
+    if (!canPerform("moderate-members") || !online) return;
     try {
       await setDoc(doc(db, "users", uid), { suspended }, { merge: true });
       await setDoc(doc(db, "users", uid, "profile", "data"), { suspended }, { merge: true });
@@ -264,6 +268,7 @@ export default function AdminUsers() {
   }
 
   async function removeUser(uid: string) {
+    if (!canManageSystem || !online) return;
     try {
       await deleteDoc(doc(db, "users", uid, "profile", "data"));
       await deleteDoc(doc(db, "users", uid));
@@ -296,7 +301,7 @@ export default function AdminUsers() {
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuLabel className="truncate text-xs">{r.email ?? r.uid}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => setProfileFor(r)}>
+        <DropdownMenuItem disabled={!canManageSystem} onClick={() => setProfileFor(r)}>
           <UserCog size={14} /> View profile
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => { navigator.clipboard?.writeText(r.memberCode ?? r.uid); toast.success("Member ID copied"); }}>
@@ -316,7 +321,7 @@ export default function AdminUsers() {
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => suspend(r.uid, !r.suspended)}>
+        <DropdownMenuItem disabled={!online || (currentRole === "moderator" && !!r.role)} onClick={() => suspend(r.uid, !r.suspended)}>
           {r.suspended ? <><ShieldCheck size={14} /> Reinstate</> : <><ShieldOff size={14} /> Suspend</>}
         </DropdownMenuItem>
         {canManageSystem && (
@@ -331,7 +336,7 @@ export default function AdminUsers() {
   const roleControl = (r: UserRow & { role?: string }) =>
     r.role ? (
       canManageSystem ? (
-        <Select value={r.role} onValueChange={(v) => setRole(r.uid, v === "none" ? null : v)}>
+        <Select disabled={!online} value={r.role} onValueChange={(v) => setRole(r.uid, v === "none" ? null : v)}>
           <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="none">Demote to member</SelectItem>
@@ -358,7 +363,7 @@ export default function AdminUsers() {
             </div>
             <h1 className="text-3xl font-black tracking-tight md:text-4xl">People</h1>
             <p className="mt-1 max-w-lg text-sm text-muted-foreground">
-              Every account in one place — search, promote, suspend and audit in real time.
+              {currentRole === "moderator" ? "Review member summaries and manage suspensions. Private fitness profiles and team roles are restricted." : "Manage members, team roles and invitations in one place."}
             </p>
           </div>
           <Button variant="outline" size="sm" className="gap-2" onClick={exportCsv}>
@@ -371,7 +376,7 @@ export default function AdminUsers() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile icon={UsersIcon} label="Total accounts" value={stats.total} tone="bg-primary/30" loading={loading} />
         <StatTile icon={Crown} label="Team members" value={stats.admins} tone="bg-accent/30" loading={loading} />
-        <StatTile icon={Radio} label="Active now" value={stats.online} tone="bg-success/30" loading={loading} />
+        <StatTile icon={Radio} label="Recent sign-ins" value={stats.online} tone="bg-success/30" loading={loading} />
         <StatTile icon={Ban} label="Suspended" value={stats.suspended} tone="bg-destructive/30" loading={loading} />
       </div>
 

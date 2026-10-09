@@ -1,197 +1,266 @@
 import { useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, Users, FileText, Activity, Megaphone,
-  LifeBuoy, Settings as SettingsIcon, BarChart3, Home, ShieldCheck, LogOut,
-  Menu, X, Eye,
+  Link,
+  NavLink,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import {
+  LayoutDashboard,
+  Users,
+  FileText,
+  Activity,
+  Megaphone,
+  LifeBuoy,
+  Settings,
+  BarChart3,
+  ArrowUpRight,
+  ShieldCheck,
+  LogOut,
+  Menu,
+  Dumbbell,
+  Sun,
+  Moon,
+  ChevronRight,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBrand } from "@/contexts/SiteSettingsContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "sonner";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { ROLE_META, SECTION_PATH, type AdminSection } from "@/lib/permissions";
+import { toast } from "sonner";
+import SyncStatus from "@/components/SyncStatus";
 import logoFallback from "@/assets/logo.png";
 
-const SECTION_META: Record<AdminSection, { label: string; icon: any; end?: boolean }> = {
-  overview:      { label: "Overview",      icon: LayoutDashboard, end: true },
-  users:         { label: "Users",         icon: Users },
-  content:       { label: "Content",       icon: FileText },
-  activity:      { label: "Activity",      icon: Activity },
-  announcements: { label: "Announcements", icon: Megaphone },
-  support:       { label: "Support",       icon: LifeBuoy },
-  reports:       { label: "Reports",       icon: BarChart3 },
-  settings:      { label: "Settings",      icon: SettingsIcon },
+export const SECTION_META: Record<
+  AdminSection,
+  { label: string; icon: LucideIcon; desc: string }
+> = {
+  overview: {
+    label: "My workspace",
+    icon: LayoutDashboard,
+    desc: "Your priorities, in one place",
+  },
+  users: {
+    label: "Members & team",
+    icon: Users,
+    desc: "Manage membership and access",
+  },
+  coaching: {
+    label: "My members",
+    icon: Dumbbell,
+    desc: "Assignments and coaching check-ins",
+  },
+  content: {
+    label: "Plan studio",
+    icon: FileText,
+    desc: "Build and publish training and meal plans",
+  },
+  activity: {
+    label: "Activity trail",
+    icon: Activity,
+    desc: "Review recorded platform activity",
+  },
+  announcements: {
+    label: "Announcements",
+    icon: Megaphone,
+    desc: "Keep the community informed",
+  },
+  support: {
+    label: "Support inbox",
+    icon: LifeBuoy,
+    desc: "Reply to tickets and follow up",
+  },
+  reports: {
+    label: "Reports",
+    icon: BarChart3,
+    desc: "Explore real recorded data",
+  },
+  settings: {
+    label: "Platform settings",
+    icon: Settings,
+    desc: "Branding and platform controls",
+  },
 };
 
 export default function AdminLayout() {
-  const { role, sections, canWrite } = useAdmin();
+  const { role, sections } = useAdmin();
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const brand = useBrand(logoFallback);
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  const roleMeta = role ? ROLE_META[role] : null;
-
-  const handleLogout = async () => {
+  const meta = ROLE_META[role ?? "readonly"];
+  const active =
+    sections.find((s) => SECTION_PATH[s] === pathname) ?? "overview";
+  const signOut = async () => {
     try {
       await logout();
-      toast.success("Signed out");
       navigate("/", { replace: true });
-    } catch (e: any) {
-      toast.error(e.message ?? "Sign out failed");
+    } catch {
+      toast.error("Could not sign out. Try again.");
     }
   };
-
-  const GROUPS: { label?: string; items: AdminSection[] }[] = [
-    { items: ["overview"] },
-    { label: "Manage", items: ["users", "content", "activity"] },
-    { label: "Engage", items: ["announcements", "support"] },
-    { label: "Insights", items: ["reports"] },
-    { items: ["settings"] },
-  ];
-
-  const nav = (
-    <nav className="flex flex-col gap-4 flex-1">
-      {GROUPS.map((g, gi) => {
-        const visible = g.items.filter((s) => sections.includes(s));
-        if (!visible.length) return null;
-        return (
-          <div key={gi} className={gi === GROUPS.length - 1 ? "mt-auto pt-3 border-t border-border/60" : ""}>
-            {g.label && (
-              <p className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground/70">
-                {g.label}
-              </p>
-            )}
-            <div className="flex flex-col gap-0.5">
-              {visible.map((s) => {
-                const { label, icon: Icon, end } = SECTION_META[s];
-                return (
-                  <NavLink
-                    key={s}
-                    to={SECTION_PATH[s]}
-                    end={end}
-                    onClick={() => setMobileOpen(false)}
-                    className={({ isActive }) =>
-                      `group relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        isActive
-                          ? "bg-primary/12 text-primary"
-                          : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        {isActive && (
-                          <motion.span
-                            layoutId="admin-active"
-                            className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-primary"
-                          />
-                        )}
-                        <Icon size={15} />
-                        {label}
-                      </>
-                    )}
-                  </NavLink>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </nav>
-  );
-
-
-  const sidebarInner = (
+  const sidebar = (
     <>
-      <Link to="/" className="flex items-center gap-2 mb-4">
-        {brand.logo
-          ? <img src={brand.logo} alt={brand.name} className="h-7 w-auto max-w-[130px] object-contain" />
-          : <span className="font-black tracking-tight">{brand.name}</span>}
-      </Link>
-
-      <div className="mb-4 flex items-center gap-2 px-1">
-        <ShieldCheck size={15} className="text-primary shrink-0" />
-        <span className="text-xs font-semibold truncate">{roleMeta?.label ?? "Console"}</span>
-        {!canWrite && (
-          <Badge variant="outline" className="ml-auto text-[9px] gap-1 px-1.5">
-            <Eye size={9} /> View only
-          </Badge>
-        )}
-      </div>
-
-      {nav}
-
-      <div className="mt-4 pt-3 border-t border-border space-y-2">
-        <Link to="/dashboard" className="flex items-center gap-2 px-3 text-xs text-muted-foreground hover:text-foreground">
-          <Home size={13} /> Back to app
-        </Link>
-        <div className="px-3 text-xs text-muted-foreground truncate" title={user?.email ?? ""}>
-          {user?.email}
+      <Link to="/admin" className="flex items-center gap-3 px-2 py-3 mb-7">
+        <img
+          src={brand.logo || logoFallback}
+          alt=""
+          className="h-10 w-10 rounded-xl object-contain"
+        />
+        <div>
+          <p className="font-extrabold tracking-tight">{brand.name}</p>
+          <p className="text-[10px] uppercase tracking-[.2em] text-muted-foreground">
+            Team workspace
+          </p>
         </div>
-        <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={handleLogout}>
-          <LogOut size={14} /> Sign out
-        </Button>
+      </Link>
+      <div className="rounded-2xl border border-border bg-secondary/50 p-4 mb-6">
+        <ShieldCheck size={18} className="workspace-accent mb-3" />
+        <p className="text-sm font-bold">{meta.workspace}</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          {meta.label}
+          {role === "readonly" ? " · View only" : ""}
+        </p>
+      </div>
+      <p className="text-[10px] font-bold uppercase tracking-[.18em] text-muted-foreground px-3 mb-3">
+        Workspace
+      </p>
+      <nav aria-label={`${meta.label} navigation`} className="space-y-1 flex-1">
+        {sections.map((s) => {
+          const { icon: Icon, label } = SECTION_META[s];
+          return (
+            <NavLink
+              key={s}
+              to={SECTION_PATH[s]}
+              end={s === "overview"}
+              onClick={() => setMobileOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors ${isActive ? "workspace-nav-active font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary"}`
+              }
+            >
+              <Icon size={18} />
+              <span>
+                {s === "users" && role === "moderator"
+                  ? "Member safety"
+                  : s === "coaching" && role === "admin"
+                    ? "Coach assignments"
+                    : label}
+              </span>
+            </NavLink>
+          );
+        })}
+      </nav>
+      <div className="border-t border-border pt-5 mt-8 space-y-4">
+        <Link
+          to="/workout-planner"
+          className="flex items-center justify-between text-xs text-muted-foreground px-3 hover:text-foreground"
+        >
+          Open member app <ArrowUpRight size={14} />
+        </Link>
+        <div className="flex items-center gap-3 px-3">
+          <span className="h-9 w-9 rounded-full bg-secondary grid place-items-center font-bold workspace-accent">
+            {user?.email?.[0]?.toUpperCase() || "F"}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold">
+              {user?.displayName || user?.email?.split("@")[0]}
+            </p>
+            <p className="text-[10px] text-muted-foreground">{meta.label}</p>
+          </div>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="Sign out"
+            onClick={signOut}
+          >
+            <LogOut size={15} />
+          </Button>
+        </div>
       </div>
     </>
   );
-
-
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Mobile top bar */}
-      <div className="lg:hidden sticky top-0 z-40 flex items-center justify-between h-14 px-4 border-b border-border bg-background/85 backdrop-blur-xl">
-        <div className="flex items-center gap-2 min-w-0">
-          {brand.logo && <img src={brand.logo} alt="" className="h-6 w-auto object-contain" />}
-          <span className="text-sm font-bold truncate">{roleMeta?.label ?? "Console"}</span>
-        </div>
-        <Button size="icon" variant="ghost" onClick={() => setMobileOpen(true)} aria-label="Open menu">
-          <Menu size={18} />
-        </Button>
-      </div>
-
-      <AnimatePresence>
-        {mobileOpen && (
-          <motion.div
-            className="lg:hidden fixed inset-0 z-50 bg-background/70 backdrop-blur-sm"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => setMobileOpen(false)}
-          >
-            <motion.aside
-              className="absolute left-0 top-0 h-full w-[270px] bg-card border-r border-border p-4 flex flex-col"
-              initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
-              transition={{ type: "spring", damping: 26, stiffness: 260 }}
-              onClick={(e) => e.stopPropagation()}
+    <div
+      className="workspace-shell min-h-screen bg-background"
+      data-role={role}
+    >
+      <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 border-r border-border bg-card p-5 flex-col z-40 overflow-y-auto">
+        {sidebar}
+      </aside>
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent
+          side="left"
+          className="workspace-shell flex flex-col w-72 px-5"
+          data-role={role}
+        >
+          <SheetTitle className="sr-only">
+            {meta.workspace} navigation
+          </SheetTitle>
+          <SheetDescription className="sr-only">
+            Navigate to the tools available to your role.
+          </SheetDescription>
+          {sidebar}
+        </SheetContent>
+      </Sheet>
+      <div className="lg:pl-64">
+        <header className="h-20 border-b border-border flex items-center justify-between gap-3 px-4 md:px-8 bg-card/70 backdrop-blur-xl sticky top-0 z-30">
+          <div className="flex items-center gap-3 min-w-0">
+            <Button
+              className="lg:hidden shrink-0"
+              size="icon"
+              variant="ghost"
+              aria-label="Open workspace menu"
+              onClick={() => setMobileOpen(true)}
             >
-              <Button size="icon" variant="ghost" className="absolute right-2 top-2"
-                onClick={() => setMobileOpen(false)} aria-label="Close menu">
-                <X size={16} />
-              </Button>
-              {sidebarInner}
-            </motion.aside>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[264px_1fr] min-h-screen">
-        <aside className="hidden lg:flex border-r border-border bg-card/30 backdrop-blur-xl p-4 sticky top-0 h-screen flex-col">
-          {sidebarInner}
-        </aside>
-
-        <main className="p-4 md:p-8 max-w-[1400px] w-full">
-          <motion.div
-            key={pathname}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.18 }}
-          >
-            <Outlet />
-          </motion.div>
+              <Menu size={20} />
+            </Button>
+            <span className="text-sm text-muted-foreground hidden sm:block">
+              {meta.workspace}
+            </span>
+            <ChevronRight
+              size={14}
+              className="text-muted-foreground hidden sm:block"
+            />
+            <span className="text-sm font-semibold truncate">
+              {SECTION_META[active].label}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <SyncStatus compact />
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+              onClick={toggleTheme}
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </Button>
+          </div>
+        </header>
+        <main
+          id="main-content"
+          className="max-w-[1440px] mx-auto p-4 md:p-8 lg:p-10"
+        >
+          <Outlet />
         </main>
+        <footer className="flex flex-wrap gap-3 justify-between px-8 py-6 text-[11px] text-muted-foreground">
+          <span>
+            {brand.name} · {meta.label} workspace
+          </span>
+          <span>Access is based on your assigned role</span>
+        </footer>
       </div>
     </div>
   );

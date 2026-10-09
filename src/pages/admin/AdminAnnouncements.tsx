@@ -15,6 +15,7 @@ import {
   Pin, Sparkles, Copy, Users, Lock,
 } from "lucide-react";
 import { logActivity } from "@/lib/activity";
+import { useOnline } from "@/hooks/useOnline";
 import { useAdmin } from "@/hooks/useAdmin";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -77,7 +78,9 @@ const AUDIENCE_LABEL: Record<Audience, string> = {
 };
 
 export default function AdminAnnouncements() {
-  const { canWrite } = useAdmin();
+  const { canPerform } = useAdmin();
+  const online = useOnline();
+  const canWrite = online && canPerform("publish-announcements");
   const [list, setList] = useState<Announcement[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -151,6 +154,11 @@ export default function AdminAnnouncements() {
     () => [...list].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned)),
     [list],
   );
+
+  if (!canPerform("publish-announcements")) return <div className="space-y-6">
+    <header><p className="text-[10px] uppercase tracking-widest workspace-accent mb-2 font-bold">Team updates</p><h1 className="text-3xl">Stay in the loop.</h1><p className="text-sm text-muted-foreground mt-3">Read announcements from your platform administrators.</p></header>
+    {sorted.length === 0 ? <Card className="p-10 text-center text-sm text-muted-foreground">No announcements published yet.</Card> : sorted.map(a => <article key={a.id} className="workspace-card p-6"><div className="flex gap-2 items-center mb-3">{a.pinned && <Badge variant="outline">Pinned</Badge>}<Badge variant="secondary">{a.severity}</Badge><span className="text-[11px] text-muted-foreground">{a.createdAt?.toDate?.()?.toLocaleDateString?.() || "Published"}</span></div><h2 className="text-lg">{a.title}</h2><p className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap">{a.body}</p></article>)}
+  </div>;
 
   return (
     <div className="space-y-6">

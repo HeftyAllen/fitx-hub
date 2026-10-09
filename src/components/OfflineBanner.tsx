@@ -17,7 +17,7 @@ export default function OfflineBanner() {
           aria-live="polite"
         >
           <WifiOff size={14} />
-          You're offline — viewing cached data. Changes sync when you reconnect.
+          You're offline. Saved workouts remain available; team actions and searches need a connection.
         </motion.div>
       )}
     </AnimatePresence>

@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { logActivity } from "@/lib/activity";
 import { toast } from "sonner";
 import { getDailyUsage } from "@/lib/spoonacular";
+import { useOnline } from "@/hooks/useOnline";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useSiteSettings } from "@/contexts/SiteSettingsContext";
 import {
@@ -93,7 +94,8 @@ export default function AdminSettings() {
     return () => { u1(); u2(); };
   }, []);
 
-  const readOnly = !canManageSystem;
+  const online = useOnline();
+  const readOnly = !canManageSystem || !online;
 
   async function patch(p: Partial<Branding>, silent = false) {
     if (readOnly) { toast.error("Your role can't change system settings"); return; }
