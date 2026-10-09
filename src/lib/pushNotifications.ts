@@ -1,6 +1,7 @@
 import { deleteToken, getMessaging, getToken, isSupported, onMessage } from "firebase/messaging";
 import { auth } from "@/lib/firebase";
 import { supabase } from "@/integrations/supabase/client";
+import { DEFAULT_BRAND } from "@/lib/site-settings";
 
 const appId = import.meta.env.VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_APP_ID;
 const vapidKey = import.meta.env.VITE_LOVABLE_CONNECTOR_FIREBASE_MESSAGING_VAPID_KEY;
@@ -68,15 +69,16 @@ export async function syncPushPreferences(preferences: PushPreferences) {
   if (token) await invoke("preferences", token, preferences);
 }
 
-export function listenForForegroundPush(handler: (title: string, body: string) => void) {
+export function listenForForegroundPush(handler: (title: string, body: string) => void, fallbackTitle = DEFAULT_BRAND) {
   if (!configured()) return () => undefined;
   let unsubscribe = () => undefined;
+  let disposed = false;
   isSupported().then((supported) => {
-    if (supported) unsubscribe = onMessage(getMessaging(), (payload) => {
-      handler(payload.notification?.title ?? "FitX Journey", payload.notification?.body ?? "You have a new notification");
+    if (supported && !disposed) unsubscribe = onMessage(getMessaging(), (payload) => {
+      handler(payload.notification?.title ?? fallbackTitle, payload.notification?.body ?? "You have a new notification");
     });
   });
-  return () => unsubscribe();
+  return () => { disposed = true; unsubscribe(); };
 }
 
 export async function unregisterPushBeforeSignOut() {

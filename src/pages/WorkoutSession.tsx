@@ -344,7 +344,7 @@ export default function WorkoutSession() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col relative">
+    <div className="member-shell min-h-screen bg-background text-foreground flex flex-col relative">
       {/* Ambient glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-[0.04]" style={{ background: "radial-gradient(circle, #2563EB, transparent 70%)" }} />
@@ -352,27 +352,28 @@ export default function WorkoutSession() {
       </div>
 
       {/* Top bar */}
-      <div className="relative z-10 gradient-bg px-4 py-3">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button size="icon" variant="ghost" className="text-primary-foreground/80 hover:text-primary-foreground h-8 w-8" onClick={() => navigate("/workout-planner")}>
+      <div className="relative z-10 bg-card border-b border-border px-4 py-4">
+        <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Button aria-label="Save draft and leave workout" size="icon" variant="ghost" className="text-muted-foreground hover:text-foreground h-9 w-9 border border-border rounded-xl" onClick={() => navigate("/workout-planner")}>
               <X size={18} />
             </Button>
-            <div>
-              <h1 className="text-sm font-bold text-primary-foreground">{plan?.name || "Workout"}</h1>
-              <p className="text-xs text-primary-foreground/70">{currentIdx + 1}/{exercises.length} exercises</p>
+            <div className="min-w-0">
+              <p className="member-eyebrow !mb-1">Your training session</p>
+              <h1 className="text-sm font-semibold truncate max-w-[240px] sm:max-w-none">{plan?.name || "Workout"}</h1>
+              <p className="text-[10px] text-muted-foreground mt-1">Exercise {currentIdx + 1} of {exercises.length} · Draft saved on this device</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <p className="text-lg font-mono font-bold text-primary-foreground">{formatTime(elapsedSeconds)}</p>
-            <Button size="icon" variant="ghost" className="text-primary-foreground/80 h-8 w-8" onClick={() => setIsPaused(!isPaused)}>
+          <div className="flex items-center gap-2 ml-auto">
+            <p className="text-lg font-mono font-semibold text-primary mr-2">{formatTime(elapsedSeconds)}</p>
+            <Button aria-label={isPaused ? "Resume session timer" : "Pause session timer"} size="icon" variant="ghost" className="text-muted-foreground h-8 w-8" onClick={() => setIsPaused(!isPaused)}>
               {isPaused ? <Play size={16} /> : <Pause size={16} />}
             </Button>
-            <Button size="icon" variant="ghost" className="text-primary-foreground/80 h-8 w-8" onClick={() => { setElapsedSeconds(0); toast.info("Timer reset"); }}>
+            <Button aria-label="Reset session timer" size="icon" variant="ghost" className="text-muted-foreground h-8 w-8" onClick={() => { setElapsedSeconds(0); toast.info("Timer reset"); }}>
               <RotateCcw size={14} />
             </Button>
-            <Button size="icon" variant="ghost"
-              className={`h-8 w-8 ${voiceEnabled ? "text-primary-foreground" : "text-primary-foreground/40"}`}
+            <Button aria-label={voiceEnabled ? "Turn voice coach off" : "Turn voice coach on"} aria-pressed={voiceEnabled} size="icon" variant="ghost"
+              className={`h-8 w-8 ${voiceEnabled ? "text-primary" : "text-muted-foreground"}`}
               onClick={() => { setVoiceEnabled(!voiceEnabled); toast.info(voiceEnabled ? "Voice coach off" : "Voice coach on 🎙️"); }}>
               {voiceEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
             </Button>
@@ -764,7 +765,7 @@ function CompletionScreen({
   if (totalVolume > 0) stats.splice(1, 0, { icon: Dumbbell, label: "Volume", value: `${totalVolume.toLocaleString()} kg`, color: "text-accent" });
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="member-shell min-h-screen bg-background text-foreground flex items-center justify-center p-4 relative overflow-hidden">
       {confettiPieces.map(p => (
         <motion.div key={p.id}
           initial={{ y: -20, opacity: 1, rotate: 0 }}
@@ -786,7 +787,7 @@ function CompletionScreen({
           <Trophy size={40} className="text-primary-foreground" />
         </motion.div>
         <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
-          className="text-2xl font-heading font-bold mb-1">Workout Complete! 🎉</motion.h1>
+          className="text-2xl font-heading font-bold mb-1">Another session in the books.</motion.h1>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
           className="text-muted-foreground text-sm mb-6">{planName}</motion.p>
         <div className="flex justify-center mb-5"><SyncStatus /></div>
@@ -817,7 +818,7 @@ function CompletionScreen({
 
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.5 }}>
           <Button onClick={onDone} className="w-full gradient-bg text-primary-foreground rounded-xl text-base py-3 glow-pulse">
-            Done 🏠
+            Back to your training
           </Button>
         </motion.div>
       </motion.div>

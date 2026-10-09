@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { initializeTestEnvironment } from "@firebase/rules-unit-testing";
-import { doc, setDoc, Timestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, Timestamp } from "firebase/firestore";
 import type { RulesTestEnvironment } from "@firebase/rules-unit-testing";
 let env: RulesTestEnvironment;
 const identities: Record<string, string> = {};
@@ -91,6 +91,11 @@ test.beforeAll(async () => {
   });
 });
 test.afterAll(async () => env?.cleanup());
+test.beforeEach(async () => env.withSecurityRulesDisabled(async ctx => {
+  await setDoc(doc(ctx.firestore(), "siteSettings", "branding"), {});
+  await setDoc(doc(ctx.firestore(), "siteSettings", "access"), { features: {}, membership: {} });
+  await setDoc(doc(ctx.firestore(), "memberAccess", identities.member), { plan: "free", features: [], expiresAt: null });
+}));
 async function login(page: Page, role: string) {
   await page.goto("/auth");
   await page
@@ -238,4 +243,167 @@ test("member recovers a workout offline and syncs completion once on reconnect",
   await expect(page.getByText("Workout queue clear", { exact: true })).toBeVisible();
   await page.reload();
   await expect.poll(workoutLogCount, { timeout: 20000 }).toBe(1);
+});
+
+test("member features keep working in desktop, mobile and light mode", async ({ page }) => {
+  test.setTimeout(120000);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.route("**/exercisedb.p.rapidapi.com/**", route => route.fulfill({ json: [] }));
+  await page.route("**/api.spoonacular.com/**", route => route.fulfill({ json: { results: [], totalResults: 0 } }));
+  await login(page, "member");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Alex");
+  await expect(page.getByRole("heading", { name: "Smart suggestions", exact: true })).toBeVisible();
+  await expect(page.locator(".member-content-stagger > *").last()).toHaveCSS("opacity", "1");
+  await expect(page.locator(".member-data-tile").first()).not.toContainText("—");
+  await page.screenshot({ path: "test-results/member-today-desktop.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: "test-results/member-today-mobile.png", fullPage: true });
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  for (const path of ["/workout-planner", "/nutrition", "/progress", "/records", "/rewards", "/calendar", "/library", "/recipes", "/meal-planner", "/grocery-list", "/exercise-library", "/settings", "/support"]) {
+    await page.goto(path);
+    await expect(page.locator(".member-shell").first()).toBeVisible();
+    await expect(page.locator("main h1").first()).toBeVisible();
+    await expect(page.getByText("We couldn't verify access.")).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${path} should fit the phone`).toBe(true);
+  }
+  await page.getByRole("button", { name: "More member features" }).click();
+  await expect(page.getByRole("dialog").getByRole("link", { name: "Grocery list" })).toBeVisible();
+  await page.getByRole("dialog").getByRole("link", { name: "Grocery list" }).click();
+  await expect(page).toHaveURL(/\/grocery-list$/);
+  expect(errors).toEqual([]);
+});
+
+test("profile, grocery and nutrition writes survive the UI upgrade", async ({ page }) => {
+  await login(page, "member");
+  await page.goto("/settings");
+  await page.getByPlaceholder("Your name", { exact: true }).fill("Alex Active");
+  await page.getByRole("button", { name: "Save Changes", exact: true }).first().click();
+  await expect.poll(async () => {
+    let name;
+    await env.withSecurityRulesDisabled(async ctx => { name = (await getDoc(doc(ctx.firestore(), "users", identities.member, "profile", "data"))).data()?.name; });
+    return name;
+  }).toBe("Alex Active");
+  await page.goto("/grocery-list");
+  await page.getByPlaceholder("Item (e.g. Bananas)").fill("Regression bananas");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText("Regression bananas", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Regression bananas", { exact: true })).toBeVisible();
+  await page.goto("/nutrition");
+  await page.getByRole("button", { name: "Add a glass of water" }).click();
+  await expect(page.getByText("1 / 8 glasses", { exact: true })).toBeVisible();
+  await expect(page.getByText("Diary saved", { exact: true })).toBeVisible();
+  await expect.poll(async () => {
+    let water;
+    await env.withSecurityRulesDisabled(async ctx => { water = (await getDoc(doc(ctx.firestore(), "users", identities.member, "foodLogs", new Date().toISOString().slice(0, 10)))).data()?.water; });
+    return water;
+  }).toBe(1);
+  await page.goto("/dashboard");
+  await expect(page.getByText("1 glasses of water logged", { exact: true })).toBeVisible();
+});
+
+test("publishing a brand syncs member, team, sign-in and offline app metadata", async ({ page, browser }) => {
+  test.setTimeout(90000);
+  const memberContext = await browser.newContext();
+  const member = await memberContext.newPage();
+  await login(member, "member");
+  await login(page, "admin");
+  await page.goto("/admin/settings");
+  await page.getByLabel("App name", { exact: true }).fill("Pulse Studio");
+  await page.getByLabel("Short name / installed app").fill("Pulse");
+  await page.getByLabel("Tagline", { exact: true }).fill("Built for your rhythm.");
+  await page.getByLabel("Main logo", { exact: true }).fill("/placeholder.svg");
+  await page.getByLabel("Primary colour", { exact: true }).fill("262 65% 53%");
+  await page.getByLabel("Today description").fill("Keep your own rhythm.");
+  await page.getByLabel("Landing headline").fill("Find your rhythm.");
+  await page.getByRole("tab", { name: "Feature access", exact: true }).click();
+  await page.getByRole("tab", { name: "Brand studio", exact: true }).click();
+  await expect(page.getByLabel("App name", { exact: true })).toHaveValue("Pulse Studio");
+  await page.getByRole("button", { name: "Publish brand", exact: true }).click();
+  await expect(page.getByText("Brand published across the app", { exact: true })).toBeVisible();
+  await expect(member.getByRole("link", { name: "Pulse Studio home" })).toBeVisible();
+  await expect(member.getByText("Keep your own rhythm.", { exact: true })).toBeVisible();
+  await expect.poll(() => member.locator(".member-shell").first().evaluate(element => getComputedStyle(element).getPropertyValue("--primary").trim())).toBe("262 65% 53%");
+  await expect(member).toHaveTitle("Pulse Studio");
+  await page.screenshot({ path: "test-results/brand-studio.png", fullPage: true });
+  await member.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await member.reload();
+  await expect.poll(() => member.evaluate(async () => (await (await fetch("/manifest.webmanifest")).json()).name)).toBe("Pulse Studio");
+  await memberContext.setOffline(true);
+  await member.reload();
+  await expect(member.getByRole("link", { name: "Pulse Studio home" })).toBeVisible();
+  await expect(member.getByText("Keep your own rhythm.", { exact: true })).toBeVisible();
+  await memberContext.setOffline(false);
+  const guest = await browser.newContext();
+  const landing = await guest.newPage();
+  await landing.goto("/");
+  await expect(landing.getByRole("heading", { name: /Find your rhythm/ })).toBeVisible();
+  await landing.goto("/auth");
+  await expect(landing.getByText("Pulse Studio", { exact: true })).toBeVisible();
+  await guest.close();
+  await memberContext.close();
+});
+
+test("admins disable Nutrition, restore it behind a paywall and grant or revoke membership live", async ({ page, browser }) => {
+  test.setTimeout(90000);
+  const context = await browser.newContext();
+  const member = await context.newPage();
+  await login(member, "member");
+  await member.goto("/nutrition");
+  await login(page, "admin");
+  await page.goto("/admin/settings");
+  await page.getByRole("tab", { name: "Feature access", exact: true }).click();
+  await page.locator("#mode-nutrition").selectOption("disabled");
+  await page.getByRole("button", { name: "Publish feature access" }).click();
+  await expect(member.getByRole("heading", { name: "Nutrition is currently unavailable." })).toBeVisible();
+  await expect(member.getByRole("navigation", { name: "Member navigation", exact: true }).getByRole("link", { name: "Nutrition", exact: true })).toHaveCount(0);
+  for (const path of ["/recipes", "/meal-planner", "/grocery-list", "/NUTRITION/", "/n%75trition", "/Recipes/"]) {
+    await member.goto(path);
+    await expect(member.getByRole("heading", { name: "Nutrition is currently unavailable." })).toBeVisible();
+  }
+  await member.goto("/nutrition");
+  await page.locator("#mode-nutrition").selectOption("premium");
+  await page.getByRole("button", { name: "Publish feature access" }).click();
+  await expect(member.getByRole("link", { name: "View membership", exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/feature-access.png", fullPage: true });
+  await member.screenshot({ path: "test-results/member-paywall.png", fullPage: true });
+  await page.getByRole("tab", { name: "Memberships", exact: true }).click();
+  await page.getByRole("button", { name: /member@fitx.test/ }).click();
+  await page.getByLabel("Membership plan", { exact: true }).selectOption("plus");
+  await page.getByRole("button", { name: "Save membership", exact: true }).click();
+  await expect(member.getByRole("heading", { name: "Fuel your everyday." })).toBeVisible();
+  await page.getByRole("button", { name: "Revoke premium access", exact: true }).click();
+  await expect(member.getByRole("link", { name: "View membership", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Feature access", exact: true }).click();
+  await page.locator("#mode-nutrition").selectOption("free");
+  await page.getByRole("button", { name: "Publish feature access" }).click();
+  await expect(member.getByRole("heading", { name: "Fuel your everyday." })).toBeVisible();
+  await context.close();
+});
+
+test("Nutrition child paywalls cannot be bypassed through embedded tabs", async ({ page }) => {
+  await env.withSecurityRulesDisabled(async ctx => {
+    await setDoc(doc(ctx.firestore(), "siteSettings", "access"), { features: { recipes: { mode: "premium", requiredPlan: "pro" }, mealPlanner: { mode: "disabled" }, barcode: { mode: "premium" } } });
+    await setDoc(doc(ctx.firestore(), "users", identities.member, "mealPlanEntries", "hidden-meal-fixture"), { date: new Date().toISOString().slice(0, 10), meals: [{ id: 123, title: "Hidden meal-plan fixture" }] });
+  });
+  await login(page, "member");
+  await page.goto("/nutrition");
+  await page.getByRole("button", { name: "Recipes · Premium", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Recipes access", exact: true })).toBeVisible();
+  await expect(page.getByPlaceholder("Search recipes, ingredients, cuisine...")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Meal Plan", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Barcode Scan · Premium", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Barcode scanner access", exact: true })).toBeVisible();
+  await expect(page.getByPlaceholder("Type UPC/EAN (e.g. 028400064057)")).toHaveCount(0);
+  await page.goto("/library");
+  await expect(page.getByRole("button", { name: "Meal Plans", exact: true })).toHaveCount(0);
+  await page.goto("/calendar");
+  await expect(page.getByRole("heading", { name: "Your fitness calendar", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: String(new Date().getDate()), exact: true }).click();
+  await expect(page.getByText("Meal Plan", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Hidden meal-plan fixture", { exact: true })).toHaveCount(0);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/dashboard");
+  expect(await page.locator(".member-today-hero").evaluate(element => getComputedStyle(element, "::after").animationName)).toBe("none");
 });

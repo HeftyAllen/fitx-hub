@@ -8,7 +8,7 @@ export default defineConfig({
     viewport: { width: 1440, height: 1000 },
     trace: "retain-on-failure",
     launchOptions: process.env.FITX_BROWSER_EXECUTABLE
-      ? { executablePath: process.env.FITX_BROWSER_EXECUTABLE }
+      ? { executablePath: process.env.FITX_BROWSER_EXECUTABLE, args: process.env.FITX_BROWSER_ARGS ? JSON.parse(process.env.FITX_BROWSER_ARGS) : undefined }
       : undefined,
   },
   webServer: {

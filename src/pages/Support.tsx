@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import {
   addDoc, collection, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where,
 } from "firebase/firestore";
@@ -109,20 +110,8 @@ export default function Support() {
 
   return (
     <AppLayout>
-      <div className="max-w-6xl mx-auto px-4 md:px-6 pt-20 pb-24 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-primary/15 flex items-center justify-center">
-              <LifeBuoy className="text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-heading font-bold">Support</h1>
-              <p className="text-sm text-muted-foreground">We typically reply within 24 hours.</p>
-            </div>
-          </div>
-          <NewTicketDialog open={newOpen} onOpenChange={setNewOpen} onCreated={(id) => setActive(id)} />
-        </div>
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 pb-24 space-y-6">
+        <MemberPageHeader eyebrow="We're in your corner" title="How can we help?" description="Ask a question, report a problem and keep track of your conversation with the support team." actions={<NewTicketDialog open={newOpen} onOpenChange={setNewOpen} onCreated={(id) => setActive(id)} />} />
 
         <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4">
           {/* Inbox */}

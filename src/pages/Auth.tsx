@@ -5,11 +5,15 @@ import { doc, getDocFromServer } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { auth } from "@/lib/firebase";
 import { motion } from "framer-motion";
+import { useBrand, useSiteSettings } from "@/contexts/SiteSettingsContext";
+import { isAdminRole } from "@/lib/permissions";
 import logo from "@/assets/logo.png";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { logActivity } from "@/lib/activity";
 
 export default function Auth() {
+  const brand = useBrand(logo);
+  const settings = useSiteSettings();
   const [searchParams] = useSearchParams();
   const [isSignUp, setIsSignUp] = useState(searchParams.get("signup") === "true");
   const [email, setEmail] = useState("");
@@ -23,16 +27,10 @@ export default function Auth() {
   const navigate = useNavigate();
 
 
-  const ADMIN_EMAILS = ["admin1@gmail.com", "admin101@gmail.com"];
-
-  const routeAfterAuth = async (uid: string, email?: string | null) => {
-    if (email && ADMIN_EMAILS.includes(email.toLowerCase())) {
-      navigate("/admin", { replace: true });
-      return;
-    }
+  const routeAfterAuth = async (uid: string) => {
     try {
       const snap = await getDocFromServer(doc(db, "admins", uid));
-      if (snap.exists() && ["admin", "moderator", "staff"].includes(snap.data().role)) {
+      if (snap.exists() && isAdminRole(snap.data().role)) {
         navigate("/admin", { replace: true });
         return;
       }
@@ -47,6 +45,7 @@ export default function Auth() {
     setLoading(true);
     try {
       if (isSignUp) {
+        if (!settings.signupEnabled) throw new Error("Registration is currently paused. Existing members can sign in.");
         await signUp(email, password);
         logActivity("auth.signup", { email });
         navigate("/onboarding", { replace: true });
@@ -54,7 +53,7 @@ export default function Auth() {
         await signIn(email, password);
         logActivity("auth.login", { email });
         const uid = auth.currentUser?.uid;
-        if (uid) await routeAfterAuth(uid, auth.currentUser?.email);
+        if (uid) await routeAfterAuth(uid);
         else navigate("/dashboard", { replace: true });
       }
     } catch (err: any) {
@@ -98,7 +97,7 @@ export default function Auth() {
       await signInWithGoogle();
       logActivity("auth.login", { method: "google" });
       const uid = auth.currentUser?.uid;
-      if (uid) await routeAfterAuth(uid, auth.currentUser?.email);
+      if (uid) await routeAfterAuth(uid);
       else navigate("/dashboard", { replace: true });
     } catch (err: any) {
       const code = err?.code || "";
@@ -126,14 +125,15 @@ export default function Auth() {
       >
         <div className="glass-card p-8 space-y-6">
           <div className="flex flex-col items-center gap-4">
-            <img src={logo} alt="FitX Journey" className="h-16 w-auto" />
+            <img src={brand.logo} alt={brand.name} className="h-16 max-w-full object-contain" />
+            <p className="text-sm font-semibold">{brand.name}</p>
             <h1 className="text-2xl font-heading font-bold">
-              {mode === "reset" ? "Reset Password" : isSignUp ? "Create Account" : "Welcome Back"}
+              {mode === "reset" ? "Reset Password" : isSignUp ? "Create Account" : settings.loginTitle}
             </h1>
             <p className="text-muted-foreground text-sm text-center">
               {mode === "reset"
                 ? "We'll email you a secure link to set a new password"
-                : isSignUp ? "Start your fitness journey today" : "Log in to continue your journey"}
+                : isSignUp ? brand.tagline : settings.loginDescription}
             </p>
 
           </div>
@@ -183,6 +183,7 @@ export default function Auth() {
               </div>
             )}
 
+            {isSignUp && !settings.signupEnabled && mode === "credentials" && <p role="status" className="text-sm text-muted-foreground text-center">Registration is currently paused. Existing members can sign in.</p>}
             {error && (
               <p className="text-destructive text-sm text-center">{error}</p>
             )}
@@ -192,7 +193,7 @@ export default function Auth() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (isSignUp && !settings.signupEnabled && mode === "credentials")}
               className="w-full py-3 rounded-xl gradient-bg text-primary-foreground font-semibold text-sm hover:scale-[0.98] active:scale-[0.96] transition-transform glow-pulse disabled:opacity-50"
             >
               {loading ? "Loading..." : mode === "reset" ? "Send reset link" : isSignUp ? "Sign Up" : "Sign In"}
@@ -222,6 +223,7 @@ export default function Auth() {
 
               <button
                 onClick={handleGoogle}
+                disabled={loading || (!settings.signupEnabled && isSignUp)}
                 className="w-full py-3 rounded-xl bg-secondary border border-border text-foreground font-medium text-sm hover:bg-secondary/80 transition-colors flex items-center justify-center gap-2"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24">
@@ -236,6 +238,7 @@ export default function Auth() {
               <p className="text-center text-sm text-muted-foreground">
                 {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
                 <button
+                  disabled={!isSignUp && !settings.signupEnabled}
                   onClick={() => { setIsSignUp(!isSignUp); setError(""); setNotice(""); }}
                   className="text-primary hover:underline font-medium"
                 >

@@ -59,6 +59,6 @@ npm run build
 
 The dashboard labels its bounded samples (up to 500 members, 100 tickets / events / assignments, or 200 workout plans) rather than claiming platform-wide totals. Reports use member summary timestamps and the latest 1,000 activity events; analysts do not fetch private member profiles.
 
-Verified: production build and type check pass, along with 9 unit tests, 9 Firebase rules tests and 7 browser tests. Browser tests cover all five desktop / mobile workspaces, direct-route permissions, coach check-ins, offline recovery and exactly one server log after reconnecting.
+The current checks also cover the member redesign, brand publishing and feature access. See [Member experience, branding and feature access](Member-Experience-Branding-Access.md) for the extended controls and rollout. Browser tests retain coverage of all five desktop / mobile workspaces, direct-route permissions, coach check-ins, offline recovery and exactly one server log after reconnecting.
 
-The repository-wide lint check still reports 220 errors (the original revision reports 224). Targeted lint for the new modules has no errors and two React Fast Refresh export warnings. The production build also retains a large-bundle warning.
+The repository retains older lint issues. Targeted lint for the new branding and access modules has no errors and four React Fast Refresh export warnings. The production build also retains a large-bundle warning.

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Lock, Zap, Star, Trophy, Target, CheckCircle2, TrendingUp,
@@ -82,10 +83,11 @@ export default function Rewards() {
     <AppLayout>
       <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6 pb-24">
 
+        <MemberPageHeader eyebrow="Every win adds up" title="Your effort, rewarded." description="Follow your earned XP, explore your badges and see what comes next in your journey." />
         {/* ── HERO / TIER CARD ────────────────────────────────────── */}
         <motion.section
           initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}
-          className="relative rounded-3xl overflow-hidden border border-white/10 p-6 md:p-8 isolate"
+          className="member-card relative overflow-hidden p-6 md:p-8 isolate"
         >
           {/* animated aurora */}
           <div className={`absolute inset-0 bg-gradient-to-br ${currentTier.color} opacity-20`} />
@@ -132,9 +134,9 @@ export default function Rewards() {
             {/* Text + progress */}
             <div className="flex-1 min-w-0 text-center md:text-left">
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground mb-1">Current tier</p>
-              <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-foreground to-foreground/60 bg-clip-text text-transparent leading-none">
+              <h2 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-foreground to-foreground/60 bg-clip-text text-transparent leading-none">
                 {currentTier.name}
-              </h1>
+              </h2>
               <p className="text-xs text-muted-foreground mt-2">
                 {nextTier
                   ? <>Earn <span className="text-foreground font-bold">{xpToNextTier.toLocaleString()} XP</span> more to reach <span className="text-foreground font-bold">{nextTier.name}</span></>

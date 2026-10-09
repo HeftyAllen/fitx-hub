@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, storage } from "@/lib/firebase";
 import {
@@ -338,20 +339,7 @@ export default function Progress() {
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 pb-24 space-y-8">
 
         {/* ── PAGE HEADER ── */}
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-          className="relative rounded-3xl overflow-hidden p-6 md:p-8"
-          style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.18) 0%, rgba(6,182,212,0.10) 100%)" }}>
-          <div className="absolute inset-0 border border-primary/20 rounded-3xl pointer-events-none" />
-          <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full opacity-10 blur-3xl bg-primary" />
-          <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full opacity-10 blur-3xl bg-cyan-500" />
-          <div className="relative z-10">
-            <p className="text-xs text-primary/80 font-bold uppercase tracking-widest mb-1">Your Journey</p>
-            <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2">Progress Tracker</h1>
-            <p className="text-muted-foreground text-sm max-w-lg">
-              Track your weight, measurements, progress photos and workout stats all in one place.
-            </p>
-          </div>
-        </motion.div>
+        <MemberPageHeader eyebrow="The bigger picture" title="Progress you can see." description="A record of your effort, beyond any single number. Follow your weight, measurements and photos over time." actions={<button className="member-action" onClick={() => { setShowWeightForm(true); document.getElementById("weight-history")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}><Plus size={15} />Log weight</button>} />
 
         {/* ── STAT CARDS ── */}
         <motion.div variants={stagger} initial="hidden" animate="visible"
@@ -376,7 +364,7 @@ export default function Progress() {
         </motion.div>
 
         {/* ── WEIGHT TRACKER ── */}
-        <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+        <motion.section id="weight-history" className="scroll-mt-24" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <div className="glass-card p-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <SectionTitle icon={Scale} label="Weight History" desc="Track your weight over time" />

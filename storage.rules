@@ -13,7 +13,17 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*|application/pdf');
       allow delete: if owner(uid) || fullAdmin();
     }
-    match /public/{path=**} { allow read: if true; allow write: if fullAdmin(); }
+    match /public/branding/{path=**} {
+      allow read: if true;
+      allow create, update: if fullAdmin() && request.resource.size <= 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/png|image/jpeg|image/webp|image/x-icon|image/vnd.microsoft.icon');
+      allow delete: if fullAdmin();
+    }
+    match /public/{folder}/{path=**} {
+      allow read: if true;
+      allow write: if folder != 'branding' && fullAdmin();
+    }
+    match /public/{filename} { allow read: if true; allow write: if fullAdmin(); }
     match /{path=**} { allow read, write: if false; }
   }
 }

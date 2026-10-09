@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy, Plus, X, Target, Zap, CheckCircle2, Lock, Star,
@@ -90,22 +91,13 @@ export default function Records() {
   return (
     <AppLayout>
       <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
+        <MemberPageHeader eyebrow="Celebrate the effort" title="Your best, kept here." description="Personal records, new milestones and challenges to keep you moving forward." />
         {/* ===== HERO ===== */}
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden rounded-3xl border border-white/[0.06] p-6 md:p-8"
-          style={{
-            background:
-              "radial-gradient(120% 120% at 0% 0%, hsl(var(--warning) / 0.22) 0%, transparent 55%), radial-gradient(120% 120% at 100% 100%, hsl(var(--primary) / 0.28) 0%, transparent 55%), linear-gradient(135deg, hsl(240 20% 10% / 0.9), hsl(240 15% 8% / 0.9))",
-            boxShadow: "0 30px 80px -40px hsl(var(--primary) / 0.55)",
-          }}
+          className="member-card p-6 md:p-8"
         >
-          <motion.div aria-hidden className="pointer-events-none absolute -top-24 -left-16 w-72 h-72 rounded-full bg-warning/20 blur-3xl"
-            animate={{ x: [0, 25, 0], y: [0, 15, 0] }} transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }} />
-          <motion.div aria-hidden className="pointer-events-none absolute -bottom-24 -right-16 w-80 h-80 rounded-full bg-primary/25 blur-3xl"
-            animate={{ x: [0, -20, 0], y: [0, -10, 0] }} transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }} />
-
           <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-4">
               {/* Medallion */}
@@ -128,9 +120,9 @@ export default function Records() {
 
               <div className="min-w-0">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Records & Challenges</p>
-                <h1 className="mt-1 text-2xl md:text-4xl font-heading font-bold leading-tight">
+                <h2 className="mt-1 text-2xl md:text-4xl font-heading font-bold leading-tight">
                   <span className="gradient-text">Trophy Room</span>
-                </h1>
+                </h2>
                 <p className="text-xs text-muted-foreground mt-1 max-w-sm">Track your bests. Conquer challenges. Earn XP.</p>
               </div>
             </div>

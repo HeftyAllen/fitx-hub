@@ -156,13 +156,13 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
   },
 ];
 
-export function useChallenges() {
+export function useChallenges(enabled = true) {
   const { user } = useAuth();
   const [challenges, setChallenges] = useState<ChallengeWithProgress[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchChallenges = useCallback(async () => {
-    if (!user) return;
+    if (!user || !enabled) { setChallenges([]); setLoading(false); return; }
     setLoading(true);
     try {
       const [joinedSnap, logsSnap, prsSnap, calSnap] = await Promise.all([
@@ -220,7 +220,7 @@ export function useChallenges() {
       console.error(e);
     }
     setLoading(false);
-  }, [user]);
+  }, [user, enabled]);
 
   useEffect(() => { fetchChallenges(); }, [fetchChallenges]);
 

@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
+import FeatureGate, { FeatureNotice } from "@/components/member/FeatureGate";
+import { useFeatureAccess } from "@/contexts/FeatureAccessContext";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
 import {
   collection, doc, onSnapshot, query, orderBy, where,
-  setDoc, serverTimestamp,
+  setDoc, serverTimestamp, writeBatch,
 } from "firebase/firestore";
 import { motion } from "framer-motion";
 import { Dumbbell, UtensilsCrossed, Check, Library as LibraryIcon, Plus } from "lucide-react";
@@ -27,11 +30,18 @@ interface LibraryPlan {
 /** Embeddable section — can be dropped into other pages. */
 export function LibrarySection({ defaultTab = "workouts", showTabs = true }: { defaultTab?: LibType; showTabs?: boolean }) {
   const { user } = useAuth();
+  const { getAccess } = useFeatureAccess();
   const [tab, setTab] = useState<LibType>(defaultTab);
   const [plans, setPlans] = useState<LibraryPlan[]>([]);
   const [optedIn, setOptedIn] = useState<Set<string>>(new Set());
 
+  const feature = tab === "workouts" ? "training" : "mealPlanner";
+  const access = getAccess(feature);
+  const libraryAccess = getAccess("library");
+  const allowed = access.state === "allowed" && !access.loading && !access.error && libraryAccess.state === "allowed" && !libraryAccess.loading && !libraryAccess.error;
   useEffect(() => {
+    setPlans([]);
+    if (!allowed) return;
     const q = query(
       collection(db, `library_${tab}`),
       where("status", "==", "published"),
@@ -41,7 +51,7 @@ export function LibrarySection({ defaultTab = "workouts", showTabs = true }: { d
       setPlans(snap.docs.map(d => ({ id: d.id, type: tab, ...(d.data() as any) })));
     }, () => setPlans([]));
     return unsub;
-  }, [tab]);
+  }, [tab, allowed]);
 
   useEffect(() => {
     if (!user) return;
@@ -53,14 +63,15 @@ export function LibrarySection({ defaultTab = "workouts", showTabs = true }: { d
   }, [user]);
 
   async function optIn(plan: LibraryPlan) {
-    if (!user) return;
+    if (!user || !allowed) { toast.error("This plan requires an active feature membership."); return; }
     try {
-      await setDoc(doc(db, "users", user.uid, "libraryOptIns", plan.id), {
+      const batch = writeBatch(db);
+      batch.set(doc(db, "users", user.uid, "libraryOptIns", plan.id), {
         planId: plan.id, type: plan.type, title: plan.title,
         acceptedAt: serverTimestamp(),
       });
       const targetCollection = plan.type === "workouts" ? "workoutPlans" : "mealPlans";
-      await setDoc(doc(db, "users", user.uid, targetCollection, plan.id), {
+      batch.set(doc(db, "users", user.uid, targetCollection, plan.id), {
         name: plan.title,
         title: plan.title,
         description: plan.description ?? null,
@@ -70,6 +81,7 @@ export function LibrarySection({ defaultTab = "workouts", showTabs = true }: { d
         sourceId: plan.id,
         createdAt: serverTimestamp(),
       }, { merge: true });
+      await batch.commit();
       logActivity("library.plan.optIn", { planId: plan.id, type: plan.type });
       toast.success(`Added "${plan.title}" to your plans`);
     } catch (e: any) {
@@ -79,13 +91,13 @@ export function LibrarySection({ defaultTab = "workouts", showTabs = true }: { d
   }
 
   return (
-    <div className="space-y-5">
+    <FeatureGate feature="library" inline><div className="space-y-5">
       {showTabs && (
         <div className="flex gap-2">
           {([
             { v: "workouts" as LibType,  label: "Workouts",   icon: Dumbbell },
             { v: "mealPlans" as LibType, label: "Meal Plans", icon: UtensilsCrossed },
-          ]).map(t => (
+          ]).filter(t => getAccess(t.v === "workouts" ? "training" : "mealPlanner").state !== "disabled").map(t => (
             <button key={t.v} onClick={() => setTab(t.v)}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                 tab === t.v ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
@@ -96,7 +108,7 @@ export function LibrarySection({ defaultTab = "workouts", showTabs = true }: { d
         </div>
       )}
 
-      {plans.length === 0 ? (
+      {!allowed ? <FeatureNotice feature={feature} /> : plans.length === 0 ? (
         <div className="glass-card p-12 text-center text-muted-foreground text-sm">
           Nothing published yet. Your coach hasn't shared any plans — check back soon.
         </div>
@@ -138,23 +150,16 @@ export function LibrarySection({ defaultTab = "workouts", showTabs = true }: { d
           })}
         </div>
       )}
-    </div>
+    </div></FeatureGate>
   );
 }
 
 export default function Library() {
   return (
     <AppLayout>
-      <div className="max-w-5xl mx-auto px-4 pt-20 pb-16 space-y-6">
-        <header className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-primary/15 flex items-center justify-center">
-            <LibraryIcon className="text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-heading font-bold">Library</h1>
-            <p className="text-sm text-muted-foreground">Coach-curated plans you can add to your account.</p>
-          </div>
-        </header>
+      <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 pb-16 space-y-6">
+        <MemberPageHeader eyebrow="A little expert inspiration" title="Your coach library" description="Workout and meal plans created by coaches. Find a routine and add it to your own account." />
+
         <LibrarySection />
       </div>
     </AppLayout>

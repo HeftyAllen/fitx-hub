@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { motion, AnimatePresence } from "framer-motion";
+import { useBrand } from "@/contexts/SiteSettingsContext";
 import logo from "@/assets/logo.png";
 import { ChevronRight, ChevronLeft, Check, Flame, Beef, Wheat, Droplets } from "lucide-react";
 import { computeTargets, PACE_OPTIONS, type WeeklyPace, type NutritionPreference } from "@/lib/nutrition";
@@ -40,6 +41,7 @@ export default function Onboarding() {
     dietaryPrefs: [] as string[], equipmentAccess: [] as string[],
   });
   const { user, refreshProfile } = useAuth();
+  const brand = useBrand(logo);
   const navigate = useNavigate();
   const totalSteps = 8;
 
@@ -115,7 +117,7 @@ export default function Onboarding() {
             <motion.div key={step} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.25 }}>
               {step === 0 && (
                 <div className="flex flex-col items-center gap-6 text-center py-8">
-                  <motion.img src={logo} alt="FitX Journey" className="h-24 w-auto" animate={{ scale: [0.9, 1.05, 1] }} transition={{ duration: 0.8 }} />
+                  <motion.img src={brand.logo} alt={brand.name} className="h-24 w-auto" animate={{ scale: [0.9, 1.05, 1] }} transition={{ duration: 0.8 }} />
                   <h1 className="text-3xl font-heading font-bold gradient-text">Your transformation starts here</h1>
                   <p className="text-muted-foreground">Let's set up your profile to personalise your experience</p>
                 </div>
@@ -129,7 +131,7 @@ export default function Onboarding() {
                     <label className="text-xs text-muted-foreground ml-1">Date of birth (16+)</label>
                     <input type="date" max={maxDob} value={profile.dob} onChange={(e) => update("dob", e.target.value)} className="w-full mt-1 px-4 py-3 rounded-xl bg-secondary border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
                     {profile.dob && !ageValid && (
-                      <p className="text-xs text-destructive mt-1 ml-1">You must be at least 16 years old to use FitX.</p>
+                      <p className="text-xs text-destructive mt-1 ml-1">You must be at least 16 years old to use {brand.name}.</p>
                     )}
                   </div>
                   <div className="flex gap-2">

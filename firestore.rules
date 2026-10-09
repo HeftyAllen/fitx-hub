@@ -11,6 +11,41 @@ service cloud.firestore {
     function moderator() { return roleIn(['admin', 'moderator']); }
     function support() { return roleIn(['admin', 'moderator', 'staff']); }
     function contentAuthor() { return roleIn(['admin', 'coach']); }
+    function featurePolicy(id) {
+      let features = exists(/databases/$(database)/documents/siteSettings/access)
+        ? get(/databases/$(database)/documents/siteSettings/access).data.get('features', {}) : {};
+      return features.get(id, {'mode': 'free', 'requiredPlan': 'plus'});
+    }
+    function membershipGrants(id, requiredPlan) {
+      let existsMember = exists(/databases/$(database)/documents/memberAccess/$(request.auth.uid));
+      let membership = existsMember ? get(/databases/$(database)/documents/memberAccess/$(request.auth.uid)).data : {};
+      let expiry = membership.get('expiresAt', null);
+      return existsMember && (expiry == null || (expiry is timestamp && expiry > request.time))
+        && ((requiredPlan == 'pro' && membership.get('plan', 'free') == 'pro')
+          || (requiredPlan == 'plus' && membership.get('plan', 'free') in ['plus', 'pro'])
+          || id in membership.get('features', []));
+    }
+    function singleFeature(id) {
+      let policy = featurePolicy(id);
+      return policy.get('mode', 'free') == 'free'
+        || (policy.get('mode', 'free') == 'premium'
+          && membershipGrants(id, policy.get('requiredPlan', 'plus')));
+    }
+    function featureEnabled(id) {
+      return signedIn() && (fullAdmin() || (singleFeature(id)
+        && (!(id in ['recipes', 'mealPlanner', 'grocery', 'barcode']) || singleFeature('nutrition'))));
+    }
+    function collectionEnabled(collectionId) {
+      return (collectionId in ['workoutLogs', 'workoutPlans'] ? featureEnabled('training') : true)
+        && (collectionId in ['foodLogs', 'nutritionLogs'] ? featureEnabled('nutrition') : true)
+        && (collectionId in ['mealPlan', 'mealPlans', 'mealPlanEntries'] ? featureEnabled('mealPlanner') : true)
+        && (collectionId == 'groceryList' ? featureEnabled('grocery') : true)
+        && (collectionId in ['weightLogs', 'measurements', 'progressPhotos'] ? featureEnabled('progress') : true)
+        && (collectionId == 'personalRecords' ? featureEnabled('records') : true)
+        && (collectionId == 'joinedChallenges' ? (featureEnabled('records') || featureEnabled('rewards')) : true)
+        && (collectionId == 'calendarEntries' ? featureEnabled('calendar') : true)
+        && (collectionId == 'libraryOptIns' ? featureEnabled('library') : true);
+    }
     function activeOwner(uid) {
       return owner(uid) && (!exists(/databases/$(database)/documents/users/$(uid))
         || get(/databases/$(database)/documents/users/$(uid)).data.get('suspended', false) != true);
@@ -36,7 +71,10 @@ service cloud.firestore {
       // Exclude privilege-bearing invite documents from the generic owner rule.
       match /{collectionId}/{document=**} {
         allow read: if collectionId != 'adminInvites' && collectionId != 'profile' && (owner(uid) || fullAdmin());
-        allow write: if collectionId != 'adminInvites' && collectionId != 'profile' && (activeOwner(uid) || fullAdmin());
+        // Owners retain their existing history for export; paid/disabled tools cannot write new data.
+        allow create, update: if collectionId != 'adminInvites' && collectionId != 'profile'
+          && ((activeOwner(uid) && collectionEnabled(collectionId)) || fullAdmin());
+        allow delete: if collectionId != 'adminInvites' && collectionId != 'profile' && (activeOwner(uid) || fullAdmin());
       }
       match /adminInvites/{inviteId} {
         allow read, delete: if owner(uid) || fullAdmin();
@@ -60,11 +98,11 @@ service cloud.firestore {
       allow delete: if fullAdmin();
     }
     match /library_workouts/{id} {
-      allow read: if signedIn();
+      allow read: if contentAuthor() || (featureEnabled('library') && featureEnabled('training'));
       allow create, update, delete: if contentAuthor();
     }
     match /library_mealPlans/{id} {
-      allow read: if signedIn();
+      allow read: if contentAuthor() || (featureEnabled('library') && featureEnabled('mealPlanner'));
       allow create, update, delete: if contentAuthor();
     }
     match /activityLogs/{id} {
@@ -118,6 +156,23 @@ service cloud.firestore {
       }
     }
     match /siteSettings/{id} { allow read: if true; allow write: if fullAdmin(); }
+    match /settingsHistory/{id} {
+      allow read, delete: if fullAdmin();
+      allow create: if fullAdmin() && request.resource.data.kind in ['branding', 'access']
+        && request.resource.data.settings is map && request.resource.data.updatedBy == request.auth.uid;
+      allow update: if false;
+    }
+    match /memberAccess/{uid} {
+      allow read: if owner(uid) || fullAdmin();
+      allow create, update: if fullAdmin()
+        && request.resource.data.keys().hasOnly(['plan', 'features', 'expiresAt', 'updatedAt', 'updatedBy'])
+        && request.resource.data.plan in ['free', 'plus', 'pro']
+        && request.resource.data.features is list
+        && request.resource.data.features.hasOnly(['training', 'nutrition', 'recipes', 'mealPlanner', 'barcode', 'grocery', 'progress', 'records', 'calendar', 'rewards', 'library'])
+        && (request.resource.data.expiresAt == null || request.resource.data.expiresAt is timestamp)
+        && request.resource.data.updatedBy == request.auth.uid && request.resource.data.updatedAt == request.time;
+      allow delete: if fullAdmin();
+    }
     match /featureFlags/{id} { allow read: if true; allow write: if fullAdmin(); }
     match /{document=**} { allow read, write: if false; }
   }

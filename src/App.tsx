@@ -6,6 +6,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { SiteSettingsProvider } from "@/contexts/SiteSettingsContext";
+import { FeatureAccessProvider } from "@/contexts/FeatureAccessContext";
+import FeatureGate from "@/components/member/FeatureGate";
+import { featureForPath } from "@/lib/feature-access";
+import { useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import OfflineBanner from "@/components/OfflineBanner";
 import ThemeSync from "@/components/ThemeSync";
@@ -43,6 +47,7 @@ const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
 const AdminReports = lazy(() => import("./pages/admin/AdminReports"));
 const Library = lazy(() => import("./pages/Library"));
 const GroceryList = lazy(() => import("./pages/GroceryList"));
+const Membership = lazy(() => import("./pages/Membership"));
 const AdminCoaching = lazy(() => import("./pages/admin/AdminCoaching"));
 import { OfflineProvider } from "@/contexts/OfflineContext";
 
@@ -62,11 +67,13 @@ function ProtectedRoute({
   allowOnboarding?: boolean;
 }) {
   const { user, loading, needsOnboarding } = useAuth();
+  const { pathname } = useLocation();
   if (loading) return <Spinner />;
   if (!user) return <Navigate to="/" replace />;
   if (needsOnboarding && !allowOnboarding)
     return <Navigate to="/onboarding" replace />;
-  return <>{children}</>;
+  const feature = featureForPath(pathname);
+  return feature ? <FeatureGate feature={feature}>{children}</FeatureGate> : <>{children}</>;
 }
 
 function DashboardGate() {
@@ -227,6 +234,8 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route path="/grocery-list" element={<ProtectedRoute><GroceryList /></ProtectedRoute>} />
+        <Route path="/membership" element={<ProtectedRoute><Membership /></ProtectedRoute>} />
 
         {/* Admin */}
         <Route
@@ -327,13 +336,15 @@ const App = () => (
           <OfflineProvider>
             <AdminProvider>
               <ThemeSync />
-              <PushListener />
               <SiteSettingsProvider>
+                <PushListener />
+                <FeatureAccessProvider>
                 <OfflineBanner />
                 <AdminInviteBanner />
                 <Suspense fallback={<Spinner />}>
                   <AppRoutes />
                 </Suspense>
+                </FeatureAccessProvider>
               </SiteSettingsProvider>
             </AdminProvider>
           </OfflineProvider>

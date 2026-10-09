@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { searchExercises, getExercisesByBodyPart, getExercisesByEquipment } from "@/lib/api";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Heart, X, Plus, Filter, ChevronDown, Dumbbell, Target, Layers, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -213,13 +214,7 @@ export default function ExerciseLibrary() {
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-5">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-heading font-bold gradient-text">Exercise Library</h1>
-            <p className="text-xs text-muted-foreground mt-1">Browse, filter and add exercises to your workout</p>
-          </div>
-        </div>
+        <MemberPageHeader eyebrow="Find your next movement" title="Exercise library" description="Explore movements by muscle group and equipment, then build a workout that works for you." />
 
         {/* Search + Filter bar */}
         <div className="space-y-3">

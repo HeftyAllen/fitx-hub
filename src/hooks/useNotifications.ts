@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useBrand } from "@/contexts/SiteSettingsContext";
 import { useAuth } from "@/contexts/AuthContext";
 
 export type NotifCategory = "workout" | "nutrition" | "progress" | "challenge" | "system";
@@ -63,6 +64,7 @@ export function useNotifications(prefs?: {
   weeklyReport?: boolean;
 }) {
   const { user } = useAuth();
+  const brand = useBrand();
   const uid = user?.uid ?? null;
 
   const [notifications, setNotifications] = useState<AppNotification[]>(() => loadFor(uid));
@@ -106,14 +108,15 @@ export function useNotifications(prefs?: {
     return unsub;
   }, [uid]);
   const filteredByPrefs = useMemo(() => {
-    if (!prefs) return notifications;
-    return notifications.filter(n => {
+    const branded = notifications.map(notification => notification.id.startsWith("n_welcome_") ? { ...notification, title: `Welcome to ${brand.name} 🚀` } : notification);
+    if (!prefs) return branded;
+    return branded.filter(n => {
       if (n.category === "workout"   && prefs.workoutReminders === false) return false;
       if (n.category === "challenge" && prefs.challengeAlerts  === false) return false;
       if (n.category === "progress"  && prefs.progressUpdates  === false) return false;
       return true;
     });
-  }, [notifications, prefs]);
+  }, [notifications, prefs, brand.name]);
 
   const unreadCount = filteredByPrefs.filter(n => !n.read).length;
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { searchRecipes } from "@/lib/api";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import { motion } from "framer-motion";
 import { Search, Clock, Flame, Bookmark } from "lucide-react";
 
@@ -59,7 +60,7 @@ export default function Recipes() {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
-        <h1 className="text-2xl font-heading font-bold">Recipes</h1>
+        <MemberPageHeader eyebrow="Fresh ideas for your table" title="Recipes worth making." description="Find a meal that suits your preferences, save your favourites and explore something new." />
 
         <form onSubmit={handleSearch} className="relative">
           <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />

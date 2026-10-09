@@ -14,6 +14,7 @@ import {
   deleteDoc,
   writeBatch,
   serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
 let env;
 before(async () => {
@@ -252,4 +253,58 @@ test("private member uploads are restricted to the owner and full admins", async
     await assertFails(deleteObject(ref(store, path)));
   }
   await assertSucceeds(deleteObject(ref(ownerStore, path)));
+});
+
+test("only full administrators can publish brands, access policies, history and memberships", async () => {
+  const access = { plan: "plus", features: [], expiresAt: null, updatedAt: serverTimestamp(), updatedBy: "admin" };
+  await assertSucceeds(setDoc(doc(dbFor("admin"), "memberAccess", "member"), access));
+  await assertSucceeds(setDoc(doc(dbFor("admin"), "siteSettings", "branding"), { businessName: "Pulse Studio" }));
+  await assertSucceeds(setDoc(doc(dbFor("admin"), "siteSettings", "access"), { features: { nutrition: { mode: "premium" } } }));
+  await assertSucceeds(setDoc(doc(dbFor("admin"), "settingsHistory", "version"), { kind: "branding", settings: { businessName: "FitX Journey" }, updatedBy: "admin" }));
+  for (const uid of ["member", "moderator", "staff", "coach", "readonly"]) {
+    await assertFails(setDoc(doc(dbFor(uid), "memberAccess", "member"), { ...access, updatedBy: uid }));
+    await assertFails(setDoc(doc(dbFor(uid), "siteSettings", "branding"), { businessName: "Forged" }));
+    await assertFails(getDoc(doc(dbFor(uid), "settingsHistory", "version")));
+  }
+  await assertSucceeds(getDoc(doc(dbFor("member"), "memberAccess", "member")));
+  await assertFails(getDoc(doc(dbFor("other"), "memberAccess", "member")));
+});
+test("Nutrition policies protect child writes and templates while keeping historical member data readable", async () => {
+  const admin = dbFor("admin"), member = dbFor("member");
+  await assertSucceeds(setDoc(doc(member, "users", "member", "foodLogs", "old"), { foods: [] }));
+  await assertSucceeds(setDoc(doc(admin, "siteSettings", "access"), { features: { nutrition: { mode: "disabled" } } }));
+  for (const collection of ["foodLogs", "groceryList", "mealPlan", "mealPlans", "mealPlanEntries"]) await assertFails(setDoc(doc(member, "users", "member", collection, "new"), { name: "Entry" }));
+  await assertFails(getDoc(doc(member, "library_mealPlans", "template")));
+  await assertSucceeds(getDoc(doc(member, "users", "member", "foodLogs", "old")));
+  await assertSucceeds(setDoc(doc(member, "users", "member", "workoutPlans", "new"), { name: "Unaffected training" }));
+  await assertSucceeds(setDoc(doc(admin, "siteSettings", "access"), { features: { nutrition: { mode: "free" } } }));
+  await assertSucceeds(setDoc(doc(member, "users", "member", "foodLogs", "new"), { foods: [] }));
+});
+test("paid tools require active, server-managed membership; expiry and child plan requirements are enforced", async () => {
+  const admin = dbFor("admin"), member = dbFor("member");
+  await setDoc(doc(admin, "siteSettings", "access"), { features: { nutrition: { mode: "premium", requiredPlan: "plus" }, mealPlanner: { mode: "premium", requiredPlan: "pro" } } });
+  const food = doc(member, "users", "member", "foodLogs", "today"), meal = doc(member, "users", "member", "mealPlan", "week");
+  await assertFails(setDoc(food, { foods: [] }));
+  // An editable profile field never counts as a protected entitlement.
+  await assertSucceeds(updateDoc(doc(member, "users", "member", "profile", "data"), { membership: "pro" }));
+  await assertFails(setDoc(food, { foods: [] }));
+  const membership = { plan: "plus", features: [], expiresAt: null, updatedBy: "admin", updatedAt: serverTimestamp() };
+  await setDoc(doc(admin, "memberAccess", "member"), membership);
+  await assertSucceeds(setDoc(food, { foods: [] }));
+  await assertFails(setDoc(meal, { cells: {} }));
+  await setDoc(doc(admin, "memberAccess", "member"), { ...membership, features: ["mealPlanner"] });
+  await assertSucceeds(setDoc(meal, { cells: {} }));
+  await setDoc(doc(admin, "memberAccess", "member"), { ...membership, plan: "pro", expiresAt: Timestamp.fromMillis(Date.now() - 60000) });
+  await assertFails(setDoc(food, { foods: [] }));
+  await setDoc(doc(admin, "memberAccess", "member"), { ...membership, plan: "pro", expiresAt: Timestamp.fromMillis(Date.now() + 60000) });
+  await assertSucceeds(setDoc(meal, { cells: {} }));
+});
+test("branding uploads are admin-only, size-limited raster assets", async () => {
+  const path = "public/branding/test.png";
+  for (const uid of ["member", "moderator", "staff", "coach", "readonly"]) await assertFails(uploadBytes(ref(env.authenticatedContext(uid).storage(), path), new Uint8Array([1]), { contentType: "image/png" }));
+  const store = env.authenticatedContext("admin").storage();
+  await assertSucceeds(uploadBytes(ref(store, path), new Uint8Array([1]), { contentType: "image/png" }));
+  await assertFails(uploadBytes(ref(store, "public/branding/bad.svg"), new Uint8Array([1]), { contentType: "image/svg+xml" }));
+  await assertFails(uploadBytes(ref(store, "public/branding/large.png"), new Uint8Array(2 * 1024 * 1024 + 1), { contentType: "image/png" }));
+  await assertSucceeds(deleteObject(ref(store, path)));
 });

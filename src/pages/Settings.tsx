@@ -2,7 +2,9 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useBrand } from "@/contexts/SiteSettingsContext";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import AccountSecurity from "@/components/settings/AccountSecurity";
 import PushNotifications from "@/components/settings/PushNotifications";
 import { syncPushPreferences } from "@/lib/pushNotifications";
@@ -145,6 +147,8 @@ function SaveButton({ onClick, saving, saved }: { onClick: () => void; saving: b
 export default function Settings() {
   const { theme, setTheme } = useTheme();
   const { user, userProfile, logout, refreshProfile } = useAuth();
+  const uid = user?.uid;
+  const brand = useBrand();
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState<ProfileData>(defaultProfile);
@@ -160,26 +164,28 @@ export default function Settings() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!user) return;
-    getDoc(doc(db, "users", user.uid, "profile", "data")).then(snap => {
+    if (!uid) return;
+    let cancelled = false;
+    setLoading(true);
+    getDoc(doc(db, "users", uid, "profile", "data")).then(snap => {
+      if (cancelled) return;
       if (snap.exists()) {
         const data = snap.data();
-        setProfile(prev => ({
-          ...prev,
+        setProfile({
+          ...defaultProfile,
           ...data,
           notifications: { ...defaultProfile.notifications, ...(data.notifications || {}) },
-        }));
+        });
         if (data.theme === "light" || data.theme === "dark") setTheme(data.theme);
-      } else if (userProfile) {
-        setProfile(prev => ({
-          ...prev,
-          name: userProfile.name || "",
-          photoURL: userProfile.photoURL || user.photoURL || "",
-        }));
-      }
+      } else setProfile(defaultProfile);
+      setLoading(false);
+    }).catch(() => {
+      if (cancelled) return;
+      toast.error("Your settings could not load. Reconnect and try again.");
       setLoading(false);
     });
-  }, [user, userProfile]);
+    return () => { cancelled = true; };
+  }, [uid, setTheme]);
 
   const set = (key: keyof ProfileData) => (value: any) =>
     setProfile(prev => ({ ...prev, [key]: value }));
@@ -290,19 +296,19 @@ export default function Settings() {
   return (
     <AppLayout>
       <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 pb-24">
-        <div className="mb-6">
-          <h1 className="text-3xl md:text-4xl font-heading font-black tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage your profile, preferences and account.</p>
-        </div>
+        <div className="mb-6"><MemberPageHeader eyebrow="Made for you" title="Your journey, your way." description="Keep your profile up to date and make your training, nutrition and app preferences fit your life.">
+          <div className="member-card p-4 flex items-center gap-3"><span className="member-avatar !w-12 !h-12">{userProfile?.photoURL ? <img src={userProfile.photoURL} alt="" /> : (userProfile?.name || "A")[0].toUpperCase()}</span><div className="min-w-0 flex-1"><p className="font-semibold text-sm truncate">{userProfile?.name || user?.displayName || "Your profile"}</p><p className="text-xs text-muted-foreground truncate mt-1">{user?.email}</p></div><span className="hidden sm:inline-flex text-[10px] text-primary rounded-full bg-primary/10 px-3 py-1.5">Personal workspace</span></div>
+        </MemberPageHeader></div>
 
         <div className="grid md:grid-cols-[220px_1fr] gap-5 md:gap-8 items-start">
           {/* SECTION RAIL */}
-          <nav className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible md:sticky md:top-20 -mx-1 px-1 pb-1">
+          <nav aria-label="Profile sections" className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible md:sticky md:top-24 -mx-1 px-1 pb-1">
             {SECTIONS.map(s => {
               const active = tab === s.key;
               return (
                 <button
                   key={s.key}
+                  aria-pressed={active}
                   onClick={() => setTab(s.key)}
                   className={`relative shrink-0 flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-colors ${
                     active ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
@@ -322,7 +328,7 @@ export default function Settings() {
           <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
             {tab === "profile" && (
               <section>
-                <SectionHeader label="Profile" desc="Your public identity across FitX Journey" />
+                <SectionHeader label="Profile" desc={`Your public identity across ${brand.name}`} />
                 <div className="glass-card p-6 space-y-6">
                   <div className="flex items-center gap-5">
                     <div className="relative flex-shrink-0">
@@ -454,7 +460,7 @@ export default function Settings() {
 
             {tab === "notif" && (
               <section>
-                <SectionHeader label="Notifications" desc="Control when and how FitX Journey notifies you" />
+                <SectionHeader label="Notifications" desc={`Control when and how ${brand.name} notifies you`} />
                 <div className="glass-card px-5 py-1">
                   <Toggle checked={profile.notifications.workoutReminders} onChange={setNotif("workoutReminders")}
                     label="Workout Reminders" desc="Get notified when a scheduled workout is coming up" />
