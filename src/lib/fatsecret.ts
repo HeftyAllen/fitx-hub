@@ -3,6 +3,7 @@
 // can consume directly.
 
 import { supabase } from "@/integrations/supabase/client";
+import { auth } from "@/lib/firebase";
 
 export interface FsServing {
   serving_id: string;
@@ -36,8 +37,11 @@ export interface FsSearchHit {
 }
 
 async function call<T = any>(action: string, payload: Record<string, unknown>): Promise<T> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Sign in to use food search.");
   const { data, error } = await supabase.functions.invoke("fatsecret", {
     body: { action, ...payload },
+    headers: { "x-firebase-token": await user.getIdToken() },
   });
   if (error) throw new Error(error.message || "Edge function error");
   if (!data?.ok) throw new Error(data?.error || "FatSecret request failed");

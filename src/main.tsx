@@ -15,3 +15,6 @@ createRoot(root).render(
     </ThemeProvider>
   </ErrorBoundary>
 );
+
+import { registerOfflineShell } from "./lib/offline/register";
+void registerOfflineShell();

@@ -7,7 +7,10 @@
 //
 // All upstream calls go through https://platform.fatsecret.com/rest/server.api
 
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders as supabaseCorsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { verifyFirebaseToken, getFirebaseDocument, getFirebaseAdminRole } from "../_shared/firebase-auth.ts";
+import { serverFeatureAllowed } from "../_shared/member-access.ts";
+const corsHeaders = { ...supabaseCorsHeaders, "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-firebase-token" };
 
 const CLIENT_ID = Deno.env.get("FATSECRET_CLIENT_ID");
 const CLIENT_SECRET = Deno.env.get("FATSECRET_CLIENT_SECRET");
@@ -81,8 +84,23 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
   try {
+    if (req.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const token = req.headers.get("x-firebase-token") || "";
+    let identity;
+    try { identity = await verifyFirebaseToken(token); }
+    catch { return new Response(JSON.stringify({ ok: false, error: "Sign in to use food search." }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || "").trim();
+    const role = await getFirebaseAdminRole(identity.uid, token);
+    if (role !== "admin") {
+      const [settings, membership] = await Promise.all([
+        getFirebaseDocument("siteSettings/access", token),
+        getFirebaseDocument(`memberAccess/${encodeURIComponent(identity.uid)}`, token),
+      ]);
+      if (!serverFeatureAllowed(action === "barcode" ? "barcode" : "nutrition", settings, membership)) {
+        return new Response(JSON.stringify({ ok: false, error: "This feature is unavailable for your membership." }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
 
     let data: unknown;
     switch (action) {

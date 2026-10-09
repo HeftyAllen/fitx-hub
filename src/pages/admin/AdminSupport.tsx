@@ -3,6 +3,8 @@ import {
   addDoc, collection, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAdmin } from "@/hooks/useAdmin";
+import { useOnline } from "@/hooks/useOnline";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,9 @@ interface Message {
 
 export default function AdminSupport() {
   const { user } = useAuth();
+  const { canPerform } = useAdmin();
+  const online = useOnline();
+  const canReply = online && canPerform("reply-support");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -56,7 +61,7 @@ export default function AdminSupport() {
   const active = useMemo(() => tickets.find(t => t.id === activeId) ?? null, [tickets, activeId]);
 
   async function send() {
-    if (!reply.trim() || !activeId || !user) return;
+    if (!reply.trim() || !activeId || !user || !canReply) return;
     try {
       await addDoc(collection(db, "supportTickets", activeId, "messages"), {
         authorId: user.uid,
@@ -74,8 +79,8 @@ export default function AdminSupport() {
   }
 
   async function setStatus(s: Ticket["status"]) {
-    if (!activeId) return;
-    await updateDoc(doc(db, "supportTickets", activeId), { status: s });
+    if (!activeId || !canReply) return;
+    try { await updateDoc(doc(db, "supportTickets", activeId), { status: s }); } catch { toast.error("Could not update the ticket."); }
   }
 
   const openCount = tickets.filter(t => t.status === "open").length;
@@ -131,9 +136,9 @@ export default function AdminSupport() {
                   <div className="text-xs text-muted-foreground">{active.userEmail ?? active.userId}</div>
                 </div>
                 <div className="flex gap-1">
-                  <Button size="sm" variant="outline" onClick={() => setStatus("open")}>Open</Button>
-                  <Button size="sm" variant="outline" onClick={() => setStatus("pending")}>Pending</Button>
-                  <Button size="sm" variant="outline" onClick={() => setStatus("closed")}>Close</Button>
+                  <Button size="sm" variant="outline" disabled={!canReply} onClick={() => setStatus("open")}>Open</Button>
+                  <Button size="sm" variant="outline" disabled={!canReply} onClick={() => setStatus("pending")}>Pending</Button>
+                  <Button size="sm" variant="outline" disabled={!canReply} onClick={() => setStatus("closed")}>Close</Button>
                 </div>
               </div>
               <div className="flex-1 p-4 space-y-3 overflow-y-auto">
@@ -158,7 +163,7 @@ export default function AdminSupport() {
                   rows={2}
                   className="flex-1 resize-none"
                 />
-                <Button onClick={send}>Send</Button>
+                <Button disabled={!canReply || !reply.trim()} onClick={send}>Send</Button>
               </div>
             </>
           )}

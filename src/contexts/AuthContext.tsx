@@ -16,7 +16,7 @@ import {
   reauthenticateWithPopup,
   EmailAuthProvider,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
 import { unregisterPushBeforeSignOut } from "@/lib/pushNotifications";
 
@@ -98,17 +98,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((cred) => { if (cred?.user) syncUserDoc(cred.user); })
       .catch((e) => console.warn("[auth] redirect result", e));
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let stopProfile = () => {};
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      stopProfile();
       setUser(user);
+      setUserProfile(null);
       if (user) {
-        await syncUserDoc(user);
-        await fetchProfile(user.uid);
+        // Do not wait for a server-acknowledged write during offline startup.
+        if (navigator.onLine) void syncUserDoc(user);
+        stopProfile = onSnapshot(doc(db, "users", user.uid, "profile", "data"), snap => {
+          setUserProfile(snap.exists() ? snap.data() : null);
+          setLoading(false);
+        }, () => { setLoading(false); });
       } else {
         setUserProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
-    return unsubscribe;
+    return () => { unsubscribe(); stopProfile(); };
   }, []);
 
   const signIn = async (email: string, password: string) => {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, Plus, X, Trash2, Play, Dumbbell,
@@ -15,6 +16,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isToday } from "date-fns";
 import { useChallenges } from "@/hooks/useChallenges";
+import { useFeatureAccess } from "@/contexts/FeatureAccessContext";
 
 interface WorkoutPlan {
   id: string;
@@ -53,6 +55,14 @@ interface MealPlanEntry {
 
 export default function CalendarView() {
   const { user } = useAuth();
+  const uid = user?.uid;
+  const { getAccess } = useFeatureAccess();
+  const trainingAccess = getAccess("training");
+  const mealAccess = getAccess("mealPlanner");
+  const recordAccess = getAccess("records");
+  const trainingAllowed = trainingAccess.state === "allowed" && !trainingAccess.loading && !trainingAccess.error;
+  const mealsAllowed = mealAccess.state === "allowed" && !mealAccess.loading && !mealAccess.error;
+  const recordsAllowed = recordAccess.state === "allowed" && !recordAccess.loading && !recordAccess.error;
   const navigate = useNavigate();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [plans, setPlans] = useState<WorkoutPlan[]>([]);
@@ -61,28 +71,28 @@ export default function CalendarView() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const { challenges } = useChallenges();
+  const { challenges } = useChallenges(recordsAllowed);
 
-  useEffect(() => { if (user) fetchData(); }, [user]);
-
-  const fetchData = async () => {
-    if (!user) return;
+  useEffect(() => {
+    if (!uid) return;
+    let cancelled = false;
     setLoading(true);
-    try {
-      const [plansSnap, entriesSnap, mealSnap] = await Promise.all([
-        getDocs(collection(db, "users", user.uid, "workoutPlans")),
-        getDocs(collection(db, "users", user.uid, "calendarEntries")),
-        getDocs(collection(db, "users", user.uid, "mealPlanEntries")),
-      ]);
-      setPlans(plansSnap.docs.map(d => ({ id: d.id, ...d.data() } as WorkoutPlan)));
+    Promise.all([
+        trainingAllowed ? getDocs(collection(db, "users", uid, "workoutPlans")) : Promise.resolve(null),
+        getDocs(collection(db, "users", uid, "calendarEntries")),
+        mealsAllowed ? getDocs(collection(db, "users", uid, "mealPlanEntries")) : Promise.resolve(null),
+      ]).then(([plansSnap, entriesSnap, mealSnap]) => {
+      if (cancelled) return;
+      setPlans(plansSnap?.docs.map(d => ({ id: d.id, ...d.data() } as WorkoutPlan)) || []);
       setEntries(entriesSnap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEntry)));
-      setMealEntries(mealSnap.docs.map(d => ({ id: d.id, ...d.data() } as MealPlanEntry)));
-    } catch (e) { console.error(e); }
-    setLoading(false);
-  };
+      setMealEntries(mealSnap?.docs.map(d => ({ id: d.id, ...d.data() } as MealPlanEntry)) || []);
+    }).catch(() => { if (!cancelled) toast.error("Calendar could not load. Reconnect and try again."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [uid, trainingAllowed, mealsAllowed]);
 
   const addEntry = async (planId: string, planName: string, date: Date) => {
-    if (!user) return;
+    if (!user || !trainingAllowed) return;
     const dateStr = format(date, "yyyy-MM-dd");
     const ref = await addDoc(collection(db, "users", user.uid, "calendarEntries"), {
       date: dateStr, planId, planName, completed: false, createdAt: Timestamp.now(),
@@ -119,7 +129,7 @@ export default function CalendarView() {
 
   const getMealsForDate = (date: Date) => {
     const dateStr = format(date, "yyyy-MM-dd");
-    return mealEntries.filter(e => e.date === dateStr);
+    return mealsAllowed ? mealEntries.filter(e => e.date === dateStr) : [];
   };
 
   const selectedEntries = selectedDate ? getEntriesForDate(selectedDate) : [];
@@ -142,22 +152,7 @@ export default function CalendarView() {
   return (
     <AppLayout>
       <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-5">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-heading font-bold gradient-text">Fitness Calendar</h1>
-            <p className="text-xs text-muted-foreground mt-1">Schedule and track your workouts</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="glass-card px-4 py-2 rounded-xl flex items-center gap-2">
-              <span className="text-lg">🔥</span>
-              <div>
-                <p className="text-sm font-bold text-foreground">{streak} Day Streak</p>
-                <p className="text-[10px] text-muted-foreground">Keep it going!</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <MemberPageHeader eyebrow="A routine worth keeping" title="Your fitness calendar" description="Make space for training and recovery. Schedule your next session and revisit your workout history." actions={<span className="member-action secondary"><span aria-hidden="true">🔥</span>{streak} day training streak</span>} />
 
         <div className="grid md:grid-cols-[1fr_320px] gap-5">
           {/* Calendar */}
@@ -229,9 +224,9 @@ export default function CalendarView() {
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <div className="w-2 h-2 rounded-full bg-green-400" /> Completed
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {mealsAllowed && <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <div className="w-2 h-2 rounded-full bg-amber-400" /> Meal Plan
-              </div>
+              </div>}
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <div className="w-3 h-3 rounded border border-primary/30 bg-primary/10" /> Today
               </div>
@@ -246,7 +241,7 @@ export default function CalendarView() {
                 <h3 className="font-heading font-bold text-sm">
                   {selectedDate ? format(selectedDate, "EEEE, MMM d") : "Select a day"}
                 </h3>
-                {selectedDate && (
+                {selectedDate && trainingAllowed && (
                   <Button size="sm" onClick={() => setShowAddModal(true)}
                     className="gradient-bg text-primary-foreground rounded-xl text-xs gap-1 h-8">
                     <Plus size={14} /> Add
@@ -263,10 +258,10 @@ export default function CalendarView() {
                 <div className="text-center py-6">
                   <Dumbbell size={28} className="mx-auto text-muted-foreground/30 mb-2" />
                   <p className="text-xs text-muted-foreground mb-3">Rest day — no workouts scheduled</p>
-                  <Button size="sm" variant="outline" onClick={() => setShowAddModal(true)}
+                  {trainingAllowed && <Button size="sm" variant="outline" onClick={() => setShowAddModal(true)}
                     className="rounded-xl text-xs border-white/10 gap-1">
                     <Plus size={12} /> Schedule Workout
-                  </Button>
+                  </Button>}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -302,7 +297,7 @@ export default function CalendarView() {
                             </button>
                           </div>
                         </div>
-                        {plan && !entry.completed && (
+                        {trainingAllowed && plan && !entry.completed && (
                           <Button size="sm" onClick={() => navigate("/workout-session", { state: { plan } })}
                             className="w-full gradient-bg text-primary-foreground rounded-lg text-xs gap-1 h-7 mt-1">
                             <Play size={12} /> Start Workout
@@ -371,7 +366,7 @@ export default function CalendarView() {
             </div>
 
             {/* Challenges Progress */}
-            {challenges.filter(c => c.joined && !c.completed).length > 0 && (
+            {recordsAllowed && challenges.filter(c => c.joined && !c.completed).length > 0 && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 className="glass-card p-4 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
@@ -409,7 +404,7 @@ export default function CalendarView() {
 
         {/* Add to Calendar Modal */}
         <AnimatePresence>
-          {showAddModal && selectedDate && (
+          {trainingAllowed && showAddModal && selectedDate && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowAddModal(false)}>
               <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}

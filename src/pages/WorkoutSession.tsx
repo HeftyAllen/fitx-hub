@@ -9,13 +9,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/lib/firebase";
-import { addDoc, collection, Timestamp } from "firebase/firestore";
+import { loadWorkoutDraft, saveWorkoutDraft, clearWorkoutDraft } from "@/lib/offline/drafts";
+import { queueWorkout } from "@/lib/offline/queue";
+import SyncStatus from "@/components/SyncStatus";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { useChallenges } from "@/hooks/useChallenges";
 
 interface SetLog {
   weight: number;
@@ -155,8 +155,9 @@ export default function WorkoutSession() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const plan = location.state?.plan;
-  const { challenges, fetchChallenges, completeChallenge } = useChallenges();
+  const [recovered] = useState(() => user ? loadWorkoutDraft(user.uid) : null);
+  const plan = location.state?.plan ?? recovered?.plan;
+  const [sessionId] = useState(() => recovered && (!location.state?.plan || recovered.plan.id === location.state.plan.id) ? recovered.sessionId : crypto.randomUUID());
 
   const [exercises, setExercises] = useState<ExerciseLog[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -175,9 +176,19 @@ export default function WorkoutSession() {
 
   const timerRef = useRef<number | null>(null);
   const restRef = useRef<number | null>(null);
+  const savedRef = useRef(false);
+  const draftWarning = useRef(false);
 
   useEffect(() => {
     if (!plan?.exercises?.length) { navigate("/workout-planner"); return; }
+    if (recovered?.sessionId === sessionId && recovered.exercises.length) {
+      setExercises(recovered.exercises as ExerciseLog[]);
+      setCurrentIdx(recovered.currentIdx);
+      setElapsedSeconds(recovered.elapsedSeconds);
+      setSetNotes(recovered.setNotes);
+      toast.info("Your saved workout session was restored.");
+      return;
+    }
     setExercises(
       plan.exercises.map((ex: any) => ({
         name: ex.name,
@@ -189,13 +200,19 @@ export default function WorkoutSession() {
         secondaryMuscles: ex.secondaryMuscles || [],
         plannedSets: ex.sets || 3,
         plannedReps: ex.reps || 10,
-        restSeconds: ex.restSeconds || 60,
+        restSeconds: ex.restSeconds ?? 60,
         sets: Array.from({ length: ex.sets || 3 }, () => ({
           weight: 0, reps: ex.reps || 10, completed: false,
         })),
       }))
     );
   }, [plan]);
+
+  useEffect(() => {
+    if (!user || !plan || !exercises.length || completed || savedRef.current) return;
+    try { saveWorkoutDraft(user.uid, { sessionId, plan, exercises, currentIdx, elapsedSeconds, setNotes, savedAt: Date.now() }); }
+    catch { if (!draftWarning.current) { draftWarning.current = true; toast.error("Session recovery is unavailable because device storage is full or blocked."); } }
+  }, [user, plan, exercises, currentIdx, elapsedSeconds, setNotes, sessionId, completed]);
 
   // Elapsed timer
   useEffect(() => {
@@ -272,15 +289,14 @@ export default function WorkoutSession() {
   };
 
   const finishWorkout = async () => {
-    setCompleted(true);
-    if (voiceEnabled) speakText("Workout complete! Amazing work champion!");
-    if (!user) return;
+    if (!user || savedRef.current) return;
+    savedRef.current = true;
     const totalVolume = exercises.reduce((sum, ex) =>
       sum + ex.sets.filter(s => s.completed).reduce((s, set) => s + set.weight * set.reps, 0), 0
     );
     try {
-      await addDoc(collection(db, "users", user.uid, "workoutLogs"), {
-        date: Timestamp.now(),
+      await queueWorkout(user.uid, sessionId, {
+        dateMs: Date.now(),
         planId: plan?.id || null,
         planName: plan?.name || "Quick Workout",
         exercises: exercises.map(ex => ({
@@ -291,18 +307,12 @@ export default function WorkoutSession() {
         totalVolume,
         notes: setNotes,
       });
-      // Re-fetch challenges and notify user of any newly completed ones
-      const prevCompleted = new Set(challenges.filter(c => c.completed).map(c => c.id));
-      await fetchChallenges();
-      const freshChallenges = challenges; // will reflect after re-render
-      setTimeout(async () => {
-        const newlyDone = freshChallenges.filter(c => !prevCompleted.has(c.id) && c.progress >= c.target && c.joined);
-        for (const ch of newlyDone) {
-          toast.success(`🏆 Challenge Complete: "${ch.name}"! +${ch.xpReward} XP`, { duration: 5000 });
-          await completeChallenge(ch.id);
-        }
-      }, 1500);
-    } catch (e) { console.error(e); }
+      try { clearWorkoutDraft(user.uid); } catch { /* durable queue is already saved */ }
+      setCompleted(true);
+      toast.success(navigator.onLine ? "Workout saved on this device. Syncing to your account." : "Workout saved offline. It will sync when you reconnect.");
+      if (voiceEnabled) speakText("Workout complete! Amazing work champion!");
+      // Challenge progress is recalculated from server records after the queued log syncs.
+    } catch { savedRef.current = false; toast.error("Could not save this workout. Free up device storage and try again; your session is still open."); }
   };
 
   const formatTime = (secs: number) => {
@@ -334,7 +344,7 @@ export default function WorkoutSession() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col relative">
+    <div className="member-shell min-h-screen bg-background text-foreground flex flex-col relative">
       {/* Ambient glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-[0.04]" style={{ background: "radial-gradient(circle, #2563EB, transparent 70%)" }} />
@@ -342,27 +352,28 @@ export default function WorkoutSession() {
       </div>
 
       {/* Top bar */}
-      <div className="relative z-10 gradient-bg px-4 py-3">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button size="icon" variant="ghost" className="text-primary-foreground/80 hover:text-primary-foreground h-8 w-8" onClick={() => navigate("/workout-planner")}>
+      <div className="relative z-10 bg-card border-b border-border px-4 py-4">
+        <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Button aria-label="Save draft and leave workout" size="icon" variant="ghost" className="text-muted-foreground hover:text-foreground h-9 w-9 border border-border rounded-xl" onClick={() => navigate("/workout-planner")}>
               <X size={18} />
             </Button>
-            <div>
-              <h1 className="text-sm font-bold text-primary-foreground">{plan?.name || "Workout"}</h1>
-              <p className="text-xs text-primary-foreground/70">{currentIdx + 1}/{exercises.length} exercises</p>
+            <div className="min-w-0">
+              <p className="member-eyebrow !mb-1">Your training session</p>
+              <h1 className="text-sm font-semibold truncate max-w-[240px] sm:max-w-none">{plan?.name || "Workout"}</h1>
+              <p className="text-[10px] text-muted-foreground mt-1">Exercise {currentIdx + 1} of {exercises.length} · Draft saved on this device</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <p className="text-lg font-mono font-bold text-primary-foreground">{formatTime(elapsedSeconds)}</p>
-            <Button size="icon" variant="ghost" className="text-primary-foreground/80 h-8 w-8" onClick={() => setIsPaused(!isPaused)}>
+          <div className="flex items-center gap-2 ml-auto">
+            <p className="text-lg font-mono font-semibold text-primary mr-2">{formatTime(elapsedSeconds)}</p>
+            <Button aria-label={isPaused ? "Resume session timer" : "Pause session timer"} size="icon" variant="ghost" className="text-muted-foreground h-8 w-8" onClick={() => setIsPaused(!isPaused)}>
               {isPaused ? <Play size={16} /> : <Pause size={16} />}
             </Button>
-            <Button size="icon" variant="ghost" className="text-primary-foreground/80 h-8 w-8" onClick={() => { setElapsedSeconds(0); toast.info("Timer reset"); }}>
+            <Button aria-label="Reset session timer" size="icon" variant="ghost" className="text-muted-foreground h-8 w-8" onClick={() => { setElapsedSeconds(0); toast.info("Timer reset"); }}>
               <RotateCcw size={14} />
             </Button>
-            <Button size="icon" variant="ghost"
-              className={`h-8 w-8 ${voiceEnabled ? "text-primary-foreground" : "text-primary-foreground/40"}`}
+            <Button aria-label={voiceEnabled ? "Turn voice coach off" : "Turn voice coach on"} aria-pressed={voiceEnabled} size="icon" variant="ghost"
+              className={`h-8 w-8 ${voiceEnabled ? "text-primary" : "text-muted-foreground"}`}
               onClick={() => { setVoiceEnabled(!voiceEnabled); toast.info(voiceEnabled ? "Voice coach off" : "Voice coach on 🎙️"); }}>
               {voiceEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
             </Button>
@@ -630,7 +641,7 @@ export default function WorkoutSession() {
                             <Check size={20} className="text-success" />
                           </div>
                         ) : (
-                          <Button size="icon" onClick={() => logSet(setIdx)}
+                          <Button size="icon" aria-label={`Complete set ${setIdx + 1}`} onClick={() => logSet(setIdx)}
                             className="w-12 h-12 gradient-bg text-primary-foreground rounded-xl hover:scale-95 active:scale-90 transition-transform">
                             <Check size={20} />
                           </Button>
@@ -707,7 +718,7 @@ export default function WorkoutSession() {
             ))}
           </div>
           {currentIdx === exercises.length - 1 ? (
-            <Button onClick={finishWorkout} className="gradient-bg text-primary-foreground rounded-xl gap-2 glow-pulse">
+            <Button aria-label="Finish workout" onClick={finishWorkout} className="gradient-bg text-primary-foreground rounded-xl gap-2 glow-pulse">
               <Trophy size={16} /> Finish
             </Button>
           ) : (
@@ -754,7 +765,7 @@ function CompletionScreen({
   if (totalVolume > 0) stats.splice(1, 0, { icon: Dumbbell, label: "Volume", value: `${totalVolume.toLocaleString()} kg`, color: "text-accent" });
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="member-shell min-h-screen bg-background text-foreground flex items-center justify-center p-4 relative overflow-hidden">
       {confettiPieces.map(p => (
         <motion.div key={p.id}
           initial={{ y: -20, opacity: 1, rotate: 0 }}
@@ -776,9 +787,10 @@ function CompletionScreen({
           <Trophy size={40} className="text-primary-foreground" />
         </motion.div>
         <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
-          className="text-2xl font-heading font-bold mb-1">Workout Complete! 🎉</motion.h1>
+          className="text-2xl font-heading font-bold mb-1">Another session in the books.</motion.h1>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
           className="text-muted-foreground text-sm mb-6">{planName}</motion.p>
+        <div className="flex justify-center mb-5"><SyncStatus /></div>
 
         <div className={`grid ${stats.length > 4 ? "grid-cols-3" : "grid-cols-2"} gap-2.5 mb-6`}>
           {stats.map((stat, i) => (
@@ -806,7 +818,7 @@ function CompletionScreen({
 
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.5 }}>
           <Button onClick={onDone} className="w-full gradient-bg text-primary-foreground rounded-xl text-base py-3 glow-pulse">
-            Done 🏠
+            Back to your training
           </Button>
         </motion.div>
       </motion.div>

@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { logActivity } from "@/lib/activity";
 import { toast } from "sonner";
+import { useOnline } from "@/hooks/useOnline";
+import { useAdmin } from "@/hooks/useAdmin";
 import { useAuth } from "@/contexts/AuthContext";
 import { searchRecipes } from "@/lib/spoonacular";
 import { searchExercises, getExercisesByBodyPart } from "@/lib/api";
@@ -63,6 +65,8 @@ function dayToString(d: Day, i: number) {
 
 export default function AdminContent() {
   const { user } = useAuth();
+  const { canPerform } = useAdmin();
+  const online = useOnline();
   const [tab, setTab] = useState<LibType>("workouts");
   const [plans, setPlans] = useState<LibraryPlan[]>([]);
 
@@ -135,6 +139,7 @@ export default function AdminContent() {
   }
 
   async function save(status: "draft" | "published") {
+    if (!online || !canPerform("publish-content")) { toast.error("Reconnect with a content-author role to save this plan."); return; }
     if (!title.trim()) { toast.error("Give the plan a title"); return; }
     if (!totalItems) { toast.error("Add at least one item from the library"); return; }
     const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -160,6 +165,7 @@ export default function AdminContent() {
   }
 
   async function togglePublish(p: LibraryPlan) {
+    if (!online || !canPerform("publish-content")) return;
     const next = p.status === "published" ? "draft" : "published";
     await setDoc(doc(db, `library_${tab}`, p.id), { status: next, publishedAt: serverTimestamp() }, { merge: true });
     if (next === "published") logActivity("library.plan.publish", { id: p.id, type: tab });
@@ -167,6 +173,7 @@ export default function AdminContent() {
   }
 
   async function remove(p: LibraryPlan) {
+    if (!online || !canPerform("publish-content")) return;
     if (!confirm(`Delete "${p.title}"?`)) return;
     await deleteDoc(doc(db, `library_${tab}`, p.id));
     logActivity("library.plan.delete", { id: p.id, type: tab });
@@ -312,8 +319,8 @@ export default function AdminContent() {
             <Plus size={14} className="mr-1" /> Add day
           </Button>
           <div className="flex-1" />
-          <Button variant="outline" onClick={() => save("draft")}><Save size={14} className="mr-1" /> Save draft</Button>
-          <Button onClick={() => save("published")}><Send size={14} className="mr-1" /> Publish now</Button>
+          <Button variant="outline" disabled={!online} onClick={() => save("draft")}><Save size={14} className="mr-1" /> Save draft</Button>
+          <Button disabled={!online} onClick={() => save("published")}><Send size={14} className="mr-1" /> Publish now</Button>
         </div>
       </Card>
 
@@ -341,11 +348,11 @@ export default function AdminContent() {
                 {p.description && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{p.description}</p>}
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                <Button size="sm" variant="ghost" onClick={() => togglePublish(p)}
+                <Button size="sm" variant="ghost" disabled={!online} onClick={() => togglePublish(p)}
                   title={p.status === "published" ? "Unpublish" : "Publish"}>
                   {p.status === "published" ? <EyeOff size={14} /> : <Eye size={14} />}
                 </Button>
-                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => remove(p)}>
+                <Button size="sm" variant="ghost" className="text-destructive" disabled={!online} onClick={() => remove(p)}>
                   <Trash2 size={14} />
                 </Button>
               </div>

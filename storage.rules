@@ -1,37 +1,29 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-
-    function isSignedIn() { return request.auth != null; }
-
-    function isAdmin() {
-      return isSignedIn()
-        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
-    }
-
-    function isFullAdmin() {
-      return isSignedIn()
+    function signedIn() { return request.auth != null; }
+    function owner(uid) { return signedIn() && request.auth.uid == uid; }
+    function fullAdmin() {
+      return signedIn() && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
         && firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.role == 'admin';
     }
-
-    // Per-user uploads: users/{uid}/...
-    match /users/{uid}/{allPaths=**} {
-      allow read:  if request.auth.uid == uid || isAdmin();
-      allow write: if request.auth.uid == uid
-                   && request.resource.size < 5 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*|application/pdf');
-      allow delete: if request.auth.uid == uid || isAdmin();
+    match /users/{uid}/{path=**} {
+      allow read: if owner(uid) || fullAdmin();
+      allow create, update: if owner(uid) && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*|application/pdf');
+      allow delete: if owner(uid) || fullAdmin();
     }
-
-    // Public assets — read-all, admin write
-    match /public/{allPaths=**} {
-      allow read:  if true;
-      allow write: if isFullAdmin();
+    match /public/branding/{path=**} {
+      allow read: if true;
+      allow create, update: if fullAdmin() && request.resource.size <= 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/png|image/jpeg|image/webp|image/x-icon|image/vnd.microsoft.icon');
+      allow delete: if fullAdmin();
     }
-
-    // Default deny
-    match /{allPaths=**} {
-      allow read, write: if false;
+    match /public/{folder}/{path=**} {
+      allow read: if true;
+      allow write: if folder != 'branding' && fullAdmin();
     }
+    match /public/{filename} { allow read: if true; allow write: if fullAdmin(); }
+    match /{path=**} { allow read, write: if false; }
   }
 }

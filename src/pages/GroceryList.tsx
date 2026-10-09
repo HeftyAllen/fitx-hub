@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShoppingCart, Plus, Trash2, Check, X, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -64,28 +65,7 @@ export default function GroceryList() {
   return (
     <AppLayout>
       <div className="max-w-3xl mx-auto px-4 md:px-6 py-6 pb-24 space-y-6">
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-          className="relative rounded-3xl overflow-hidden p-6"
-          style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(34,211,238,0.10) 100%)" }}>
-          <div className="absolute inset-0 border border-emerald-400/20 rounded-3xl pointer-events-none" />
-          <div className="relative z-10 flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 flex items-center justify-center">
-                <ShoppingCart size={20} className="text-emerald-400" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-black">Grocery List</h1>
-                <p className="text-xs text-muted-foreground">{items.length} items · {totalChecked} checked</p>
-              </div>
-            </div>
-            {totalChecked > 0 && (
-              <button onClick={clearDone}
-                className="px-3 py-2 rounded-xl bg-secondary text-xs font-bold text-muted-foreground hover:text-foreground flex items-center gap-1.5">
-                <Trash2 size={12} /> Clear checked
-              </button>
-            )}
-          </div>
-        </motion.div>
+        <MemberPageHeader eyebrow="From your plan to your pantry" title="Your grocery list" description={`${items.length} items on your list · ${totalChecked} checked off`} actions={totalChecked > 0 ? <button onClick={clearDone} className="member-action secondary"><Trash2 size={14} />Clear checked</button> : undefined} />
 
         <form onSubmit={submit} className="glass-card p-4 grid grid-cols-1 md:grid-cols-[1fr_140px_140px_auto] gap-2">
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Item (e.g. Bananas)"

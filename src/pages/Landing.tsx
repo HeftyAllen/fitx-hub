@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence, useScroll, useTransform, useReducedMotion } from "framer-motion";
+import { useBrand, useSiteSettings } from "@/contexts/SiteSettingsContext";
+import { useFeatureAccess } from "@/contexts/FeatureAccessContext";
 import logo from "@/assets/logo.png";
 import heroImg from "@/assets/landing-hero.jpg";
 import trackImg from "@/assets/landing-track.jpg";
@@ -77,9 +79,14 @@ function SectionLabel({ index, children }: { index: string; children: string }) 
 }
 
 export default function Landing() {
+  const brand = useBrand(logo);
+  const settings = useSiteSettings();
+  const { config } = useFeatureAccess();
+  const nutritionVisible = config.features.nutrition.mode !== "disabled";
+  const navItems = NAV.filter(([label]) => label !== "Nutrition" || nutritionVisible);
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotion() || settings.motion !== "full";
   const { scrollY } = useScroll();
   const heroY = useTransform(scrollY, [0, 700], [0, reduce ? 0 : 70]);
 
@@ -100,12 +107,12 @@ export default function Landing() {
       >
         <div className="max-w-6xl mx-auto px-5 md:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5">
-            <img src={logo} alt="FitX Journey" className="h-7 w-auto" />
-            <span className="hidden sm:block text-sm font-semibold tracking-tight">FitX Journey</span>
+            <img src={brand.logo} alt={brand.name} className="h-7 w-auto" />
+            <span className="hidden sm:block text-sm font-semibold tracking-tight">{brand.name}</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
-            {NAV.map(([label, href]) => (
+            {navItems.map(([label, href]) => (
               <a key={href} href={href} className="relative py-1 hover:text-foreground transition-colors group">
                 {label}
                 <span className="absolute -bottom-0.5 left-0 h-px w-0 bg-foreground/60 transition-all duration-300 group-hover:w-full" />
@@ -119,10 +126,10 @@ export default function Landing() {
               Sign in
             </Link>
             <Link
-              to="/auth?signup=true"
+              to={settings.signupEnabled ? "/auth?signup=true" : "/auth"}
               className="hidden sm:inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold bg-foreground text-background hover:opacity-90 transition-opacity"
             >
-              Get started
+              {settings.signupEnabled ? settings.heroCta : "Sign in"}
             </Link>
             <button className="md:hidden p-2 -mr-2 text-foreground" onClick={() => setMenuOpen(v => !v)} aria-label="Menu">
               {menuOpen ? <X size={20} /> : <Menu size={20} />}
@@ -138,14 +145,14 @@ export default function Landing() {
               className="md:hidden overflow-hidden bg-background border-b border-border"
             >
               <div className="px-5 py-4">
-                {NAV.map(([l, h]) => (
+                {navItems.map(([l, h]) => (
                   <a key={h} href={h} onClick={() => setMenuOpen(false)} className="flex items-center justify-between py-3 text-sm border-b border-border/60 text-muted-foreground">
                     {l} <ArrowUpRight size={14} />
                   </a>
                 ))}
                 <div className="flex flex-col gap-2 pt-4">
                   <Link to="/auth" onClick={() => setMenuOpen(false)} className="text-center py-3 rounded-full border border-border text-sm font-medium">Sign in</Link>
-                  <Link to="/auth?signup=true" onClick={() => setMenuOpen(false)} className="text-center py-3 rounded-full text-sm font-semibold bg-foreground text-background">Get started</Link>
+                  <Link to={settings.signupEnabled ? "/auth?signup=true" : "/auth"} onClick={() => setMenuOpen(false)} className="text-center py-3 rounded-full text-sm font-semibold bg-foreground text-background">{settings.signupEnabled ? settings.heroCta : "Sign in"}</Link>
                 </div>
               </div>
             </motion.div>
@@ -165,23 +172,20 @@ export default function Landing() {
               variants={reveal}
               className="mt-7 font-heading text-[13vw] leading-[0.9] sm:text-6xl md:text-7xl font-black tracking-[-0.03em]"
             >
-              Your whole fitness
-              <br className="hidden sm:block" />
-              {" "}journey,
-              <span className="block text-muted-foreground">in one place.</span>
+              {settings.heroTitle}
+              <span className="block text-primary">{settings.heroHighlight}</span>
             </motion.h1>
 
             <motion.p variants={reveal} className="mt-7 text-base md:text-lg text-muted-foreground max-w-xl leading-relaxed">
-              Plan workouts, hit calorie targets built around your own goal, and watch progress take shape
-              session by session.
+              {settings.heroDescription}
             </motion.p>
 
             <motion.div variants={reveal} className="mt-9 flex flex-wrap items-center gap-3">
               <Link
-                to="/auth?signup=true"
+                to={settings.signupEnabled ? "/auth?signup=true" : "/auth"}
                 className="group inline-flex items-center gap-2 px-6 py-3.5 rounded-full text-sm font-semibold bg-foreground text-background hover:opacity-90 transition-opacity"
               >
-                Create your account
+                {settings.signupEnabled ? settings.heroCta : "Sign in"}
                 <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
               </Link>
               <a href="#features" className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full text-sm font-medium border border-border hover:border-foreground/30 transition-colors">
@@ -198,7 +202,7 @@ export default function Landing() {
             className="mt-14 md:mt-20 relative overflow-hidden rounded-2xl border border-border aspect-[16/9] md:aspect-[21/9]"
           >
             <motion.img
-              src={heroImg}
+              src={settings.heroImageUrl || heroImg}
               alt="Athlete training with a dumbbell in a gym"
               width={1408}
               height={1600}
@@ -225,7 +229,7 @@ export default function Landing() {
             </motion.h2>
 
             <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 border-t border-border">
-              {FEATURES.map(({ icon: Icon, title, desc }) => (
+              {FEATURES.filter(feature => feature.title !== "Nutrition that fits" || nutritionVisible).map(({ icon: Icon, title, desc }) => (
                 <motion.div
                   key={title}
                   variants={reveal}
@@ -281,7 +285,7 @@ export default function Landing() {
       </section>
 
       {/* ===== NUTRITION ===== */}
-      <section id="nutrition" className="py-20 md:py-28 border-t border-border">
+      {nutritionVisible && <section id="nutrition" className="py-20 md:py-28 border-t border-border">
         <div className="max-w-6xl mx-auto px-5 md:px-8 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           <motion.div
             initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
@@ -312,7 +316,7 @@ export default function Landing() {
             </motion.ul>
           </motion.div>
         </div>
-      </section>
+      </section>}
 
       {/* ===== CTA ===== */}
       <section className="border-t border-border">
@@ -328,10 +332,10 @@ export default function Landing() {
             Set up your goal in under two minutes and train with a plan that actually fits you.
           </p>
           <Link
-            to="/auth?signup=true"
+            to={settings.signupEnabled ? "/auth?signup=true" : "/auth"}
             className="group mt-9 inline-flex items-center gap-2 px-7 py-4 rounded-full text-sm font-semibold bg-foreground text-background hover:opacity-90 transition-opacity"
           >
-            Create your free account
+            {settings.signupEnabled ? settings.heroCta : "Sign in"}
             <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
           </Link>
         </motion.div>
@@ -341,8 +345,8 @@ export default function Landing() {
       <footer className="border-t border-border py-9">
         <div className="max-w-6xl mx-auto px-5 md:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <img src={logo} alt="FitX Journey" className="h-6 w-auto" />
-            <span className="text-xs text-muted-foreground">© {new Date().getFullYear()} FitX Journey</span>
+            <img src={brand.logo} alt={brand.name} className="h-6 w-auto" />
+            <span className="text-xs text-muted-foreground">© {new Date().getFullYear()} {brand.name}{settings.footerText ? ` · ${settings.footerText}` : ""}</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
             <a href="#features" className="hover:text-foreground transition-colors">Features</a>

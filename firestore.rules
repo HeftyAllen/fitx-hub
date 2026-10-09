@@ -1,120 +1,179 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isSignedIn() {
-      return request.auth != null;
+    function signedIn() { return request.auth != null; }
+    function owner(uid) { return signedIn() && request.auth.uid == uid; }
+    function roleIn(roles) {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role in roles;
     }
-
-    function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
+    function fullAdmin() { return roleIn(['admin']); }
+    function moderator() { return roleIn(['admin', 'moderator']); }
+    function support() { return roleIn(['admin', 'moderator', 'staff']); }
+    function contentAuthor() { return roleIn(['admin', 'coach']); }
+    function featurePolicy(id) {
+      let features = exists(/databases/$(database)/documents/siteSettings/access)
+        ? get(/databases/$(database)/documents/siteSettings/access).data.get('features', {}) : {};
+      return features.get(id, {'mode': 'free', 'requiredPlan': 'plus'});
     }
-
-    function adminDoc() {
-      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
+    function membershipGrants(id, requiredPlan) {
+      let existsMember = exists(/databases/$(database)/documents/memberAccess/$(request.auth.uid));
+      let membership = existsMember ? get(/databases/$(database)/documents/memberAccess/$(request.auth.uid)).data : {};
+      let expiry = membership.get('expiresAt', null);
+      return existsMember && (expiry == null || (expiry is timestamp && expiry > request.time))
+        && ((requiredPlan == 'pro' && membership.get('plan', 'free') == 'pro')
+          || (requiredPlan == 'plus' && membership.get('plan', 'free') in ['plus', 'pro'])
+          || id in membership.get('features', []));
     }
-
-    function isAdmin() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-        && adminDoc().role in ['admin', 'moderator', 'staff'];
+    function singleFeature(id) {
+      let policy = featurePolicy(id);
+      return policy.get('mode', 'free') == 'free'
+        || (policy.get('mode', 'free') == 'premium'
+          && membershipGrants(id, policy.get('requiredPlan', 'plus')));
     }
-
-    // any console role, including read-only analysts
-    function hasConsole() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-        && adminDoc().role in ['admin', 'moderator', 'staff', 'readonly'];
+    function featureEnabled(id) {
+      return signedIn() && (fullAdmin() || (singleFeature(id)
+        && (!(id in ['recipes', 'mealPlanner', 'grocery', 'barcode']) || singleFeature('nutrition'))));
     }
-
-    function isFullAdmin() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-        && adminDoc().role == 'admin';
+    function collectionEnabled(collectionId) {
+      return (collectionId in ['workoutLogs', 'workoutPlans'] ? featureEnabled('training') : true)
+        && (collectionId in ['foodLogs', 'nutritionLogs'] ? featureEnabled('nutrition') : true)
+        && (collectionId in ['mealPlan', 'mealPlans', 'mealPlanEntries'] ? featureEnabled('mealPlanner') : true)
+        && (collectionId == 'groceryList' ? featureEnabled('grocery') : true)
+        && (collectionId in ['weightLogs', 'measurements', 'progressPhotos'] ? featureEnabled('progress') : true)
+        && (collectionId == 'personalRecords' ? featureEnabled('records') : true)
+        && (collectionId == 'joinedChallenges' ? (featureEnabled('records') || featureEnabled('rewards')) : true)
+        && (collectionId == 'calendarEntries' ? featureEnabled('calendar') : true)
+        && (collectionId == 'libraryOptIns' ? featureEnabled('library') : true);
     }
-
-    // ── User-owned data: every collection lives under users/{uid}/...
+    function activeOwner(uid) {
+      return owner(uid) && (!exists(/databases/$(database)/documents/users/$(uid))
+        || get(/databases/$(database)/documents/users/$(uid)).data.get('suspended', false) != true);
+    }
+    function noPrivilegeFields() { return !request.resource.data.keys().hasAny(['role', 'suspended']); }
+    function privilegesUnchanged() { return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'suspended']); }
+    function suspensionOnly(uid) {
+      return moderator() && !exists(/databases/$(database)/documents/admins/$(uid))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['suspended'])
+        && request.resource.data.suspended is bool;
+    }
     match /users/{uid} {
-      allow read, write: if isOwner(uid) || isAdmin();
-
-      match /{document=**} {
-        allow read, write: if isOwner(uid) || isAdmin();
+      allow read: if owner(uid) || roleIn(['admin', 'moderator', 'readonly']);
+      allow create: if (owner(uid) && noPrivilegeFields()) || fullAdmin();
+      allow update: if (activeOwner(uid) && privilegesUnchanged()) || fullAdmin() || suspensionOnly(uid);
+      allow delete: if fullAdmin();
+      match /profile/{id} {
+        allow read: if owner(uid) || fullAdmin();
+        allow create: if (activeOwner(uid) && noPrivilegeFields()) || fullAdmin();
+        allow update: if (activeOwner(uid) && privilegesUnchanged()) || fullAdmin() || suspensionOnly(uid);
+        allow delete: if activeOwner(uid) || fullAdmin();
+      }
+      // Exclude privilege-bearing invite documents from the generic owner rule.
+      match /{collectionId}/{document=**} {
+        allow read: if collectionId != 'adminInvites' && collectionId != 'profile' && (owner(uid) || fullAdmin());
+        // Owners retain their existing history for export; paid/disabled tools cannot write new data.
+        allow create, update: if collectionId != 'adminInvites' && collectionId != 'profile'
+          && ((activeOwner(uid) && collectionEnabled(collectionId)) || fullAdmin());
+        allow delete: if collectionId != 'adminInvites' && collectionId != 'profile' && (activeOwner(uid) || fullAdmin());
+      }
+      match /adminInvites/{inviteId} {
+        allow read, delete: if owner(uid) || fullAdmin();
+        allow create, update: if fullAdmin() && request.resource.data.role in ['admin', 'moderator', 'staff', 'coach'];
       }
     }
-
-    // ── Admin registry — full admins manage roles; users may read their own row
-    //    and create their own row when accepting a pending invite (rules-light:
-    //    we trust the client because only invited users will ever do this from UI).
+    function validInvite(uid) {
+      let incoming = request.resource.data;
+      return owner(uid) && incoming.keys().hasOnly(['role', 'grantedAt', 'grantedFromInvite'])
+        && incoming.keys().hasAll(['role', 'grantedAt', 'grantedFromInvite'])
+        && incoming.grantedFromInvite is string
+        && incoming.grantedAt == request.time
+        && exists(/databases/$(database)/documents/users/$(uid)/adminInvites/$(incoming.grantedFromInvite))
+        && get(/databases/$(database)/documents/users/$(uid)/adminInvites/$(incoming.grantedFromInvite)).data.role == incoming.role
+        && !existsAfter(/databases/$(database)/documents/users/$(uid)/adminInvites/$(incoming.grantedFromInvite));
+    }
     match /admins/{uid} {
-      allow read:   if isOwner(uid) || isAdmin();
-      allow create: if isOwner(uid) || isFullAdmin();
-      allow update, delete: if isFullAdmin();
+      allow read: if owner(uid) || roleIn(['admin', 'moderator']);
+      allow create: if request.resource.data.role in ['admin', 'moderator', 'staff', 'coach', 'readonly'] && (fullAdmin() || validInvite(uid));
+      allow update: if fullAdmin() && request.resource.data.role in ['admin', 'moderator', 'staff', 'coach', 'readonly'];
+      allow delete: if fullAdmin();
     }
-
-    // ── Admin invites: written into target user's subcollection by an admin,
-    //    read & deleted by the target user when they accept/decline.
-    match /users/{uid}/adminInvites/{inviteId} {
-      allow read, delete: if isOwner(uid) || isAdmin();
-      allow create, update: if isAdmin();
+    match /library_workouts/{id} {
+      allow read: if contentAuthor() || (featureEnabled('library') && featureEnabled('training'));
+      allow create, update, delete: if contentAuthor();
     }
-
-    // ── Global content library (workouts + meal plans) — admin authored,
-    //    signed-in users read.
-    match /library_workouts/{planId} {
-      allow read:  if isSignedIn();
-      allow create, update, delete: if isAdmin();
+    match /library_mealPlans/{id} {
+      allow read: if contentAuthor() || (featureEnabled('library') && featureEnabled('mealPlanner'));
+      allow create, update, delete: if contentAuthor();
     }
-    match /library_mealPlans/{planId} {
-      allow read:  if isSignedIn();
-      allow create, update, delete: if isAdmin();
-    }
-
-    // ── Append-only activity log
     match /activityLogs/{id} {
-      allow create: if isSignedIn()
-                    && request.resource.data.userId == request.auth.uid
-                    && request.resource.data.keys().hasAll(['userId','action','createdAt']);
-      allow read:   if hasConsole();
-      allow update, delete: if isFullAdmin();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid && request.resource.data.keys().hasAll(['userId', 'action', 'createdAt']);
+      allow read: if roleIn(['admin', 'moderator', 'readonly']);
+      allow update, delete: if fullAdmin();
     }
-
-    // ── Announcements (admin authored, all signed-in users read)
     match /announcements/{id} {
-      allow read:  if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      allow read: if signedIn();
+      allow create, update, delete: if fullAdmin();
     }
-
-    // ── Support tickets — owner + admin read; only owner creates; admin or owner updates
+    function ticketAccess(id) {
+      return signedIn() && (get(/databases/$(database)/documents/supportTickets/$(id)).data.userId == request.auth.uid || support());
+    }
     match /supportTickets/{id} {
-      allow create: if isSignedIn()
-                    && request.resource.data.userId == request.auth.uid;
-      allow read, update: if isSignedIn()
-                          && (resource.data.userId == request.auth.uid || isAdmin());
-      allow delete: if isFullAdmin();
-
-      match /messages/{msgId} {
-        allow create: if isSignedIn()
-                      && request.resource.data.authorId == request.auth.uid;
-        allow read:   if isSignedIn()
-                      && (get(/databases/$(database)/documents/supportTickets/$(id)).data.userId == request.auth.uid
-                          || isAdmin());
-        allow update, delete: if isFullAdmin();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || support());
+      allow update: if signedIn() && (resource.data.userId == request.auth.uid || support())
+        && request.resource.data.userId == resource.data.userId;
+      allow delete: if fullAdmin();
+      match /messages/{messageId} {
+        allow read: if ticketAccess(id);
+        allow create: if ticketAccess(id) && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.body is string && request.resource.data.body.size() > 0
+          && ((request.resource.data.authorRole == 'admin' && support())
+            || (request.resource.data.authorRole == 'user' && get(/databases/$(database)/documents/supportTickets/$(id)).data.userId == request.auth.uid));
+        allow update, delete: if fullAdmin();
       }
     }
-
-    // ── Site settings & feature flags — public read, admin write
-    match /siteSettings/{doc} {
-      allow read:  if true;
-      allow write: if isFullAdmin();
+    function assignmentAccess(id) {
+      return fullAdmin() || (roleIn(['coach']) && get(/databases/$(database)/documents/coachAssignments/$(id)).data.coachId == request.auth.uid);
     }
-    match /featureFlags/{flag} {
-      allow read:  if true;
-      allow write: if isAdmin();
+    match /coachAssignments/{id} {
+      allow read: if fullAdmin() || (roleIn(['coach']) && resource.data.coachId == request.auth.uid);
+      allow create, update: if fullAdmin()
+        && request.resource.data.coachId is string && request.resource.data.memberId is string
+        && request.resource.data.memberName is string && request.resource.data.goal is string
+        && request.resource.data.status in ['active', 'archived']
+        && get(/databases/$(database)/documents/admins/$(request.resource.data.coachId)).data.role == 'coach'
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.memberId));
+      allow delete: if fullAdmin();
+      match /checkIns/{id2} {
+        allow read: if assignmentAccess(id);
+        allow create: if assignmentAccess(id)
+          && get(/databases/$(database)/documents/coachAssignments/$(id)).data.status == 'active'
+          && request.resource.data.keys().hasOnly(['coachId', 'body', 'nextDate', 'createdAt'])
+          && request.resource.data.coachId == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.body is string && request.resource.data.body.size() > 0 && request.resource.data.body.size() <= 4000;
+        allow update, delete: if fullAdmin();
+      }
     }
-
-    // ── Default deny
-    match /{document=**} {
-      allow read, write: if false;
+    match /siteSettings/{id} { allow read: if true; allow write: if fullAdmin(); }
+    match /settingsHistory/{id} {
+      allow read, delete: if fullAdmin();
+      allow create: if fullAdmin() && request.resource.data.kind in ['branding', 'access']
+        && request.resource.data.settings is map && request.resource.data.updatedBy == request.auth.uid;
+      allow update: if false;
     }
+    match /memberAccess/{uid} {
+      allow read: if owner(uid) || fullAdmin();
+      allow create, update: if fullAdmin()
+        && request.resource.data.keys().hasOnly(['plan', 'features', 'expiresAt', 'updatedAt', 'updatedBy'])
+        && request.resource.data.plan in ['free', 'plus', 'pro']
+        && request.resource.data.features is list
+        && request.resource.data.features.hasOnly(['training', 'nutrition', 'recipes', 'mealPlanner', 'barcode', 'grocery', 'progress', 'records', 'calendar', 'rewards', 'library'])
+        && (request.resource.data.expiresAt == null || request.resource.data.expiresAt is timestamp)
+        && request.resource.data.updatedBy == request.auth.uid && request.resource.data.updatedAt == request.time;
+      allow delete: if fullAdmin();
+    }
+    match /featureFlags/{id} { allow read: if true; allow write: if fullAdmin(); }
+    match /{document=**} { allow read, write: if false; }
   }
 }

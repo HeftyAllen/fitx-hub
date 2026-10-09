@@ -1,7 +1,7 @@
 # FitX Journey — Admin Guide
 
 Guide for the team running the platform: roles, each console section, and how
-admin changes reach members.
+admin changes reach members. See [Role workspaces and offline workouts](Role-Workspaces-Offline.md) for the current deployment and offline behavior notes.
 
 ---
 
@@ -12,9 +12,10 @@ their member dashboard.
 
 | Role | Label | Can open |
 | --- | --- | --- |
-| `admin` | Administrator | Everything: overview, users, content, activity, announcements, support, reports, settings |
-| `moderator` | Moderator | Overview, users, activity, announcements, support, reports |
-| `staff` | Coach / Staff | Overview, content, announcements, support |
+| `admin` | Administrator | Overview, users, coaching assignments, content, activity, announcements, support, reports, settings |
+| `moderator` | Moderator | Overview, member safety, activity, support |
+| `staff` | Support staff | Overview, support, announcements (read only) |
+| `coach` | Coach | Overview, assigned members and check-ins, content |
 | `readonly` | Analyst | Overview, activity, reports (view only, no writes) |
 
 Rules:
@@ -32,18 +33,13 @@ Rules:
 
 ## 2. Navigation
 
-The sidebar is grouped:
-- **Manage** — Users, Content, Activity
-- **Engage** — Announcements, Support
-- **Insights** — Reports
-- **System** — Settings (admins only)
+The sidebar shows only the tools allowed for the signed-in role. Each role has its own workspace name, visual accent and dashboard priorities. Administrators manage coach assignments; coaches see their assigned members and record check-ins.
 
 ---
 
 ## 3. Overview
 
-High-contrast stat grid: total members, active today/this week, workouts logged,
-food logs, open tickets. Workspace cards jump straight into the section you need.
+Each dashboard uses a role-specific focus panel, quick actions and metrics from bounded samples of recorded data. The UI identifies cached data and loading errors. Counts do not claim to be platform-wide totals.
 
 ---
 
@@ -138,8 +134,8 @@ page instantly — no redeploy needed.
 
 - All member data is scoped per user; members can only read and write their own
   documents.
-- Admin reads are gated on the admin record, and destructive/system writes are
-  gated on the full `admin` role.
+- Private fitness profiles and uploads are accessible to their owner and full administrators. Moderators read member summaries; support staff read tickets; coaches read assignments. Destructive/system writes require the full `admin` role.
+- Team invitations must be created by a full administrator and consumed atomically with the exact invited role. Members cannot self-promote.
 - Uploads are limited to 5 MB and image/PDF types; public assets are writable by
   full admins only.
 - Third-party food and exercise lookups run through a server function so
@@ -151,7 +147,7 @@ page instantly — no redeploy needed.
 
 | Task | Where |
 | --- | --- |
-| Promote a coach | Users → find member → Manage role → Coach / Staff |
+| Promote a coach | Members & team → find member → Manage role → Coach |
 | Find someone by member ID | Users → search `FX-…` |
 | Publish a 5-day program | Content → new plan → add days → publish |
 | Post maintenance notice | Announcements → warning tone → target everyone → set expiry |

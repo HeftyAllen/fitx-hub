@@ -1,10 +1,24 @@
-import { useEffect, useState } from "react";
-import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import {
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  canAccess, canManageSystem, canWrite, ROLE_SECTIONS,
-  type AdminRole, type AdminSection,
+  canAccess,
+  canManageSystem,
+  canWrite,
+  canPerform,
+  isAdminRole,
+  ROLE_SECTIONS,
+  type AdminRole,
+  type AdminSection,
+  type Capability,
 } from "@/lib/permissions";
 
 export type { AdminRole } from "@/lib/permissions";
@@ -18,14 +32,16 @@ export interface AdminInfo {
   can: (section: AdminSection) => boolean;
   canWrite: boolean;
   canManageSystem: boolean;
+  canPerform: (capability: Capability) => boolean;
 }
 
-// Hardcoded admin emails — always treated as full admin regardless of Firestore.
-const ADMIN_EMAILS = ["admin1@gmail.com", "admin101@gmail.com"];
-
-export function useAdmin(): AdminInfo {
+function useAdminState(): AdminInfo {
   const { user } = useAuth();
-  const [state, setState] = useState<{ loading: boolean; role: AdminRole | null }>({
+  const [state, setState] = useState<{
+    loading: boolean;
+    role: AdminRole | null;
+    uid?: string;
+  }>({
     loading: true,
     role: null,
   });
@@ -36,42 +52,42 @@ export function useAdmin(): AdminInfo {
       return;
     }
 
-    // Email allowlist short-circuit — also self-heals the admins/{uid} doc so
-    // Firestore/Storage rules (which read that doc) grant write access too.
-    if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) {
-      setState({ loading: false, role: "admin" });
-      (async () => {
-        try {
-          const ref = doc(db, "admins", user.uid);
-          const snap = await getDoc(ref);
-          if (!snap.exists()) {
-            await setDoc(ref, { role: "admin", grantedAt: serverTimestamp(), source: "allowlist" });
-          }
-        } catch { /* rules may block — allowlist UI access still works */ }
-      })();
-      return;
-    }
-
+    setState({ loading: true, role: null, uid: user.uid });
     const unsub = onSnapshot(
       doc(db, "admins", user.uid),
       (snap) => {
-        if (!snap.exists()) { setState({ loading: false, role: null }); return; }
-        const role = (snap.data().role ?? "readonly") as AdminRole;
-        setState({ loading: false, role: ROLE_SECTIONS[role] ? role : "readonly" });
+        const role = snap.data()?.role;
+        setState({
+          loading: false,
+          role: isAdminRole(role) ? role : null,
+          uid: user.uid,
+        });
       },
-      () => setState({ loading: false, role: null }),
+      () => setState({ loading: false, role: null, uid: user.uid }),
     );
     return unsub;
   }, [user]);
 
-  const role = state.role;
+  const role = state.uid === user?.uid ? state.role : null;
   return {
-    loading: state.loading,
+    loading: !!user && (state.loading || state.uid !== user.uid),
     role,
     isAdmin: !!role,
     sections: role ? ROLE_SECTIONS[role] : [],
     can: (section: AdminSection) => canAccess(role, section),
     canWrite: canWrite(role),
     canManageSystem: canManageSystem(role),
+    canPerform: (capability) => canPerform(role, capability),
   };
+}
+
+const AdminContext = createContext<AdminInfo | null>(null);
+export function AdminProvider({ children }: { children: ReactNode }) {
+  const value = useAdminState();
+  return createElement(AdminContext.Provider, { value }, children);
+}
+export function useAdmin(): AdminInfo {
+  const value = useContext(AdminContext);
+  if (!value) throw new Error("AdminProvider is missing");
+  return value;
 }

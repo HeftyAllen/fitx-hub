@@ -28,7 +28,7 @@ export async function listGrocery(uid: string): Promise<GroceryItem[]> {
 }
 
 export async function addGrocery(uid: string, item: Omit<GroceryItem, "id" | "createdAt">) {
-  await addDoc(col(uid), { ...item, createdAt: Timestamp.now() });
+  await addDoc(col(uid), { ...Object.fromEntries(Object.entries(item).filter(([, value]) => value !== undefined)), createdAt: Timestamp.now() });
 }
 
 export async function toggleGrocery(uid: string, id: string, checked: boolean) {

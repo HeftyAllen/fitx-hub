@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { BellRing, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { disablePush, enablePush, getPushStatus, type PushPreferences, type PushStatus } from "@/lib/pushNotifications";
+import { useBrand } from "@/contexts/SiteSettingsContext";
 import { toast } from "sonner";
 
 const COPY: Record<PushStatus, string> = {
@@ -15,6 +16,7 @@ const COPY: Record<PushStatus, string> = {
 };
 
 export default function PushNotifications({ preferences }: { preferences: PushPreferences }) {
+  const brand = useBrand();
   const [status, setStatus] = useState<PushStatus>("checking");
   const [busy, setBusy] = useState(false);
   useEffect(() => setStatus(getPushStatus()), []);
@@ -45,7 +47,7 @@ export default function PushNotifications({ preferences }: { preferences: PushPr
         <span className="rounded-lg bg-primary/10 p-2 text-primary"><BellRing size={16} /></span>
         <div className="min-w-0">
           <p className="text-sm font-semibold">Push notifications</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{COPY[status]}</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{COPY[status].split("FitX Journey").join(brand.name)}</p>
         </div>
       </div>
       {status === "open-in-new-tab" ? (

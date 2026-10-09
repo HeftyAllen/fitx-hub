@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from "npm:jose@5.10.0";
+import { decodeFirestoreFields } from "./member-access.ts";
 
 const FIREBASE_PROJECT_ID = "fit-x-journey";
 const FIREBASE_ISSUER = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
@@ -37,4 +38,14 @@ export async function getFirebaseAdminRole(uid: string, idToken: string): Promis
   if (!response.ok) throw new Error(`Admin role check failed [${response.status}]: ${await response.text()}`);
   const document = await response.json();
   return String(firestoreValue(document?.fields?.role) ?? "") || null;
+}
+
+export async function getFirebaseDocument(path: string, idToken: string): Promise<Record<string, unknown> | null> {
+  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${path}`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
+  if (response.status === 404) return null;
+  // Permission errors and transport failures must never be interpreted as a free feature.
+  if (!response.ok) throw new Error("Feature access could not be verified.");
+  const document = await response.json();
+  return decodeFirestoreFields(document.fields || {});
 }

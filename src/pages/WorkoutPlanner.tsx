@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import { useFeatureAccess } from "@/contexts/FeatureAccessContext";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Dumbbell, Play, Trash2, Copy, Edit2, Search, X, ChevronDown, ChevronUp,
@@ -10,13 +12,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, Timestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, Timestamp, onSnapshot } from "firebase/firestore";
 import { searchExercises, getExercisesByBodyPart, getExercisesByEquipment } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useChallenges } from "@/hooks/useChallenges";
 import { LibrarySection } from "@/pages/Library";
+import { loadWorkoutDraft, clearWorkoutDraft } from "@/lib/offline/drafts";
 
 interface ExerciseInPlan {
   id: string;
@@ -63,15 +66,29 @@ function getMuscleColor(bodyPart: string) {
 
 export default function WorkoutPlanner() {
   const { user } = useAuth();
+  const { getAccess } = useFeatureAccess();
+  const recordsAccess = getAccess("records");
+  const recordsAllowed = recordsAccess.state === "allowed" && !recordsAccess.loading && !recordsAccess.error;
   const navigate = useNavigate();
   const [plans, setPlans] = useState<WorkoutPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editingPlan, setEditingPlan] = useState<WorkoutPlan | null>(null);
   const [activeTab, setActiveTab] = useState<"plans" | "library" | "coach">("plans");
-  const { challenges } = useChallenges();
+  const { challenges } = useChallenges(recordsAllowed);
+  const [draft, setDraft] = useState(() => user ? loadWorkoutDraft(user.uid) : null);
 
-  useEffect(() => { if (user) fetchPlans(); }, [user]);
+  useEffect(() => {
+    setPlans([]);
+    if (!user) { setLoading(false); return; }
+    setLoading(true);
+    return onSnapshot(collection(db, "users", user.uid, "workoutPlans"), { includeMetadataChanges: true }, snap => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as WorkoutPlan));
+      data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setPlans(data);
+      setLoading(false);
+    }, () => { setLoading(false); toast.error("Could not load workout plans. Reconnect and try again."); });
+  }, [user]);
 
   const fetchPlans = async () => {
     if (!user) return;
@@ -106,23 +123,13 @@ export default function WorkoutPlanner() {
     <AppLayout>
       <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-5">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-heading font-bold gradient-text">Workout Planner</h1>
-            <p className="text-xs text-muted-foreground mt-1">Build, manage and start your workout plans</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={() => { setEditingPlan(null); setShowCreate(true); }}
-              className="gradient-bg text-primary-foreground rounded-xl glow-pulse gap-2"
-            >
-              <Plus size={16} /> New Plan
-            </Button>
-          </div>
-        </div>
+        {draft && <div className="workspace-card p-4 flex flex-wrap gap-4 items-center justify-between"><div><p className="font-semibold text-sm">Continue {draft.plan.name}</p><p className="text-xs text-muted-foreground mt-1">Your sets and notes were saved on this device.</p></div><div className="flex gap-2"><Button variant="outline" onClick={() => { if (user) clearWorkoutDraft(user.uid); setDraft(null); }}>Discard draft</Button><Button onClick={() => navigate("/workout-session")}>Resume workout</Button></div></div>}
+        <MemberPageHeader eyebrow="Your training space" title="Make room for movement." description="Your own plans, coach-created routines and the exercises to make them yours." actions={<Button onClick={() => { setEditingPlan(null); setShowCreate(true); }} className="gradient-bg text-primary-foreground rounded-xl gap-2"><Plus size={16} /> New Plan</Button>}>
+          <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs text-muted-foreground"><span><strong className="text-foreground">{plans.length}</strong> saved plans</span><span className="flex items-center gap-1.5"><Dumbbell size={13} />Sets and notes recover offline</span><Link to="/calendar" className="text-primary sm:ml-auto flex items-center gap-1.5"><CalIcon size={14} />View training calendar</Link></div>
+        </MemberPageHeader>
 
         {/* Active challenges mini-strip */}
-        {challenges.filter(c => c.joined && !c.completed && ["workouts", "streak"].includes(c.type)).length > 0 && (
+        {recordsAllowed && challenges.filter(c => c.joined && !c.completed && ["workouts", "streak"].includes(c.type)).length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
             {challenges.filter(c => c.joined && !c.completed && ["workouts", "streak"].includes(c.type)).map(c => {
               const pct = Math.min((c.progress / c.target) * 100, 100);
@@ -146,7 +153,7 @@ export default function WorkoutPlanner() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 p-1 bg-secondary/40 rounded-2xl w-fit border border-white/[0.05]">
+        <div className="flex gap-1 p-1 bg-secondary/60 rounded-2xl w-fit max-w-full overflow-x-auto border border-border" aria-label="Training sections">
           {[
             { id: "plans" as const, label: "My Plans", icon: LayoutGrid },
             { id: "coach" as const, label: "Coach Library", icon: LibraryIcon },
@@ -154,8 +161,9 @@ export default function WorkoutPlanner() {
           ].map(tab => (
             <button
               key={tab.id}
+              aria-pressed={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
                 activeTab === tab.id
                   ? "gradient-bg text-primary-foreground shadow-lg"
                   : "text-muted-foreground hover:text-foreground"
@@ -297,9 +305,8 @@ function PlansTab({ plans, loading, onEdit, onDelete, onDuplicate, onStart, onCr
           transition={{ delay: idx * 0.05 }}
           className="glass-card rounded-2xl overflow-hidden group hover:border-white/[0.15] transition-all"
         >
-          {/* Plan header with gradient accent */}
-          <div className="h-1.5 gradient-bg" />
-          <div className="p-5 space-y-4">
+          <div className="flex items-center justify-between px-5 pt-5"><span className="member-eyebrow !mb-0">Training plan {String(idx + 1).padStart(2, "0")}</span><span className="w-8 h-8 grid place-items-center bg-primary/10 text-primary rounded-lg"><Dumbbell size={15} /></span></div>
+          <div className="p-5 pt-3 space-y-4">
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
                 <h3 className="font-heading font-bold text-lg text-foreground truncate">{plan.name}</h3>
@@ -732,6 +739,9 @@ function CreatePlanModal({ existingPlan, onClose, onSave }: {
   const [days, setDays] = useState<string[]>(existingPlan?.days || []);
   const [showSearch, setShowSearch] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
+  const { getAccess } = useFeatureAccess();
+  const calendarAccess = getAccess("calendar");
+  const calendarAllowed = calendarAccess.state === "allowed" && !calendarAccess.loading && !calendarAccess.error;
   const [syncToCalendar, setSyncToCalendar] = useState(false);
   const [syncDays, setSyncDays] = useState<string[]>([]);
   const [weeks, setWeeks] = useState(4);
@@ -839,11 +849,13 @@ function CreatePlanModal({ existingPlan, onClose, onSave }: {
                 <CalIcon size={16} className="text-primary" />
                 <div>
                   <p className="text-sm font-semibold">Sync to Calendar</p>
-                  <p className="text-[11px] text-muted-foreground">Auto-schedule this workout on chosen days</p>
+                  <p className="text-[11px] text-muted-foreground">{calendarAllowed ? "Auto-schedule this workout on chosen days" : "Calendar access is currently unavailable"}</p>
                 </div>
               </div>
               <button
                 type="button"
+                aria-label="Sync workout to calendar"
+                disabled={!calendarAllowed}
                 onClick={() => setSyncToCalendar(v => !v)}
                 className={`relative w-11 h-6 rounded-full transition-colors ${syncToCalendar ? "bg-primary" : "bg-secondary"}`}
               >
@@ -851,7 +863,7 @@ function CreatePlanModal({ existingPlan, onClose, onSave }: {
               </button>
             </label>
             <AnimatePresence>
-              {syncToCalendar && (
+              {syncToCalendar && calendarAllowed && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden space-y-3">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Pick days to schedule</p>
@@ -886,8 +898,8 @@ function CreatePlanModal({ existingPlan, onClose, onSave }: {
             <Button onClick={() => {
               if (!name.trim()) { toast.error("Enter a plan name"); return; }
               if (exercises.length === 0) { toast.error("Add at least one exercise"); return; }
-              if (syncToCalendar && syncDays.length === 0) { toast.error("Pick at least one day to sync"); return; }
-              onSave({ name: name.trim(), exercises, days }, { syncToCalendar, syncDays, weeks });
+              if (syncToCalendar && calendarAllowed && syncDays.length === 0) { toast.error("Pick at least one day to sync"); return; }
+              onSave({ name: name.trim(), exercises, days }, { syncToCalendar: syncToCalendar && calendarAllowed, syncDays, weeks });
             }} className="flex-1 gradient-bg text-primary-foreground rounded-xl">
               {existingPlan ? "Update Plan" : "Save Plan"}
             </Button>

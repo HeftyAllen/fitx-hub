@@ -12,7 +12,7 @@ const BodySchema = z.object({
 });
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/firebase_messaging";
-const ALLOWED_ROLES = new Set(["admin", "moderator", "staff"]);
+const ALLOWED_ROLES = new Set(["admin"]);
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

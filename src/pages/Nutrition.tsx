@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import FeatureGate from "@/components/member/FeatureGate";
+import { useFeatureAccess } from "@/contexts/FeatureAccessContext";
+import { type FeatureId } from "@/lib/feature-access";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -26,7 +30,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
 import {
-  doc, setDoc, getDoc, collection, getDocs, addDoc, deleteDoc, Timestamp,
+  doc, setDoc, getDoc, collection, getDocs, addDoc, deleteDoc, Timestamp, onSnapshot,
 } from "firebase/firestore";
 import { format, subDays, addDays, startOfWeek } from "date-fns";
 import {
@@ -710,13 +714,18 @@ function DiaryTab() {
   const [dayLog, setDayLog] = useState<DayLog>({ date: dateStr, foods: [], water: 0 });
   const [activeFoodSearch, setActiveFoodSearch] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingSaves, setPendingSaves] = useState(0);
+  const [diarySaved, setDiarySaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
   /* Load from Firestore for the selected date */
   useEffect(() => {
     if (!uid) { setLoading(false); return; }
     setLoading(true);
-    getDoc(doc(db, "users", uid, "foodLogs", dateStr)).then(snap => {
+    setDiarySaved(false); setSaveError("");
+    return onSnapshot(doc(db, "users", uid, "foodLogs", dateStr), { includeMetadataChanges: true }, snap => {
+      if (snap.metadata.fromCache && !snap.exists() && navigator.onLine) return;
       if (snap.exists()) {
         const d = snap.data() as DayLog;
         setDayLog({ date: dateStr, foods: d.foods || [], water: d.water || 0 });
@@ -724,14 +733,16 @@ function DiaryTab() {
         setDayLog({ date: dateStr, foods: [], water: 0 });
       }
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }, () => setLoading(false));
   }, [uid, dateStr]);
 
-  /* Save to Firestore (debounced via direct call after state mutations) */
-  const persist = async (next: DayLog) => {
+  /* Keep save acknowledgement visible before a reload or leaving the app. */
+  const persist = async (next: Partial<DayLog>) => {
     if (!uid) return;
-    try { await setDoc(doc(db, "users", uid, "foodLogs", dateStr), next); }
-    catch (e) { console.error(e); }
+    setPendingSaves(count => count + 1); setDiarySaved(false); setSaveError("");
+    try { await setDoc(doc(db, "users", uid, "foodLogs", dateStr), next, { merge: true }); setDiarySaved(true); }
+    catch { setSaveError("Diary changes could not save. Please retry."); toast.error("Diary changes could not save. Please retry."); }
+    finally { setPendingSaves(count => Math.max(0, count - 1)); }
   };
 
   const totals = useMemo(() => {
@@ -766,8 +777,9 @@ function DiaryTab() {
   };
 
   const setWater = (n: number) => {
+    if (loading) return;
     const next = { ...dayLog, water: n };
-    setDayLog(next); persist(next);
+    setDayLog(next); persist({ date: dateStr, water: n });
   };
 
   const copyYesterday = async () => {
@@ -869,6 +881,9 @@ function DiaryTab() {
               return (
                 <motion.button
                   key={i}
+                  aria-label={`Log ${i + 1} glasses of water`}
+                  aria-pressed={filled}
+                  disabled={loading}
                   onClick={() => setWater(i + 1 === dayLog.water ? i : i + 1)}
                   whileTap={{ scale: 0.85 }}
                   whileHover={{ scale: 1.06 }}
@@ -901,11 +916,12 @@ function DiaryTab() {
             })}
           </div>
           <div className="flex gap-1.5">
-            <button onClick={() => setWater(Math.max(0, dayLog.water - 1))}
+            <button aria-label="Remove a glass of water" disabled={loading} onClick={() => setWater(Math.max(0, dayLog.water - 1))}
               className="flex-1 py-1.5 rounded-lg bg-secondary text-xs font-bold text-muted-foreground hover:text-foreground">−</button>
-            <button onClick={() => setWater(Math.min(WATER_GOAL, dayLog.water + 1))}
+            <button aria-label="Add a glass of water" disabled={loading} onClick={() => setWater(Math.min(WATER_GOAL, dayLog.water + 1))}
               className="flex-1 py-1.5 rounded-lg bg-cyan-500/20 text-xs font-bold text-cyan-400 hover:bg-cyan-500/30">+ Glass</button>
           </div>
+          <p role="status" className={`text-[10px] mt-3 ${saveError ? "text-destructive" : "text-muted-foreground"}`}>{saveError || (pendingSaves ? "Saving diary… Keep this tab open until saving finishes." : diarySaved ? "Diary saved" : loading ? "Loading your diary…" : "Ready to log your day")}</p>
         </div>
 
 
@@ -1384,6 +1400,8 @@ function MealPlanTab({ onLog }: { onLog: (recipe: any, meal: string) => void }) 
 
 /* ────────────────── BARCODE SCAN TAB (FatSecret) ────────────────── */
 function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
+  const { getAccess } = useFeatureAccess();
+  const groceryAccess = getAccess("grocery");
   const { user } = useAuth();
   const uid = user?.uid ?? null;
 
@@ -1475,6 +1493,7 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
 
   const addToGrocery = async () => {
     if (!product || !uid) return;
+    if (groceryAccess.state !== "allowed" || groceryAccess.loading || groceryAccess.error) { toast.error("Grocery access is unavailable. Check your membership."); return; }
     try {
       await addGrocery(uid, {
         name: product.food_name,
@@ -1498,10 +1517,10 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
             <ScanBarcode size={18} className="text-primary" />
             <h3 className="font-bold text-base">Scan a barcode</h3>
           </div>
-          <Link to="/grocery"
+          {groceryAccess.state !== "disabled" && <Link to="/grocery"
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-bold text-emerald-400 hover:bg-emerald-500/20 transition-colors">
             <ShoppingCart size={11} /> Grocery list
-          </Link>
+          </Link>}
         </div>
 
         <div className="aspect-video bg-secondary rounded-xl overflow-hidden relative flex items-center justify-center">
@@ -1608,10 +1627,10 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
               ))}
             </div>
 
-            <button onClick={addToGrocery}
+            {groceryAccess.state !== "disabled" && <button onClick={addToGrocery} disabled={groceryAccess.state !== "allowed" || groceryAccess.loading || !!groceryAccess.error}
               className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-colors">
               <ShoppingCart size={13} /> Add to grocery list
-            </button>
+            </button>}
           </div>
         )}
       </div>
@@ -1622,6 +1641,8 @@ function BarcodeTab({ onLog }: { onLog: (food: LoggedFood) => void }) {
 
 /* ────────────────── MAIN PAGE ────────────────── */
 export default function Nutrition() {
+  const { getAccess, config } = useFeatureAccess();
+  const tabFeature: Record<Tab, FeatureId> = { Diary: "nutrition", Recipes: "recipes", "Meal Plan": "mealPlanner", "Barcode Scan": "barcode" };
   const [activeTab, setActiveTab] = useState<Tab>("Diary");
   const { user, userProfile } = useAuth();
   const uid = user?.uid ?? null;
@@ -1644,7 +1665,7 @@ export default function Nutrition() {
   useEffect(() => {
     if (!uid) return;
     const today = format(new Date(), "yyyy-MM-dd");
-    getDoc(doc(db, "users", uid, "foodLogs", today)).then(snap => {
+    return onSnapshot(doc(db, "users", uid, "foodLogs", today), snap => {
       if (snap.exists()) {
         const d = snap.data() as DayLog;
         const t = (d.foods || []).reduce((acc, f) => ({
@@ -1652,9 +1673,9 @@ export default function Nutrition() {
           protein:  acc.protein  + (f.protein  || 0),
         }), { calories: 0, protein: 0 });
         setHeaderTotals(t);
-      }
-    });
-  }, [uid, activeTab]);
+      } else setHeaderTotals({ calories: 0, protein: 0 });
+    }, () => setHeaderTotals({ calories: 0, protein: 0 }));
+  }, [uid]);
 
   // Streak (consecutive days with foods)
   const [streak, setStreak] = useState(0);
@@ -1718,58 +1739,31 @@ export default function Nutrition() {
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 pb-24 space-y-6">
 
-        {/* ── HEADER (matches mockup) ── */}
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-          className="relative rounded-3xl overflow-hidden p-6 md:p-7"
-          style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.20) 0%, rgba(6,182,212,0.10) 100%)" }}>
-          <div className="absolute inset-0 border border-primary/20 rounded-3xl pointer-events-none" />
-          <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full opacity-10 blur-3xl bg-cyan-500" />
-          <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full opacity-10 blur-3xl bg-primary" />
-
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-black tracking-tight">Nutrition</h1>
-              <p className="text-muted-foreground text-sm mt-1">Track meals, discover recipes and nail your macros daily.</p>
-            </div>
-
-            <div className="flex items-center gap-5 sm:gap-7">
-              <div className="text-right">
-                <p className="text-2xl font-black">{headerTotals.calories || MACRO_GOALS.calories}</p>
-                <p className="text-[10px] text-muted-foreground">{headerTotals.calories ? "today / " + MACRO_GOALS.calories.toLocaleString() : "daily calorie goal"}</p>
-              </div>
-              <div className="w-px h-9 bg-border" />
-              <div className="text-right">
-                <p className="text-2xl font-black text-cyan-400">{headerTotals.protein}g</p>
-                <p className="text-[10px] text-muted-foreground">protein {headerTotals.protein ? "today" : "goal " + MACRO_GOALS.protein + "g"}</p>
-              </div>
-              <div className="w-px h-9 bg-border hidden sm:block" />
-              <div className="text-right hidden sm:block">
-                <p className="text-2xl font-black text-amber-400">{streak}</p>
-                <p className="text-[10px] text-muted-foreground">day streak</p>
-              </div>
-            </div>
+        <MemberPageHeader eyebrow="Food that fits your life" title="Fuel your everyday." description="Keep your meals in one place. Find recipes, build a meal plan and follow your daily targets." actions={getAccess("grocery").state !== "disabled" ? <Link to="/grocery-list" className="member-action secondary"><ShoppingCart size={15} />Grocery list</Link> : undefined}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="member-card p-4"><p className="text-[10px] text-muted-foreground mb-2">Calories logged today</p><p className="text-2xl font-semibold tracking-tight">{Math.round(headerTotals.calories)}<span className="text-xs font-normal text-muted-foreground ml-2">/ {MACRO_GOALS.calories.toLocaleString()} kcal</span></p></div>
+            <div className="member-card p-4"><p className="text-[10px] text-muted-foreground mb-2">Protein logged today</p><p className="text-2xl font-semibold tracking-tight">{Math.round(headerTotals.protein)}<span className="text-xs font-normal text-muted-foreground ml-2">/ {MACRO_GOALS.protein} g</span></p></div>
+            <div className="member-card p-4 col-span-2 sm:col-span-1"><p className="text-[10px] text-muted-foreground mb-2">Food diary streak</p><p className="text-2xl font-semibold tracking-tight">{streak}<span className="text-xs font-normal text-muted-foreground ml-2">days logged</span></p></div>
           </div>
-        </motion.div>
+        </MemberPageHeader>
 
         {/* ── TABS + API USAGE ── */}
         <div className="flex items-center gap-3 justify-between">
           <div className="flex-1 min-w-0 -mx-1 px-1 overflow-x-auto scrollbar-hide">
             <div className="inline-flex items-center gap-1 p-1 bg-secondary rounded-2xl">
-              {TABS.map(tab => {
+              {TABS.filter(tab => getAccess(tabFeature[tab]).state !== "disabled").map(tab => {
                 const Icon = TAB_ICONS[tab];
-                const isNew = tab === "Barcode Scan";
+
                 return (
-                  <button key={tab} onClick={() => setActiveTab(tab)}
+                  <button key={tab} aria-pressed={activeTab === tab} onClick={() => setActiveTab(tab)}
                     className={`relative flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
                       activeTab === tab
                         ? "gradient-bg text-primary-foreground shadow-lg shadow-primary/20"
                         : "text-muted-foreground hover:text-foreground"
                     }`}>
                     <Icon size={14} />
-                    <span>{tab.split(" ")[0]}</span>
-                    {isNew && (
-                      <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full text-[8px] font-black bg-amber-500 text-amber-950 leading-none">new</span>
-                    )}
+                    <span>{config.features[tabFeature[tab]].label || tab}{getAccess(tabFeature[tab]).state === "premium" ? " · Premium" : ""}</span>
+
                   </button>
                 );
               })}
@@ -1783,9 +1777,9 @@ export default function Nutrition() {
           <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
             {activeTab === "Diary"        && <DiaryTab />}
-            {activeTab === "Recipes"      && <RecipesTab onLog={logRecipeToToday} />}
-            {activeTab === "Meal Plan"    && <MealPlanTab onLog={logRecipeToToday} />}
-            {activeTab === "Barcode Scan" && <BarcodeTab onLog={logFoodToToday} />}
+            {activeTab === "Recipes"      && <FeatureGate inline feature="recipes"><RecipesTab onLog={logRecipeToToday} /></FeatureGate>}
+            {activeTab === "Meal Plan"    && <FeatureGate inline feature="mealPlanner"><MealPlanTab onLog={logRecipeToToday} /></FeatureGate>}
+            {activeTab === "Barcode Scan" && <FeatureGate inline feature="barcode"><BarcodeTab onLog={logFoodToToday} /></FeatureGate>}
           </motion.div>
         </AnimatePresence>
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import MemberPageHeader from "@/components/member/MemberPageHeader";
 import { motion } from "framer-motion";
 import { Sparkles, X, Plus, Loader2 } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
@@ -81,21 +82,8 @@ export default function MealPlanner() {
 
   return (
     <AppLayout>
-      <div className="max-w-6xl mx-auto p-4 md:p-6 pt-20 space-y-6">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-heading font-bold">Meal Planner</h1>
-            <p className="text-xs text-muted-foreground mt-1">Week of {format(weekStart, "d MMM yyyy")}</p>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={clearWeek} className="px-3 py-2 rounded-xl bg-secondary text-xs font-semibold text-muted-foreground hover:text-foreground">
-              Clear week
-            </button>
-            <button disabled className="flex items-center gap-2 px-4 py-2 rounded-xl gradient-bg text-primary-foreground text-sm font-medium opacity-60 cursor-not-allowed">
-              <Sparkles size={16} /> Generate Plan
-            </button>
-          </div>
-        </div>
+      <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
+        <MemberPageHeader eyebrow="Plan once, eat well all week" title="Your meal planner" description={`Choose meals for the week of ${format(weekStart, "d MMM yyyy")}. Tap a meal slot to add a saved recipe.`} actions={<button onClick={clearWeek} className="member-action secondary">Clear week</button>} />
 
         {loading ? (
           <div className="flex items-center justify-center py-16">

@@ -10,7 +10,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "test:rules": "firebase emulators:exec --project demo-fitx-workspaces --only firestore,storage \"node --test tests/firestore.rules.test.mjs\"",
+    "test:e2e": "firebase emulators:exec --project demo-fitx-workspaces --only auth,firestore \"vite build --mode e2e && playwright test\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -41,7 +44,7 @@
     "@radix-ui/react-toggle": "^1.1.9",
     "@radix-ui/react-toggle-group": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.7",
-    "@supabase/supabase-js": "^2.108.2",
+    "@supabase/supabase-js": "2.117.3",
     "@tanstack/react-query": "^5.83.0",
     "@zxing/browser": "^0.2.0",
     "@zxing/library": "^0.23.0",
@@ -50,7 +53,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
-    "firebase": "^12.15.0",
+    "firebase": "12.19.0",
     "framer-motion": "^12.38.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
@@ -73,7 +76,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
-    "@playwright/test": "^1.57.0",
+    "@firebase/rules-unit-testing": "5.0.2",
+    "@playwright/test": "1.57.0",
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",
@@ -86,6 +90,8 @@
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
+    "fake-indexeddb": "6.2.5",
+    "firebase-tools": "14.18.0",
     "globals": "^15.15.0",
     "jsdom": "^20.0.3",
     "postcss": "^8.5.6",
