@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { initializeTestEnvironment } from "@firebase/rules-unit-testing";
-import { doc, setDoc, getDoc, Timestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, deleteField, Timestamp } from "firebase/firestore";
 import type { RulesTestEnvironment } from "@firebase/rules-unit-testing";
 let env: RulesTestEnvironment;
 const identities: Record<string, string> = {};
@@ -95,8 +95,13 @@ test.beforeEach(async () => env.withSecurityRulesDisabled(async ctx => {
   await setDoc(doc(ctx.firestore(), "siteSettings", "branding"), {});
   await setDoc(doc(ctx.firestore(), "siteSettings", "access"), { features: {}, membership: {} });
   await setDoc(doc(ctx.firestore(), "memberAccess", identities.member), { plan: "free", features: [], expiresAt: null });
+  await setDoc(doc(ctx.firestore(), "users", identities.member, "profile", "data"), { name: "Alex Member", greetingName: "", daysPerWeek: 3, membershipInterest: deleteField() }, { merge: true });
+  await setDoc(doc(ctx.firestore(), "users", identities.member), { name: "Alex Member", membershipInterest: deleteField() }, { merge: true });
 }));
 async function login(page: Page, role: string) {
+  // External fonts are optional; keep local regression checks independent of
+  // network font failures and exercise the app's ordinary fallback typography.
+  await page.route("**/fonts.googleapis.com/**", route => route.fulfill({ contentType: "text/css", body: "" }));
   await page.goto("/auth");
   await page
     .getByPlaceholder("Email", { exact: true })
@@ -260,7 +265,7 @@ test("member features keep working in desktop, mobile and light mode", async ({ 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: "test-results/member-today-mobile.png", fullPage: true });
   await page.getByRole("button", { name: "Switch to light mode" }).click();
-  for (const path of ["/workout-planner", "/nutrition", "/progress", "/records", "/rewards", "/calendar", "/library", "/recipes", "/meal-planner", "/grocery-list", "/exercise-library", "/settings", "/support"]) {
+  for (const path of ["/workout-planner", "/nutrition", "/progress", "/records", "/rewards", "/calendar", "/library", "/recipes", "/meal-planner", "/grocery-list", "/exercise-library", "/settings", "/support", "/membership"]) {
     await page.goto(path);
     await expect(page.locator(".member-shell").first()).toBeVisible();
     await expect(page.locator("main h1").first()).toBeVisible();
@@ -406,4 +411,106 @@ test("Nutrition child paywalls cannot be bypassed through embedded tabs", async 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/dashboard");
   expect(await page.locator(".member-today-hero").evaluate(element => getComputedStyle(element, "::after").animationName)).toBe("none");
+});
+
+test("member names survive sign-in, preferred greetings sync and weekly targets are editable", async ({ page }) => {
+  test.setTimeout(90000);
+  const visitedRoutes: string[] = [];
+  page.on("framenavigated", frame => { if (frame === page.mainFrame()) visitedRoutes.push(new URL(frame.url()).pathname); });
+  await env.withSecurityRulesDisabled(async ctx => {
+    await setDoc(doc(ctx.firestore(), "users", identities.member), { name: "FitX QA" }, { merge: true });
+    await setDoc(doc(ctx.firestore(), "users", identities.member, "profile", "data"), { name: "Jamie Morgan" }, { merge: true });
+  });
+  await login(page, "member");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Jamie Morgan");
+  await page.goto("/settings");
+  await expect(page.getByLabel("Display Name", { exact: true })).toHaveValue("Jamie Morgan");
+  await page.getByLabel("Greeting name (optional)", { exact: true }).fill("Jamie");
+  await page.getByRole("button", { name: "Save Changes", exact: true }).click();
+  await expect.poll(async () => {
+    let savedName;
+    await env.withSecurityRulesDisabled(async ctx => { savedName = (await getDoc(doc(ctx.firestore(), "users", identities.member, "profile", "data"))).data()?.greetingName; });
+    return savedName;
+  }).toBe("Jamie");
+  await page.goto("/dashboard");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(", Jamie.");
+  await page.getByRole("link", { name: "Edit weekly training target" }).click();
+  await page.getByLabel("Weekly training target", { exact: true }).selectOption("5");
+  await page.getByRole("button", { name: "Save Changes", exact: true }).click();
+  await expect.poll(async () => {
+    let target;
+    await env.withSecurityRulesDisabled(async ctx => { target = (await getDoc(doc(ctx.firestore(), "users", identities.member, "profile", "data"))).data()?.daysPerWeek; });
+    return target;
+  }).toBe(5);
+  await page.goto("/dashboard");
+  await expect(page.getByText("/ 5", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await login(page, "member");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(", Jamie.");
+  await page.goto("/settings");
+  await expect(page.getByLabel("Display Name", { exact: true })).toHaveValue("Jamie Morgan");
+  await expect(page.getByLabel("Greeting name (optional)", { exact: true })).toHaveValue("Jamie");
+  expect(visitedRoutes).not.toContain("/onboarding");
+});
+
+test("team accounts can switch into their own member view and return without changing roles", async ({ page }) => {
+  await login(page, "admin");
+  await page.locator(".workspace-member-switch").click();
+  await expect(page).toHaveURL(/\/dashboard\?view=member$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Admin Team");
+  await expect(page.locator(".member-preview-banner")).toContainText("Administrator preview access");
+  const nav = page.getByRole("navigation", { name: "Member navigation", exact: true });
+  await nav.getByRole("link", { name: "Training", exact: true }).click();
+  await nav.getByRole("link", { name: "Today", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\?view=member$/);
+  await page.locator(".member-preview-banner").getByRole("link", { name: "Back to team workspace" }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  await page.screenshot({ path: "test-results/admin-colour-upgrade.png", fullPage: true });
+});
+
+test("free plans show future prices, save interest live for admins and preserve free access", async ({ page, browser }) => {
+  test.setTimeout(90000);
+  await env.withSecurityRulesDisabled(async ctx => {
+    await setDoc(doc(ctx.firestore(), "users", identities.member, "foodLogs", new Date().toISOString().slice(0, 10)), { foods: [], water: 2 });
+  });
+  const memberContext = await browser.newContext();
+  const member = await memberContext.newPage();
+  await login(member, "member");
+  await member.goto("/membership");
+  await expect(member.getByText("Everything available today is free.", { exact: true })).toBeVisible();
+  await expect(member.getByRole("region", { name: "Free plan", exact: true })).toContainText("Nutrition");
+  await expect(member.getByRole("region", { name: "Plus plan", exact: true })).toContainText("R79 / month");
+  await expect(member.getByRole("region", { name: "Pro plan", exact: true })).toContainText("R149 / month");
+  await member.screenshot({ path: "test-results/membership-desktop.png", fullPage: true });
+  await member.getByRole("button", { name: "Notify me about Pro", exact: true }).click();
+  await expect(member.getByRole("button", { name: "Interest saved", exact: true })).toBeVisible();
+  await login(page, "admin");
+  await page.goto("/admin/settings");
+  await page.getByRole("tab", { name: "Memberships", exact: true }).click();
+  await page.getByRole("button", { name: /^Interested in Pro/ }).click();
+  await page.getByRole("button", { name: /member@fitx.test/ }).click();
+  await expect(page.getByText("Registered interest: Pro", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Membership plan", { exact: true })).toHaveValue("free");
+  await member.reload();
+  await expect(member.getByRole("button", { name: "Interest saved", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Feature access", exact: true }).click();
+  await page.getByLabel("Plus display price", { exact: true }).fill("R89 / month");
+  await page.getByLabel("Planned Plus extras", { exact: true }).fill("Weekly performance insights\nPersonal training recommendations");
+  await page.getByRole("button", { name: "Publish feature access" }).click();
+  await expect(member.getByRole("region", { name: "Plus plan", exact: true })).toContainText("R89 / month");
+  await expect(member.getByText("Weekly performance insights", { exact: true })).toBeVisible();
+  await member.getByRole("button", { name: "Remove my interest", exact: true }).click();
+  await expect(member.getByRole("button", { name: "Notify me about Pro", exact: true })).toBeVisible();
+  await member.setViewportSize({ width: 390, height: 844 });
+  await member.getByRole("button", { name: "Switch to light mode", exact: true }).click();
+  await member.evaluate(() => window.scrollTo(0, 0));
+  await member.screenshot({ path: "test-results/membership-mobile-light.png", fullPage: true });
+  expect(await member.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await member.goto("/dashboard");
+  await expect(member.getByRole("region", { name: "Today check-in", exact: true })).toBeVisible();
+  await expect(member.getByRole("link", { name: "Make time for water: complete", exact: true })).toBeVisible();
+  await member.emulateMedia({ reducedMotion: "reduce" });
+  expect(await member.locator(".member-hero-ring").evaluate(element => getComputedStyle(element).animationName)).toBe("none");
+  await member.screenshot({ path: "test-results/member-today-light.png", fullPage: true });
+  await memberContext.close();
 });

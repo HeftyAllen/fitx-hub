@@ -39,6 +39,7 @@ import {
 import { ROLE_META, SECTION_PATH, type AdminSection } from "@/lib/permissions";
 import { toast } from "sonner";
 import SyncStatus from "@/components/SyncStatus";
+import { memberGreetingName } from "@/lib/member-identity";
 import logoFallback from "@/assets/logo.png";
 
 export const SECTION_META: Record<
@@ -94,7 +95,8 @@ export const SECTION_META: Record<
 
 export default function AdminLayout() {
   const { role, sections } = useAdmin();
-  const { user, logout } = useAuth();
+  const { user, userProfile, logout } = useAuth();
+  const name = memberGreetingName(userProfile, user?.displayName) || "Your account";
   const { theme, toggleTheme } = useTheme();
   const brand = useBrand(logoFallback);
   const navigate = useNavigate();
@@ -164,18 +166,19 @@ export default function AdminLayout() {
       </nav>
       <div className="border-t border-border pt-5 mt-8 space-y-4">
         <Link
-          to="/workout-planner"
+          to="/dashboard?view=member"
+          onClick={() => setMobileOpen(false)}
           className="flex items-center justify-between text-xs text-muted-foreground px-3 hover:text-foreground"
         >
-          Open member app <ArrowUpRight size={14} />
+          Member view <ArrowUpRight size={14} />
         </Link>
         <div className="flex items-center gap-3 px-3">
           <span className="h-9 w-9 rounded-full bg-secondary grid place-items-center font-bold workspace-accent">
-            {user?.email?.[0]?.toUpperCase() || "F"}
+            {name[0].toUpperCase()}
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs font-semibold">
-              {user?.displayName || user?.email?.split("@")[0]}
+              {name}
             </p>
             <p className="text-[10px] text-muted-foreground">{meta.label}</p>
           </div>
@@ -238,6 +241,7 @@ export default function AdminLayout() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <Link to="/dashboard?view=member" className="workspace-member-switch"><Dumbbell size={15} /><span className="hidden sm:inline">Member view</span></Link>
             <SyncStatus compact />
             <Button
               variant="ghost"

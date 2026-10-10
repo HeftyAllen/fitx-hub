@@ -3,10 +3,11 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFeatureAccess } from "@/contexts/FeatureAccessContext";
 import { featureForPath } from "@/lib/feature-access";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useSiteSettings } from "@/contexts/SiteSettingsContext";
 import { useBrand } from "@/contexts/SiteSettingsContext";
 import { useAdmin } from "@/hooks/useAdmin";
+import { memberGreetingName } from "@/lib/member-identity";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useNotifications, type NotifCategory } from "@/hooks/useNotifications";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
@@ -52,6 +53,7 @@ export default function MemberNavigation() {
   const { isAdmin } = useAdmin();
   const brand = useBrand();
   const settings = useSiteSettings();
+  const reduceMotion = useReducedMotion() || settings.motion !== "full";
   const { getAccess, config } = useFeatureAccess();
   const visible = (item: NavItem) => { const id = featureForPath(item.to); return !id || getAccess(id).state !== "disabled"; };
   const premium = (item: NavItem) => { const id = featureForPath(item.to); return !!id && getAccess(id).state === "premium"; };
@@ -62,20 +64,21 @@ export default function MemberNavigation() {
   const prefs = userProfile?.notifications;
   const { notifications, unreadCount, markRead, markAllRead, dismiss, dismissAll, formatTime } = useNotifications(prefs);
   if (!user) return null;
-  const name = userProfile?.name || user.displayName || "Your profile";
+  const name = memberGreetingName(userProfile, user.displayName) || "Your profile";
+  const destination = (item: NavItem) => item.to === "/dashboard" && isAdmin ? "/dashboard?view=member" : item.to;
   const avatar = userProfile?.photoURL || user.photoURL;
   const active = (item: NavItem) => pathname === item.to || !!item.related?.includes(pathname);
   const currentItem = [...groups.flatMap(g => g.links), ...extras].find(item => item.to === pathname);
   const section = currentItem ? label(currentItem) : "Your journey";
-  const brandLink = <Link to="/dashboard" className="member-brand" aria-label={`${brand.name} home`} onClick={() => setMenuOpen(false)}>
+  const brandLink = <Link to={isAdmin ? "/dashboard?view=member" : "/dashboard"} className="member-brand" aria-label={`${brand.name} home`} onClick={() => setMenuOpen(false)}>
     <span className="member-brand-mark">{brand.logo ? <img src={brand.logo} alt="" className="h-full w-full object-contain p-1" /> : <Dumbbell size={21} strokeWidth={2.5} />}</span>
     <span><strong>{brand.name}</strong><small>{brand.tagline}</small></span>
   </Link>;
   const nav = <nav aria-label="Member navigation" className="space-y-6">
     {groups.map(group => <div key={group.label}>
       <p className="member-nav-label">{group.label}</p>
-      <div className="space-y-1">{group.links.filter(visible).map(item => <Link key={item.to} to={item.to} onClick={() => setMenuOpen(false)} aria-current={active(item) ? "page" : undefined} className={`member-nav-link ${active(item) ? "is-active" : ""}`}>
-        <item.icon size={18} /><span>{label(item)}</span>{premium(item) ? <LockKeyhole size={13} className="ml-auto" aria-label="Premium feature" /> : active(item) ? <motion.span layoutId="member-active-nav" className="ml-auto"><ChevronRight size={15} /></motion.span> : null}
+      <div className="space-y-1">{group.links.filter(visible).map(item => <Link key={item.to} to={destination(item)} data-section={item.to.slice(1)} onClick={() => setMenuOpen(false)} aria-current={active(item) ? "page" : undefined} className={`member-nav-link ${active(item) ? "is-active" : ""}`}>
+        <item.icon size={18} /><span>{label(item)}</span>{premium(item) ? <LockKeyhole size={13} className="ml-auto" aria-label="Premium feature" /> : active(item) ? <motion.span layoutId={reduceMotion ? undefined : "member-active-nav"} className="ml-auto"><ChevronRight size={15} /></motion.span> : null}
       </Link>)}</div>
     </div>)}
     {isAdmin && <Link to="/admin" className="member-nav-link" onClick={() => setMenuOpen(false)}><ShieldCheck size={18} />Team workspace<ArrowUpRight size={14} className="ml-auto" /></Link>}
@@ -107,7 +110,7 @@ export default function MemberNavigation() {
       </div>
     </header>
     <nav aria-label="Mobile member navigation" className="member-bottom-nav lg:hidden">
-      {groups[0].links.filter(visible).map(item => <Link key={item.to} to={item.to} aria-current={active(item) ? "page" : undefined} className={active(item) ? "is-active" : ""}><item.icon size={20} /><span>{label(item)}{premium(item) && <LockKeyhole size={10} className="inline ml-1" aria-label="Premium feature" />}</span></Link>)}
+      {groups[0].links.filter(visible).map(item => <Link key={item.to} to={destination(item)} aria-current={active(item) ? "page" : undefined} className={active(item) ? "is-active" : ""}><item.icon size={20} /><span>{label(item)}{premium(item) && <LockKeyhole size={10} className="inline ml-1" aria-label="Premium feature" />}</span></Link>)}
       <button onClick={() => setMenuOpen(true)} aria-label="More member features"><Menu size={20} /><span>More</span></button>
     </nav>
     <Sheet open={menuOpen} onOpenChange={setMenuOpen}>

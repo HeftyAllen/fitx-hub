@@ -31,6 +31,7 @@ try {
   });
   const context = await browser.newContext();
   const page = await context.newPage();
+  await page.route("**/fonts.googleapis.com/**", route => route.fulfill({ contentType: "text/css", body: "" }));
   const errors = [];
   const missingAssets = [];
   page.on("pageerror", error => errors.push(error.message));

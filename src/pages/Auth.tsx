@@ -1,12 +1,8 @@
 import { useState } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { doc, getDocFromServer } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { auth } from "@/lib/firebase";
 import { motion } from "framer-motion";
 import { useBrand, useSiteSettings } from "@/contexts/SiteSettingsContext";
-import { isAdminRole } from "@/lib/permissions";
 import logo from "@/assets/logo.png";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { logActivity } from "@/lib/activity";
@@ -24,20 +20,8 @@ export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<"credentials" | "reset">("credentials");
   const { signIn, signUp, signInWithGoogle, sendReset } = useAuth();
-  const navigate = useNavigate();
-
-
-  const routeAfterAuth = async (uid: string) => {
-    try {
-      const snap = await getDocFromServer(doc(db, "admins", uid));
-      if (snap.exists() && isAdminRole(snap.data().role)) {
-        navigate("/admin", { replace: true });
-        return;
-      }
-    } catch {}
-    // RootRedirect / DashboardGate will route to /onboarding if profile is incomplete.
-    navigate("/dashboard", { replace: true });
-  };
+  // AuthRedirect and DashboardGate route once the profile and role are ready.
+  // A late submit callback must not navigate away from the user's next screen.
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,13 +32,9 @@ export default function Auth() {
         if (!settings.signupEnabled) throw new Error("Registration is currently paused. Existing members can sign in.");
         await signUp(email, password);
         logActivity("auth.signup", { email });
-        navigate("/onboarding", { replace: true });
       } else {
         await signIn(email, password);
         logActivity("auth.login", { email });
-        const uid = auth.currentUser?.uid;
-        if (uid) await routeAfterAuth(uid);
-        else navigate("/dashboard", { replace: true });
       }
     } catch (err: any) {
       setError(err.message || "Something went wrong");
@@ -96,9 +76,6 @@ export default function Auth() {
     try {
       await signInWithGoogle();
       logActivity("auth.login", { method: "google" });
-      const uid = auth.currentUser?.uid;
-      if (uid) await routeAfterAuth(uid);
-      else navigate("/dashboard", { replace: true });
     } catch (err: any) {
       const code = err?.code || "";
       if (code === "auth/unauthorized-domain") {

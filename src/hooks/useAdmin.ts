@@ -55,7 +55,9 @@ function useAdminState(): AdminInfo {
     setState({ loading: true, role: null, uid: user.uid });
     const unsub = onSnapshot(
       doc(db, "admins", user.uid),
+      { includeMetadataChanges: true },
       (snap) => {
+        if (snap.metadata.fromCache && !snap.exists() && navigator.onLine) return;
         const role = snap.data()?.role;
         setState({
           loading: false,

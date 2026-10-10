@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FEATURES, normalizeAccessConfig, normalizeMemberAccess, resolveFeatureAccess, featureForPath } from "./feature-access";
+import { FEATURES, normalizeAccessConfig, normalizeMemberAccess, resolveFeatureAccess, featureForPath, allAvailableFeaturesFree, planFeatures, membershipInterestPlan } from "./feature-access";
 import { decodeFirestoreFields, serverFeatureAllowed } from "../../supabase/functions/_shared/member-access";
 describe("feature access", () => {
   const free = normalizeMemberAccess({});
@@ -38,6 +38,19 @@ describe("feature access", () => {
     const config = normalizeAccessConfig({ membership: { upgradeUrl: "javascript:alert(1)" }, features: { barcode: { mode: "premium" } } });
     expect(config.membership.upgradeUrl).toBe("");
     expect(config.features.barcode.mode).toBe("premium");
+  });
+  it("keeps future plans separate from actual access and respects parent restrictions in plan listings", () => {
+    const preview = normalizeAccessConfig({ membership: { plusPrice: "", proPrice: "R199 / month", showFuturePlans: false }, features: { nutrition: { mode: "disabled" }, recipes: { mode: "premium" } } });
+    expect(allAvailableFeaturesFree(preview)).toBe(true);
+    expect(preview.membership.plusPrice).toBe("R79 / month");
+    expect(preview.membership.proPrice).toBe("R199 / month");
+    expect(planFeatures(preview, "pro").map(feature => feature.id)).not.toContain("recipes");
+    const paid = normalizeAccessConfig({ features: { nutrition: { mode: "premium", requiredPlan: "pro" } } });
+    expect(allAvailableFeaturesFree(paid)).toBe(false);
+    expect(planFeatures(paid, "plus").map(feature => feature.id)).not.toContain("mealPlanner");
+    expect(planFeatures(paid, "pro").map(feature => feature.id)).toContain("mealPlanner");
+    expect(membershipInterestPlan({ plan: "admin" })).toBe(null);
+    expect(normalizeMemberAccess({ membershipInterest: { plan: "pro" } }).plan).toBe("free");
   });
 });
 describe("server food access", () => {

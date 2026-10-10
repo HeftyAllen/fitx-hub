@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SyncStatus from "@/components/SyncStatus";
+import { memberGreetingName } from "@/lib/member-identity";
 
 type Feed = {
   rows: (DocumentData & { id: string })[];
@@ -35,7 +36,8 @@ type Feed = {
 const initial: Feed = { rows: [], loading: true, error: false, cached: false };
 export default function AdminOverview() {
   const { role, sections } = useAdmin();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
+  const name = memberGreetingName(userProfile, user?.displayName);
   const [feeds, setFeeds] = useState<Record<string, Feed>>({});
   const meta = ROLE_META[role ?? "readonly"];
   useEffect(() => {
@@ -192,10 +194,7 @@ export default function AdminOverview() {
             <Sparkles size={12} className="workspace-accent" /> {meta.focus}
           </span>
           <p className="mt-6 text-sm text-muted-foreground">
-            Welcome back,{" "}
-            {user?.displayName?.split(" ")[0] ||
-              user?.email?.split("@")[0] ||
-              "team"}
+            Welcome back{name ? `, ${name}` : ""}.
           </p>
           <h1 className="text-3xl md:text-5xl leading-[1.1] font-extrabold mt-2 max-w-xl">
             {meta.title}
@@ -219,7 +218,7 @@ export default function AdminOverview() {
         {metrics.map(({ label, key, match }, i) => {
           const f = feed(key);
           return (
-            <div key={label} className="workspace-card p-5 md:p-6">
+            <div key={label} data-tone={["blue", "amber", "violet"][i]} className="workspace-card member-tone-card p-5 md:p-6">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-muted-foreground">{label}</span>
                 <span className="text-[10px] workspace-accent font-bold">

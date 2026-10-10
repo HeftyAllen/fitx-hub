@@ -79,8 +79,9 @@ function ProtectedRoute({
 
 function DashboardGate() {
   const { isAdmin, loading } = useAdmin();
+  const { search } = useLocation();
   if (loading) return <Spinner />;
-  if (isAdmin) return <Navigate to="/admin" replace />;
+  if (isAdmin && new URLSearchParams(search).get("view") !== "member") return <Navigate to="/admin" replace />;
   return <Dashboard />;
 }
 

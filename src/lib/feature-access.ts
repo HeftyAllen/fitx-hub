@@ -26,9 +26,13 @@ const policySchema = z.object({
 const membershipSchema = z.object({
   plusName: z.string().trim().min(1).max(40).catch("Plus").default("Plus"),
   proName: z.string().trim().min(1).max(40).catch("Pro").default("Pro"),
-  plusPrice: z.string().max(50).catch("").default(""), proPrice: z.string().max(50).catch("").default(""),
-  paywallTitle: z.string().max(120).catch("More room for your journey.").default("More room for your journey."),
-  paywallDescription: z.string().max(400).catch("").default("Unlock the tools that support your next step. Ask our team about membership options."),
+  plusPrice: z.string().trim().min(1).max(50).catch("R79 / month").default("R79 / month"),
+  proPrice: z.string().trim().min(1).max(50).catch("R149 / month").default("R149 / month"),
+  showFuturePlans: z.boolean().catch(true).default(true),
+  plusRoadmap: z.string().max(800).catch("").default("Advanced weekly progress insights\nAdaptive training recommendations\nDownloadable progress summaries"),
+  proRoadmap: z.string().max(800).catch("").default("Everything planned for Plus\nCoach-guided programmes and check-ins\nDeeper performance and nutrition reports"),
+  paywallTitle: z.string().max(120).catch("Your journey. More possibilities.").default("Your journey. More possibilities."),
+  paywallDescription: z.string().max(400).catch("").default("Explore your current access and see what is planned next."),
   upgradeUrl: z.string().trim().refine(safeExternalUrl).catch("").default(""),
   upgradeLabel: z.string().max(50).catch("Explore membership").default("Explore membership"),
 });
@@ -46,6 +50,16 @@ export function normalizeAccessConfig(raw: unknown): AccessConfig {
   };
 }
 export const DEFAULT_ACCESS = normalizeAccessConfig({});
+export function planFeatures(config: AccessConfig, plan: PlanId) {
+  return FEATURES.filter(feature => resolveFeatureAccess(feature.id, config, { plan, features: [] }).state === "allowed");
+}
+export function allAvailableFeaturesFree(config: AccessConfig) {
+  return FEATURES.every(feature => resolveFeatureAccess(feature.id, config, { plan: "free", features: [] }).state !== "premium");
+}
+export function membershipInterestPlan(raw: unknown): "plus" | "pro" | null {
+  const plan = raw && typeof raw === "object" && "plan" in raw ? raw.plan : null;
+  return plan === "plus" || plan === "pro" ? plan : null;
+}
 export interface MemberAccess { plan: PlanId; features: FeatureId[]; expiresAt?: unknown }
 export function normalizeMemberAccess(raw: unknown): MemberAccess {
   const data = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};

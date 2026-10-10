@@ -58,7 +58,9 @@ async function syncUserDoc(user: User) {
     const profRef = doc(db, "users", user.uid, "profile", "data");
     const indexRef = doc(db, "users", user.uid);
     const [profSnap, indexSnap] = await Promise.all([getDoc(profRef), getDoc(indexRef)]);
-    const existing = { ...(profSnap.data() ?? {}), ...(indexSnap.data() ?? {}) } as any;
+    // The member profile is authoritative; a stale directory entry must not
+    // replace a name or photo saved in Settings during the next sign-in.
+    const existing = { ...(indexSnap.data() ?? {}), ...(profSnap.data() ?? {}) };
 
     const summary: any = {
       email: user.email ?? null,
@@ -102,12 +104,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let stopProfile = () => {};
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       stopProfile();
+      // Hold routing until this identity's profile is known. Otherwise the
+      // previous anonymous state can send an existing member to onboarding.
+      setLoading(!!user);
       setUser(user);
       setUserProfile(null);
       if (user) {
         // Do not wait for a server-acknowledged write during offline startup.
         if (navigator.onLine) void syncUserDoc(user);
-        stopProfile = onSnapshot(doc(db, "users", user.uid, "profile", "data"), snap => {
+        stopProfile = onSnapshot(doc(db, "users", user.uid, "profile", "data"), { includeMetadataChanges: true }, snap => {
+          if (snap.metadata.fromCache && !snap.exists() && navigator.onLine) return;
           setUserProfile(snap.exists() ? snap.data() : null);
           setLoading(false);
         }, () => { setLoading(false); });

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useBrand } from "@/contexts/SiteSettingsContext";
@@ -9,7 +9,8 @@ import AccountSecurity from "@/components/settings/AccountSecurity";
 import PushNotifications from "@/components/settings/PushNotifications";
 import { syncPushPreferences } from "@/lib/pushNotifications";
 import { motion } from "framer-motion";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, writeBatch } from "firebase/firestore";
+import { cleanMemberName } from "@/lib/member-identity";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ const GENDERS = ["Male", "Female", "Non-binary", "Prefer not to say"];
 
 interface ProfileData {
   name: string;
+  greetingName: string;
   photoURL: string;
   gender: string;
   dob: string;
@@ -33,6 +35,7 @@ interface ProfileData {
   weight: string;
   goal: string;
   activityLevel: string;
+  daysPerWeek: number;
   units: "metric" | "imperial";
   notifications: {
     workoutReminders: boolean;
@@ -45,6 +48,7 @@ interface ProfileData {
 
 const defaultProfile: ProfileData = {
   name: "",
+  greetingName: "",
   photoURL: "",
   gender: "",
   dob: "",
@@ -52,6 +56,7 @@ const defaultProfile: ProfileData = {
   weight: "",
   goal: "",
   activityLevel: "",
+  daysPerWeek: 3,
   units: "metric",
   notifications: {
     workoutReminders: true,
@@ -71,20 +76,22 @@ function SectionHeader({ label, desc }: { label: string; desc: string }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</label>
+      <label htmlFor={htmlFor} className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</label>
       {children}
     </div>
   );
 }
 
-function TextInput({ value, onChange, placeholder, type = "text" }: {
-  value: string; onChange: (v: string) => void; placeholder?: string; type?: string;
+function TextInput({ value, onChange, placeholder, type = "text", id, maxLength }: {
+  value: string; onChange: (v: string) => void; placeholder?: string; type?: string; id?: string; maxLength?: number;
 }) {
   return (
     <input
+      id={id}
+      maxLength={maxLength}
       type={type}
       value={value}
       onChange={e => onChange(e.target.value)}
@@ -196,22 +203,17 @@ export default function Settings() {
       notifications: { ...prev.notifications, [key]: value },
     }));
 
-  /** Keys the admin directory reads from users/{uid} — keep them mirrored. */
-  const mirrorForAdmin = async (data: Partial<ProfileData>) => {
-    if (!user) return;
-    const mirror: any = {};
-    if ("name" in data) mirror.name = data.name ?? null;
-    if ("photoURL" in data) mirror.photoURL = data.photoURL ?? null;
-    if (Object.keys(mirror).length === 0) return;
-    await setDoc(doc(db, "users", user.uid), mirror, { merge: true });
-  };
-
   const saveSection = async (section: string, setSaving: (v: boolean) => void, data: Partial<ProfileData>) => {
     if (!user) return;
     setSaving(true);
     try {
-      await setDoc(doc(db, "users", user.uid, "profile", "data"), data, { merge: true });
-      await mirrorForAdmin(data);
+      const batch = writeBatch(db);
+      batch.set(doc(db, "users", user.uid, "profile", "data"), data, { merge: true });
+      const mirror: Partial<ProfileData> = {};
+      if ("name" in data) mirror.name = data.name;
+      if ("photoURL" in data) mirror.photoURL = data.photoURL;
+      if (Object.keys(mirror).length) batch.set(doc(db, "users", user.uid), mirror, { merge: true });
+      await batch.commit();
       await refreshProfile();
       if (section === "notif" && data.notifications) {
         await syncPushPreferences(data.notifications as unknown as Record<string, boolean>).catch(() => undefined);
@@ -266,7 +268,8 @@ export default function Settings() {
     navigate("/");
   };
 
-  const [tab, setTab] = useState<"profile" | "metrics" | "prefs" | "notif" | "appearance" | "account">("profile");
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState<"profile" | "metrics" | "prefs" | "notif" | "appearance" | "account">(params.get("section") === "prefs" ? "prefs" : "profile");
 
 
   const initials = profile.name ? profile.name.split(" ").map(p => p[0]).join("").toUpperCase().slice(0, 2)
@@ -365,18 +368,23 @@ export default function Settings() {
                   </div>
 
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <Field label="Display Name">
-                      <TextInput value={profile.name} onChange={set("name")} placeholder="Your name" />
+                    <Field label="Display Name" htmlFor="profile-name">
+                      <TextInput id="profile-name" maxLength={80} value={profile.name} onChange={set("name")} placeholder="Your name" />
                     </Field>
                     <Field label="Gender">
                       <SelectInput value={profile.gender} onChange={set("gender")} options={GENDERS} />
                     </Field>
                   </div>
 
+                  <Field label="Greeting name (optional)" htmlFor="profile-greeting-name">
+                    <TextInput id="profile-greeting-name" maxLength={40} value={profile.greetingName} onChange={set("greetingName")} placeholder="What should we call you?" />
+                    <p className="text-xs text-muted-foreground">Your Today welcome uses this name, or your display name when left blank.</p>
+                  </Field>
+
                   <div className="flex justify-end">
                     <SaveButton
                       onClick={() => saveSection("profile", setProfileSaving, {
-                        name: profile.name, gender: profile.gender, photoURL: profile.photoURL,
+                        name: cleanMemberName(profile.name), greetingName: cleanMemberName(profile.greetingName), gender: profile.gender, photoURL: profile.photoURL,
                       })}
                       saving={profileSaving}
                       saved={savedSection === "profile"}
@@ -427,6 +435,11 @@ export default function Settings() {
                     </Field>
                   </div>
 
+                  <Field label="Weekly training target" htmlFor="profile-training-target">
+                    <select id="profile-training-target" className="admin-select" value={profile.daysPerWeek} onChange={event => set("daysPerWeek")(Number(event.target.value))}>{[1, 2, 3, 4, 5, 6, 7].map(days => <option key={days} value={days}>{days} session{days > 1 ? "s" : ""} per week</option>)}</select>
+                    <p className="text-xs text-muted-foreground">Updates your weekly focus on Today. Choose a pace that works for you.</p>
+                  </Field>
+
                   <Field label="Units">
                     <div className="flex gap-3">
                       {(["metric", "imperial"] as const).map(u => (
@@ -448,7 +461,7 @@ export default function Settings() {
                   <div className="flex justify-end">
                     <SaveButton
                       onClick={() => saveSection("prefs", setPrefSaving, {
-                        goal: profile.goal, activityLevel: profile.activityLevel, units: profile.units,
+                        goal: profile.goal, activityLevel: profile.activityLevel, units: profile.units, daysPerWeek: profile.daysPerWeek,
                       })}
                       saving={prefSaving}
                       saved={savedSection === "prefs"}

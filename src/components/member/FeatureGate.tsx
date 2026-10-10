@@ -4,8 +4,10 @@ import { ArrowRight, LockKeyhole, PauseCircle, ShieldAlert } from "lucide-react"
 import { useFeatureAccess } from "@/contexts/FeatureAccessContext";
 import { featureDefinition, type FeatureId } from "@/lib/feature-access";
 import AppLayout from "@/components/layout/AppLayout";
+import { useAdmin } from "@/hooks/useAdmin";
 export function FeatureNotice({ feature }: { feature: FeatureId }) {
   const { getAccess, config } = useFeatureAccess();
+  const { isAdmin } = useAdmin();
   const access = getAccess(feature);
   const definition = featureDefinition(feature);
   const policyName = access.policy.label || featureDefinition(access.feature).label;
@@ -20,7 +22,7 @@ export function FeatureNotice({ feature }: { feature: FeatureId }) {
     {!disabled && !access.error && <p className="text-xs text-primary">{definition.label} is included with {plan}.</p>}
     <div className="flex justify-center flex-wrap gap-3">
       {!disabled && !access.error && <Link to={`/membership?feature=${feature}`} className="member-action">View membership<ArrowRight size={15} /></Link>}
-      <Link to="/dashboard" className="member-action secondary">Back to Today</Link>
+      <Link to={isAdmin ? "/dashboard?view=member" : "/dashboard"} className="member-action secondary">Back to Today</Link>
       <Link to="/support" className="member-action secondary">Contact support</Link>
     </div>
   </section>;
