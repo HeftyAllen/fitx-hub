@@ -22,12 +22,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Users, Plus, CheckCircle2, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import CoachProgrammeStudio from "@/components/admin/CoachProgrammeStudio";
+import type { CoachAssignment } from "@/lib/coaching";
 type Row = DocumentData & { id: string };
 export default function AdminCoaching() {
   const { user } = useAuth();
   const { role, canManageSystem } = useAdmin();
   const online = useOnline();
-  const [assignments, setAssignments] = useState<Row[]>([]);
+  const [assignments, setAssignments] = useState<CoachAssignment[]>([]);
   const [members, setMembers] = useState<Row[]>([]);
   const [coaches, setCoaches] = useState<Row[]>([]);
   const [notes, setNotes] = useState<Row[]>([]);
@@ -39,6 +41,7 @@ export default function AdminCoaching() {
   const [nextDate, setNextDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
   useEffect(() => {
     if (!user || !role) return;
     setAssignments([]);
@@ -51,7 +54,7 @@ export default function AdminCoaching() {
     const stop = onSnapshot(
       q,
       (snap) => {
-        setAssignments(snap.docs.map((d) => ({ ...d.data(), id: d.id })));
+        setAssignments(snap.docs.map((d) => ({ ...d.data(), id: d.id }) as CoachAssignment));
         setError("");
       },
       () =>
@@ -106,6 +109,7 @@ export default function AdminCoaching() {
         coachId,
         memberId,
         memberName: member?.name || member?.email || "Member",
+        coachName: members.find(member => member.id === coachId)?.name || "Your coach",
         goal: goal.trim(),
         status: "active",
         createdAt: serverTimestamp(),
@@ -174,7 +178,7 @@ export default function AdminCoaching() {
           <p className="text-sm text-muted-foreground mt-3">
             {canManageSystem
               ? "Assign a member to a coach and review their check-ins."
-              : "Only members assigned to you appear here. Notes stay within the coaching team."}
+              : "Share home workouts, classes and nutrition plans with your assigned members, and follow their updates."}
           </p>
         </div>
         <Button asChild variant="outline">
@@ -194,6 +198,11 @@ export default function AdminCoaching() {
           {error}
         </p>
       )}
+      <div className="coach-studio-highlights">
+        <div data-tone="mint"><Users size={20} /><strong>{assignments.filter(assignment => assignment.status === "active").length}</strong><span>Active members</span></div>
+        <div data-tone="blue"><p className="text-sm font-semibold">Train anywhere.</p><span>Home routines with sets, reps and rest.</span></div>
+        <div data-tone="violet"><p className="text-sm font-semibold">Keep the connection.</p><span>Shared classes, meal guidance and member feedback.</span></div>
+      </div>
       {canManageSystem && (
         <section className="workspace-card p-5">
           <h2 className="text-sm mb-4 flex items-center gap-2">
@@ -258,7 +267,7 @@ export default function AdminCoaching() {
           </p>
         </section>
       )}
-      <div className="grid lg:grid-cols-[320px_1fr] gap-5">
+      <div className="grid lg:grid-cols-[320px_1fr] gap-5 items-start">
         <section className="workspace-card p-5">
           <div className="flex items-center gap-2 mb-5">
             <Users size={16} className="workspace-accent" />
@@ -269,15 +278,17 @@ export default function AdminCoaching() {
               </span>
             </h2>
           </div>
+          <Input aria-label="Find assigned member" value={search} onChange={event => setSearch(event.target.value)} placeholder="Find a member…" className="mb-4" />
           {assignments.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6">
               No members assigned yet.
             </p>
           ) : (
-            assignments.map((a) => (
+            assignments.filter(a => `${a.memberName} ${a.goal}`.toLowerCase().includes(search.toLowerCase())).map((a) => (
               <button
                 key={a.id}
                 onClick={() => setActive(a.id)}
+                aria-pressed={active === a.id}
                 className={`w-full text-left rounded-xl p-3 mb-2 border ${active === a.id ? "border-primary bg-primary/5" : "border-transparent hover:bg-secondary"}`}
               >
                 <p className="text-sm font-semibold">{a.memberName}</p>
@@ -320,6 +331,9 @@ export default function AdminCoaching() {
                   </Button>
                 )}
               </div>
+              <CoachProgrammeStudio key={selected.id} assignment={selected} assignments={assignments} />
+              <h3 className="text-sm font-semibold mb-2 mt-8">Private team check-ins</h3>
+              <p className="text-xs text-muted-foreground mb-5">Internal coaching notes. Members see only programmes you share and their own feedback.</p>
               {selected.status === "active" && (
                 <div className="space-y-3 pb-6 border-b border-border">
                   <label htmlFor="check-in" className="text-xs font-semibold">

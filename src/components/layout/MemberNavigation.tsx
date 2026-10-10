@@ -16,7 +16,7 @@ import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/
 import {
   LayoutDashboard, Dumbbell, UtensilsCrossed, TrendingUp, Trophy, CalendarDays,
   Award, Settings, LogOut, Bell, ShieldCheck, Sun, Moon, Menu, ArrowUpRight,
-  BookOpen, ShoppingBasket, LifeBuoy, Library, ChevronRight, Crown, LockKeyhole, type LucideIcon,
+  BookOpen, ShoppingBasket, LifeBuoy, Library, ChevronRight, Crown, LockKeyhole, Users, type LucideIcon,
 } from "lucide-react";
 
 type NavItem = { to: string; label: string; icon: LucideIcon; related?: string[] };
@@ -32,6 +32,7 @@ const groups: { label: string; links: NavItem[] }[] = [
     { to: "/records", label: "Personal records", icon: Trophy },
     { to: "/rewards", label: "Rewards", icon: Award },
     { to: "/library", label: "Coach library", icon: Library },
+    { to: "/coaching", label: "My coach", icon: Users },
   ] },
   { label: "Essentials", links: [
     { to: "/settings", label: "Profile & settings", icon: Settings },
@@ -57,7 +58,7 @@ export default function MemberNavigation() {
   const { getAccess, config } = useFeatureAccess();
   const visible = (item: NavItem) => { const id = featureForPath(item.to); return !id || getAccess(id).state !== "disabled"; };
   const premium = (item: NavItem) => { const id = featureForPath(item.to); return !!id && getAccess(id).state === "premium"; };
-  const label = (item: NavItem) => { const id = featureForPath(item.to); return id ? config.features[id].label || item.label : item.label; };
+  const label = (item: NavItem) => { const id = featureForPath(item.to); return item.to === "/coaching" ? item.label : id ? config.features[id].label || item.label : item.label; };
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<NotifCategory | "all">("all");

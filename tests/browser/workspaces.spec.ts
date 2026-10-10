@@ -250,6 +250,151 @@ test("member recovers a workout offline and syncs completion once on reconnect",
   await expect.poll(workoutLogCount, { timeout: 20000 }).toBe(1);
 });
 
+test("focused workout controls preserve edits, rest, pause and responsive recovery", async ({ page }) => {
+  test.setTimeout(90000);
+  await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), "users", identities.member, "workoutPlans", "focus-plan"), {
+    name: "Focus strength session", createdAt: Timestamp.now(), exercises: [
+      { name: "Bodyweight squat", target: "quads", equipment: "body weight", sets: 2, reps: 10, restSeconds: 60, instructions: ["Keep your movement controlled."] },
+      { name: "Incline push-up", target: "chest", equipment: "body weight", sets: 1, reps: 8, restSeconds: 0 },
+    ],
+  }));
+  await login(page, "member");
+  await page.goto("/workout-planner");
+  await page.locator("div.glass-card").filter({ has: page.getByText("Focus strength session", { exact: true }) }).last().getByRole("button", { name: /Start/ }).click();
+  await expect(page.getByRole("heading", { name: "Bodyweight squat", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Turn voice coach off" }).click();
+  await page.getByRole("button", { name: "Track weight" }).click();
+  await page.getByLabel("Reps for set 1", { exact: true }).fill("12");
+  await page.getByLabel("Weight for set 1", { exact: true }).fill("20");
+  await page.screenshot({ path: "test-results/workout-session-desktop.png", fullPage: true });
+  await page.getByRole("button", { name: "Complete set 1", exact: true }).click();
+  await expect(page.getByLabel("Rest timer", { exact: true })).toBeVisible();
+  await expect(page.getByText("Next: Bodyweight squat · Set 2", { exact: true })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "Sets completed" })).toHaveAttribute("aria-valuenow", "1");
+  await page.getByLabel("Weight for set 2", { exact: true }).fill("22.5");
+  await page.getByRole("button", { name: "Edit completed set 1", exact: true }).click();
+  await expect(page.getByLabel("Rest timer", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("progressbar", { name: "Sets completed" })).toHaveAttribute("aria-valuenow", "0");
+  await page.getByLabel("Reps for set 1", { exact: true }).fill("11");
+  await page.getByRole("button", { name: "Complete set 1", exact: true }).click();
+  await page.getByRole("button", { name: "+30s", exact: true }).click();
+  await expect.poll(async () => Number((await page.getByLabel("Rest time remaining", { exact: true }).textContent())?.replace("s", ""))).toBeGreaterThan(75);
+  await page.getByRole("button", { name: "Pause session timer" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  const clock = await page.locator(".workout-session-clock span").textContent();
+  const rest = await page.locator(".workout-rest-ring strong").textContent();
+  await page.waitForTimeout(1200);
+  expect(await page.locator(".workout-session-clock span").textContent()).toBe(clock);
+  expect(await page.locator(".workout-rest-ring strong").textContent()).toBe(rest);
+  await page.getByRole("button", { name: "Resume workout", exact: true }).click();
+  await page.getByRole("button", { name: "Skip rest", exact: true }).click();
+  await page.getByRole("button", { name: "Add set", exact: true }).click();
+  await expect(page.getByLabel("Reps for set 3", { exact: true })).toHaveValue("10");
+  await page.getByRole("button", { name: "Remove last set", exact: true }).click();
+  await expect(page.getByLabel("Reps for set 3", { exact: true })).toHaveCount(0);
+  await page.locator(".workout-notes summary").click();
+  await page.getByLabel("How did this exercise feel?", { exact: true }).fill("Controlled form. Keep this weight next time.");
+  await page.getByRole("button", { name: /View form guide/ }).click();
+  await expect(page.getByRole("dialog").getByText("Keep your movement controlled.", { exact: true })).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `set controls fit ${width}px`).toBe(true);
+  }
+  await page.screenshot({ path: "test-results/workout-session-mobile.png", fullPage: true });
+  await page.getByRole("button", { name: "Next exercise", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Incline push-up", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Previous exercise", exact: true }).click();
+  await expect(page.getByLabel("How did this exercise feel?", { exact: true })).toHaveValue("Controlled form. Keep this weight next time.");
+  await page.getByRole("button", { name: "Save draft and leave workout" }).click();
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  await page.getByRole("button", { name: "Resume workout", exact: true }).click();
+  await page.getByRole("button", { name: "Track weight" }).click();
+  await expect(page.getByLabel("Reps for set 1", { exact: true })).toHaveValue("11");
+  await expect(page.getByLabel("Weight for set 2", { exact: true })).toHaveValue("22.5");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.screenshot({ path: "test-results/workout-session-mobile-light.png", fullPage: true });
+});
+
+test("coach shares client programmes and group classes with live member feedback", async ({ page, browser }) => {
+  test.setTimeout(120000);
+  await env.withSecurityRulesDisabled(async ctx => {
+    await setDoc(doc(ctx.firestore(), "users", "fixture-second-client"), { name: "Casey Member" });
+    await setDoc(doc(ctx.firestore(), "coachAssignments", "fixture-second-assignment"), { coachId: identities.coach, memberId: "fixture-second-client", memberName: "Casey Member", goal: "Build consistency", status: "active" });
+  });
+  await login(page, "coach");
+  await page.goto("/admin/coaching");
+  await page.getByRole("button", { name: /Alex Member/ }).click();
+  await page.getByLabel("Programme title", { exact: true }).fill("Home strength together");
+  await page.getByLabel("Instructions & what to bring", { exact: true }).fill("Warm up and use a controlled range of motion.");
+  await page.getByLabel("Exercise 1", { exact: true }).fill("Bodyweight squat");
+  await page.getByLabel("Sets for exercise 1", { exact: true }).fill("1");
+  await page.getByLabel("Rest (sec) for exercise 1", { exact: true }).fill("0");
+  await page.getByRole("button", { name: "Share programme", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Home strength together", exact: true })).toBeVisible();
+  const memberContext = await browser.newContext();
+  const member = await memberContext.newPage();
+  try {
+    await login(member, "member");
+    await member.goto("/coaching");
+    const home = member.getByRole("article").filter({ has: member.getByRole("heading", { name: "Home strength together", exact: true }) });
+    await expect(home).toBeVisible();
+    await home.getByRole("button", { name: "Save to training", exact: true }).click();
+    await expect(member.getByText("Added to your training plans.", { exact: true })).toBeVisible();
+    await home.getByRole("button", { name: "Start workout", exact: true }).click();
+    await expect(member.getByRole("heading", { name: "Bodyweight squat", exact: true })).toBeVisible();
+    await member.getByRole("button", { name: "Complete set 1", exact: true }).click();
+    await member.getByRole("button", { name: "Finish workout", exact: true }).click();
+    await expect(member.getByRole("heading", { name: "Another session in the books.", exact: true })).toBeVisible();
+    await member.goto("/coaching");
+    await home.locator("summary").click();
+    await home.getByLabel("How is this programme going?", { exact: true }).fill("Home session done. Please add a variation next time.");
+    await home.getByRole("button", { name: "Mark complete", exact: true }).click();
+    await expect(page.getByText("Member marked complete", { exact: true })).toBeVisible();
+    await expect(page.getByText("Home session done. Please add a variation next time.", { exact: true })).toBeVisible();
+    await page.locator(".coach-compose summary").click();
+    await page.getByRole("button", { name: "Gym / online class", exact: true }).click();
+    await page.getByLabel("Programme title", { exact: true }).fill("Saturday home class");
+    await page.getByLabel("Instructions & what to bring", { exact: true }).fill("Bring water and a mat. We will train together online.");
+    await page.getByLabel("Class date & time", { exact: true }).fill("2026-12-12T09:00");
+    await page.getByLabel("Online class link (optional)", { exact: true }).fill("https://example.org/fitx-class");
+    await page.getByLabel("Casey Member", { exact: true }).check();
+    await page.getByRole("button", { name: "Share programme", exact: true }).click();
+    await expect(member.getByRole("heading", { name: "Saturday home class", exact: true })).toBeVisible();
+    await expect(member.getByRole("link", { name: /Open class link/ })).toHaveAttribute("href", "https://example.org/fitx-class");
+    await env.withSecurityRulesDisabled(async ctx => {
+      const { getDocs, collection } = await import("firebase/firestore");
+      const [first, second] = await Promise.all([getDocs(collection(ctx.firestore(), "coachAssignments", "fixture-assignment", "programmes")), getDocs(collection(ctx.firestore(), "coachAssignments", "fixture-second-assignment", "programmes"))]);
+      const classPlan = first.docs.find(doc => doc.data().title === "Saturday home class");
+      expect(classPlan).toBeDefined(); expect(second.docs.some(doc => doc.id === classPlan?.id)).toBe(true);
+      expect((await getDoc(doc(ctx.firestore(), "memberAccess", identities.member))).data()?.plan).toBe("free");
+    });
+    await page.getByRole("button", { name: "Nutrition plan", exact: true }).click();
+    await page.getByLabel("Programme title", { exact: true }).fill("Balanced meal guidance");
+    await page.getByLabel("Meals, portions & daily guidance", { exact: true }).fill("Include vegetables with lunch and dinner. Use the portions we agreed.");
+    await page.getByRole("button", { name: "Share programme", exact: true }).click();
+    await expect(member.getByText("Include vegetables with lunch and dinner. Use the portions we agreed.", { exact: true })).toBeVisible();
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), "siteSettings", "access"), { features: { nutrition: { mode: "disabled" } } }));
+    await expect(member.getByText("Include vegetables with lunch and dinner. Use the portions we agreed.", { exact: true })).toHaveCount(0);
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), "siteSettings", "access"), { features: {} }));
+    await expect(member.getByText("Include vegetables with lunch and dinner. Use the portions we agreed.", { exact: true })).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await member.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: "test-results/coach-programmes-desktop.png", fullPage: true });
+    await member.screenshot({ path: "test-results/member-coaching-desktop.png", fullPage: true });
+    await member.setViewportSize({ width: 390, height: 844 });
+    await member.getByRole("button", { name: "Switch to light mode" }).click();
+    await member.screenshot({ path: "test-results/member-coaching-mobile-light.png", fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await member.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: "test-results/coach-programmes-mobile.png", fullPage: true });
+    await page.getByRole("button", { name: "Withdraw Home strength together", exact: true }).click();
+    await expect(member.getByRole("heading", { name: "Home strength together", exact: true })).toHaveCount(0);
+  } finally { await memberContext.close(); }
+});
+
 test("member features keep working in desktop, mobile and light mode", async ({ page }) => {
   test.setTimeout(120000);
   const errors: string[] = [];
@@ -265,7 +410,7 @@ test("member features keep working in desktop, mobile and light mode", async ({ 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: "test-results/member-today-mobile.png", fullPage: true });
   await page.getByRole("button", { name: "Switch to light mode" }).click();
-  for (const path of ["/workout-planner", "/nutrition", "/progress", "/records", "/rewards", "/calendar", "/library", "/recipes", "/meal-planner", "/grocery-list", "/exercise-library", "/settings", "/support", "/membership"]) {
+  for (const path of ["/workout-planner", "/nutrition", "/progress", "/records", "/rewards", "/calendar", "/library", "/coaching", "/recipes", "/meal-planner", "/grocery-list", "/exercise-library", "/settings", "/support", "/membership"]) {
     await page.goto(path);
     await expect(page.locator(".member-shell").first()).toBeVisible();
     await expect(page.locator("main h1").first()).toBeVisible();

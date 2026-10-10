@@ -59,8 +59,9 @@ const MUSCLE_COLORS: Record<string, string> = {
   default: "bg-primary/20 text-primary border-primary/30",
 };
 
-function getMuscleColor(bodyPart: string) {
-  const key = Object.keys(MUSCLE_COLORS).find(k => bodyPart.toLowerCase().includes(k));
+function getMuscleColor(bodyPart?: string) {
+  const normalized = typeof bodyPart === "string" ? bodyPart.toLowerCase() : "";
+  const key = Object.keys(MUSCLE_COLORS).find(k => normalized.includes(k));
   return MUSCLE_COLORS[key || "default"];
 }
 

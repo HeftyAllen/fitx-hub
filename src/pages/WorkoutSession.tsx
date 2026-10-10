@@ -1,14 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronLeft, ChevronRight, Check, X, Play, Pause, SkipForward,
   Plus, Minus, Trophy, Timer, Dumbbell, Flame, Info, Volume2,
-  VolumeX, RotateCcw, Zap, Target, ChevronDown, ChevronUp,
-  ListOrdered, Clock, Notebook
+  VolumeX, RotateCcw, Zap, Target, ChevronDown,
+  ListOrdered, Clock, Notebook, ArrowUpRight, ShieldCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSiteSettings } from "@/contexts/SiteSettingsContext";
 import { loadWorkoutDraft, saveWorkoutDraft, clearWorkoutDraft } from "@/lib/offline/drafts";
 import { queueWorkout } from "@/lib/offline/queue";
 import SyncStatus from "@/components/SyncStatus";
@@ -37,17 +38,19 @@ interface ExerciseLog {
   restSeconds: number;
   sets: SetLog[];
 }
+type PlannedExercise = Partial<Omit<ExerciseLog, "sets" | "plannedSets" | "plannedReps">> & { name: string; sets?: number; reps?: number };
+interface WorkoutPlan { id?: string; name: string; exercises: PlannedExercise[] }
 
 const encouragements = [
   "Let's go! You got this! 💪",
-  "Push through! No pain, no gain!",
+  "Good work. Take a breath and reset.",
   "Beast mode activated! 🔥",
   "One more rep! You're unstoppable!",
   "Crushing it! Keep that energy!",
   "You're stronger than you think!",
   "This is your moment! Own it!",
-  "Champions don't quit! 🏆",
-  "Feel the burn! That's growth!",
+  "Another set in the books! 🏆",
+  "Keep your form controlled. You've got this!",
 ];
 
 function speakText(text: string) {
@@ -60,12 +63,18 @@ function speakText(text: string) {
   window.speechSynthesis.speak(utterance);
 }
 
+function useSessionMotion() {
+  const settings = useSiteSettings();
+  const reduced = useReducedMotion();
+  return { motionEnabled: settings.motion === "full" && !reduced, fadeDuration: settings.motion === "off" ? 0 : 0.2 };
+}
+
 // ============ EXERCISE DETAIL MODAL ============
 function ExerciseDetailModal({ exercise, open, onClose }: { exercise: ExerciseLog | null; open: boolean; onClose: () => void }) {
   if (!exercise) return null;
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="glass-card border-white/10 max-w-md max-h-[85vh] overflow-y-auto">
+      <DialogContent className="member-shell max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="capitalize text-lg">{exercise.name}</DialogTitle>
           <DialogDescription className="flex flex-wrap gap-2 mt-1">
@@ -102,6 +111,7 @@ function ExerciseDetailModal({ exercise, open, onClose }: { exercise: ExerciseLo
             </ol>
           </div>
         )}
+        {!exercise.instructions?.length && <p className="text-sm text-muted-foreground">No detailed form guide is saved with this exercise. Follow the instructions provided in your training plan.</p>}
         <div className="grid grid-cols-3 gap-2 mt-2">
           <div className="glass-card p-3 rounded-xl text-center">
             <p className="text-lg font-bold text-primary">{exercise.plannedSets}</p>
@@ -130,7 +140,7 @@ function ParticleBurst({ trigger }: { trigger: number }) {
       id: Date.now() + i,
       x: (Math.random() - 0.5) * 200,
       y: (Math.random() - 0.5) * 200,
-      color: ["#2563EB", "#06B6D4", "#84CC16", "#FACC15"][Math.floor(Math.random() * 4)],
+      color: ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--tone-mint))", "hsl(var(--tone-amber))"][Math.floor(Math.random() * 4)],
     }));
     setParticles(newParticles);
     const timeout = setTimeout(() => setParticles([]), 800);
@@ -155,8 +165,9 @@ export default function WorkoutSession() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { motionEnabled, fadeDuration } = useSessionMotion();
   const [recovered] = useState(() => user ? loadWorkoutDraft(user.uid) : null);
-  const plan = location.state?.plan ?? recovered?.plan;
+  const plan = (location.state?.plan ?? recovered?.plan) as WorkoutPlan | undefined;
   const [sessionId] = useState(() => recovered && (!location.state?.plan || recovered.plan.id === location.state.plan.id) ? recovered.sessionId : crypto.randomUUID());
 
   const [exercises, setExercises] = useState<ExerciseLog[]>([]);
@@ -190,7 +201,7 @@ export default function WorkoutSession() {
       return;
     }
     setExercises(
-      plan.exercises.map((ex: any) => ({
+      plan.exercises.map((ex) => ({
         name: ex.name,
         bodyPart: ex.bodyPart || "unknown",
         target: ex.target || "general",
@@ -206,7 +217,7 @@ export default function WorkoutSession() {
         })),
       }))
     );
-  }, [plan]);
+  }, [plan, navigate, recovered, sessionId]);
 
   useEffect(() => {
     if (!user || !plan || !exercises.length || completed || savedRef.current) return;
@@ -223,7 +234,7 @@ export default function WorkoutSession() {
 
   // Rest countdown
   useEffect(() => {
-    if (!isResting) return;
+    if (!isResting || isPaused || completed) return;
     if (restTime <= 0) { setIsResting(false); if (voiceEnabled) speakText("Rest over. Let's go!"); return; }
     restRef.current = window.setInterval(() => {
       setRestTime(t => {
@@ -233,11 +244,14 @@ export default function WorkoutSession() {
       });
     }, 1000);
     return () => { if (restRef.current) clearInterval(restRef.current); };
-  }, [isResting, restTime, voiceEnabled]);
+  }, [isResting, restTime, voiceEnabled, isPaused, completed]);
+
+  useEffect(() => () => { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }, []);
 
   const currentExercise = exercises[currentIdx];
 
   const logSet = (setIdx: number) => {
+    if (!currentExercise || currentExercise.sets[setIdx]?.completed) return;
     setExercises(prev => {
       const copy = [...prev];
       copy[currentIdx] = {
@@ -254,6 +268,13 @@ export default function WorkoutSession() {
     const restSecs = currentExercise.restSeconds;
     if (restSecs > 0) { setRestTime(restSecs); setRestTotal(restSecs); setIsResting(true); }
     toast.success("Set logged! ✓", { duration: 1500 });
+  };
+
+  const reopenSet = (setIdx: number) => {
+    setExercises(prev => prev.map((ex, idx) => idx === currentIdx
+      ? { ...ex, sets: ex.sets.map((set, i) => i === setIdx ? { ...set, completed: false } : set) } : ex));
+    setIsResting(false);
+    setRestTime(0);
   };
 
   const updateSetField = (setIdx: number, field: "weight" | "reps", value: number) => {
@@ -309,6 +330,7 @@ export default function WorkoutSession() {
       });
       try { clearWorkoutDraft(user.uid); } catch { /* durable queue is already saved */ }
       setCompleted(true);
+      setIsResting(false);
       toast.success(navigator.onLine ? "Workout saved on this device. Syncing to your account." : "Workout saved offline. It will sync when you reconnect.");
       if (voiceEnabled) speakText("Workout complete! Amazing work champion!");
       // Challenge progress is recalculated from server records after the queued log syncs.
@@ -329,6 +351,10 @@ export default function WorkoutSession() {
   );
   const calorieEstimate = Math.round(elapsedSeconds / 60 * 7.5);
   const progressPercent = totalSets > 0 ? (totalSetsCompleted / totalSets) * 100 : 0;
+  const nextSetIdx = currentExercise?.sets.findIndex(set => !set.completed) ?? -1;
+  const nextExercise = exercises.find((ex, idx) => idx >= currentIdx && ex.sets.some(set => !set.completed))
+    ?? exercises.find(ex => ex.sets.some(set => !set.completed));
+  const exerciseSetsDone = currentExercise?.sets.filter(set => set.completed).length ?? 0;
 
   if (!plan?.exercises?.length) return null;
 
@@ -344,392 +370,187 @@ export default function WorkoutSession() {
   }
 
   return (
-    <div className="member-shell min-h-screen bg-background text-foreground flex flex-col relative">
-      {/* Ambient glow */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-[0.04]" style={{ background: "radial-gradient(circle, #2563EB, transparent 70%)" }} />
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full opacity-[0.04]" style={{ background: "radial-gradient(circle, #06B6D4, transparent 70%)" }} />
-      </div>
-
-      {/* Top bar */}
-      <div className="relative z-10 bg-card border-b border-border px-4 py-4">
-        <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+    <div className="member-shell workout-session">
+      <header className="workout-topbar">
+        <div className="workout-container workout-topbar-inner">
           <div className="flex items-center gap-3 min-w-0">
-            <Button aria-label="Save draft and leave workout" size="icon" variant="ghost" className="text-muted-foreground hover:text-foreground h-9 w-9 border border-border rounded-xl" onClick={() => navigate("/workout-planner")}>
-              <X size={18} />
-            </Button>
+            <Button aria-label="Save draft and leave workout" size="icon" variant="outline" className="workout-icon-button"
+              onClick={() => navigate("/workout-planner")}><ChevronLeft size={19} /></Button>
             <div className="min-w-0">
-              <p className="member-eyebrow !mb-1">Your training session</p>
-              <h1 className="text-sm font-semibold truncate max-w-[240px] sm:max-w-none">{plan?.name || "Workout"}</h1>
-              <p className="text-[10px] text-muted-foreground mt-1">Exercise {currentIdx + 1} of {exercises.length} · Draft saved on this device</p>
+              <p className="member-eyebrow !mb-1">In your corner · Training</p>
+              <h1 className="text-sm sm:text-base font-semibold truncate">{plan.name || "Workout"}</h1>
             </div>
           </div>
-          <div className="flex items-center gap-2 ml-auto">
-            <p className="text-lg font-mono font-semibold text-primary mr-2">{formatTime(elapsedSeconds)}</p>
-            <Button aria-label={isPaused ? "Resume session timer" : "Pause session timer"} size="icon" variant="ghost" className="text-muted-foreground h-8 w-8" onClick={() => setIsPaused(!isPaused)}>
-              {isPaused ? <Play size={16} /> : <Pause size={16} />}
+          <div className="workout-timer-controls">
+            <div className="workout-session-clock"><Timer size={17} aria-hidden="true" /><span aria-label="Elapsed session time">{formatTime(elapsedSeconds)}</span></div>
+            <Button aria-label={isPaused ? "Resume session timer" : "Pause session timer"} size="icon" variant="ghost" className="workout-icon-button" onClick={() => setIsPaused(!isPaused)}>
+              {isPaused ? <Play size={17} /> : <Pause size={17} />}
             </Button>
-            <Button aria-label="Reset session timer" size="icon" variant="ghost" className="text-muted-foreground h-8 w-8" onClick={() => { setElapsedSeconds(0); toast.info("Timer reset"); }}>
-              <RotateCcw size={14} />
-            </Button>
-            <Button aria-label={voiceEnabled ? "Turn voice coach off" : "Turn voice coach on"} aria-pressed={voiceEnabled} size="icon" variant="ghost"
-              className={`h-8 w-8 ${voiceEnabled ? "text-primary" : "text-muted-foreground"}`}
-              onClick={() => { setVoiceEnabled(!voiceEnabled); toast.info(voiceEnabled ? "Voice coach off" : "Voice coach on 🎙️"); }}>
-              {voiceEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+            <Button aria-label="Reset session timer" size="icon" variant="ghost" className="workout-icon-button" onClick={() => { setElapsedSeconds(0); toast.info("Timer reset"); }}><RotateCcw size={16} /></Button>
+            <Button aria-label={voiceEnabled ? "Turn voice coach off" : "Turn voice coach on"} aria-pressed={voiceEnabled} size="icon" variant="ghost" className="workout-icon-button"
+              onClick={() => { if (voiceEnabled && "speechSynthesis" in window) window.speechSynthesis.cancel(); setVoiceEnabled(!voiceEnabled); toast.info(voiceEnabled ? "Voice coach off" : "Voice coach on"); }}>
+              {voiceEnabled ? <Volume2 size={17} className="text-primary" /> : <VolumeX size={17} />}
             </Button>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Progress bar */}
-      <div className="h-1.5 bg-secondary relative z-10">
-        <motion.div className="h-full gradient-bg" animate={{ width: `${progressPercent}%` }} transition={{ type: "spring", stiffness: 100 }} />
-      </div>
-
-      {/* Rest Timer Overlay */}
-      <AnimatePresence>
-        {isResting && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-lg">
-            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }} className="text-center">
-              <motion.div animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.1, 0.3] }} transition={{ duration: 2, repeat: Infinity }}
-                className="absolute inset-0 m-auto w-56 h-56 rounded-full" style={{ background: "radial-gradient(circle, rgba(37,99,235,0.3), transparent 70%)" }} />
-              <p className="text-sm uppercase tracking-[0.3em] text-muted-foreground mb-6 font-semibold">Rest Time</p>
-              <div className="relative w-48 h-48 mx-auto mb-8">
-                <svg className="w-48 h-48 -rotate-90" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="45" fill="none" stroke="hsl(var(--secondary))" strokeWidth="3" />
-                  <circle cx="50" cy="50" r="45" fill="none" stroke="url(#restGrad2)" strokeWidth="4" strokeLinecap="round"
-                    strokeDasharray={`${2 * Math.PI * 45}`}
-                    strokeDashoffset={`${2 * Math.PI * 45 * (1 - (restTotal > 0 ? restTime / restTotal : 0))}`}
-                    className="transition-all duration-1000" />
-                  <defs><linearGradient id="restGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#2563EB" /><stop offset="100%" stopColor="#06B6D4" />
-                  </linearGradient></defs>
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <motion.span key={restTime} initial={{ scale: 1.3, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                    className="text-5xl font-mono font-bold text-foreground">{restTime}</motion.span>
-                  <span className="text-xs text-muted-foreground mt-1">seconds</span>
-                </div>
+      <main className="workout-container workout-content">
+        {currentExercise && <>
+          <motion.section key={currentIdx} className="workout-exercise-hero" aria-labelledby="current-exercise-title"
+            initial={{ opacity: motionEnabled ? 0 : 1, y: motionEnabled ? 8 : 0 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: fadeDuration }}>
+            {motionEnabled && <ParticleBurst trigger={particleTrigger} />}
+            <div className="workout-exercise-copy">
+              <span className="workout-stage-label"><span className="workout-live-dot" />Exercise {String(currentIdx + 1).padStart(2, "0")} / {String(exercises.length).padStart(2, "0")}</span>
+              <h2 id="current-exercise-title" className="workout-exercise-title capitalize">{currentExercise.name}</h2>
+              <div className="flex flex-wrap gap-2 mb-5">
+                <span className="workout-tag capitalize" data-tone="blue">{currentExercise.target}</span>
+                <span className="workout-tag capitalize" data-tone="violet">{currentExercise.equipment}</span>
               </div>
-              <p className="text-sm text-muted-foreground mb-6">
-                Next: <span className="text-foreground font-medium capitalize">
-                  {currentIdx < exercises.length - 1 ? exercises[currentIdx + 1]?.name : "Finish! 🏁"}
-                </span>
-              </p>
-              <div className="flex gap-3 justify-center">
-                <Button variant="outline" onClick={() => setRestTime(t => t + 15)} className="rounded-xl border-white/10 text-sm">+15s</Button>
-                <Button variant="outline" onClick={() => setRestTime(t => t + 30)} className="rounded-xl border-white/10 text-sm">+30s</Button>
-                <Button onClick={() => { setIsResting(false); setRestTime(0); }} className="gradient-bg text-primary-foreground rounded-xl px-6 text-sm">
-                  <SkipForward size={14} className="mr-1" /> Skip
+              <div className="workout-exercise-targets">
+                <span><Target size={15} />{currentExercise.sets.length} sets</span>
+                <span><Dumbbell size={15} />{currentExercise.plannedReps} reps target</span>
+                <span><Clock size={15} />{currentExercise.restSeconds}s rest</span>
+              </div>
+            </div>
+            <div className="workout-exercise-visual">
+              {currentExercise.gifUrl ? <img src={currentExercise.gifUrl} alt={`Demonstration of ${currentExercise.name}`} className="workout-exercise-demo" />
+                : <div className="workout-exercise-art" aria-hidden="true"><div className="workout-art-ring"><Dumbbell size={56} strokeWidth={1.4} /></div><span className="workout-art-chip"><Zap size={16} />One set at a time</span></div>}
+              <Button variant="outline" className="workout-guide-button" aria-label={`View form guide for ${currentExercise.name}`}
+                onClick={() => { setDetailExercise(currentExercise); setShowDetail(true); }}><Info size={15} />Form guide<ArrowUpRight size={14} /></Button>
+            </div>
+          </motion.section>
+
+          <div className="workout-focus-grid">
+            <section aria-labelledby="workout-sets-title" className="workout-log-panel">
+              <div className="workout-section-heading">
+                <div><p className="member-eyebrow !mb-1">{nextSetIdx < 0 ? "Exercise complete" : isResting ? "Take a breath" : `Ready for set ${nextSetIdx + 1}`}</p><h2 id="workout-sets-title" className="text-xl font-semibold">Your sets<span className="workout-small-count">{exerciseSetsDone} / {currentExercise.sets.length}</span></h2></div>
+                <Button variant="outline" size="sm" aria-pressed={showWeight} onClick={() => setShowWeight(!showWeight)} className="workout-weight-toggle">
+                  <Dumbbell size={14} />{showWeight ? "Hide weight" : "Track weight"}
                 </Button>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
-      {/* Pause Overlay */}
-      <AnimatePresence>
-        {isPaused && !isResting && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="text-center">
-              <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 2, repeat: Infinity }}
-                className="w-24 h-24 rounded-full border-2 border-primary/50 flex items-center justify-center mx-auto mb-6">
-                <Pause size={40} className="text-primary" />
-              </motion.div>
-              <h2 className="text-2xl font-heading font-bold mb-2">Workout Paused</h2>
-              <p className="text-muted-foreground mb-6">{formatTime(elapsedSeconds)} elapsed</p>
-              <Button onClick={() => setIsPaused(false)} className="gradient-bg text-primary-foreground rounded-xl px-8 glow-pulse">
-                <Play size={16} className="mr-2" /> Resume
-              </Button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <AnimatePresence>
+                {isResting && <motion.aside className="workout-rest-card" aria-label="Rest timer"
+                  initial={{ opacity: 0, y: motionEnabled ? -8 : 0 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: fadeDuration }}>
+                  <div className="workout-rest-ring">
+                    <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" /><circle cx="50" cy="50" r="44" className="workout-rest-ring-value"
+                      strokeDasharray={2 * Math.PI * 44} strokeDashoffset={2 * Math.PI * 44 * (1 - Math.min(1, restTotal > 0 ? restTime / restTotal : 0))} /></svg>
+                    <strong aria-label="Rest time remaining">{restTime}<small>s</small></strong>
+                  </div>
+                  <div className="workout-rest-copy"><p className="font-semibold text-sm">Recover & reset</p><p className="text-xs text-muted-foreground mt-1">{nextExercise ? `Next: ${nextExercise.name} · Set ${nextExercise.sets.findIndex(set => !set.completed) + 1}` : "All sets logged. Finish when you're ready."}</p></div>
+                  <div className="workout-rest-actions">
+                    <Button variant="outline" size="sm" onClick={() => { setRestTime(t => t + 15); setRestTotal(t => t + 15); }}>+15s</Button>
+                    <Button variant="outline" size="sm" onClick={() => { setRestTime(t => t + 30); setRestTotal(t => t + 30); }}>+30s</Button>
+                    <Button size="sm" className="workout-primary-button" aria-label="Skip rest" onClick={() => { setIsResting(false); setRestTime(0); }}><SkipForward size={14} />Skip</Button>
+                  </div>
+                </motion.aside>}
+              </AnimatePresence>
 
-      {/* Main content - DESKTOP: side-by-side layout */}
-      <div className="flex-1 overflow-y-auto relative z-10">
-        {currentExercise && (
-          <AnimatePresence mode="wait">
-            <motion.div key={currentIdx}
-              initial={{ opacity: 0, x: 60 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -60 }}
-              transition={{ type: "spring", damping: 20 }}
-              className="max-w-6xl mx-auto p-4 md:p-6">
-
-              {/* Desktop: 2-column layout */}
-              <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-5">
-
-                {/* LEFT: Exercise visual + queue */}
-                <div className="space-y-4">
-                  {/* Exercise card with GIF */}
-                  <div className="glass-card rounded-2xl overflow-hidden relative">
-                    <ParticleBurst trigger={particleTrigger} />
-                    {currentExercise.gifUrl && (
-                      <div className="relative">
-                        <img src={currentExercise.gifUrl} alt={currentExercise.name} className="w-full aspect-[4/3] object-contain bg-secondary/30" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent" />
-                      </div>
-                    )}
-                    <div className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h2 className="text-lg font-heading font-bold capitalize">{currentExercise.name}</h2>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary capitalize">{currentExercise.target}</span>
-                            <span className="text-xs text-muted-foreground capitalize">{currentExercise.equipment}</span>
-                          </div>
-                        </div>
-                        <Button size="icon" variant="ghost" className="h-9 w-9 rounded-xl hover:bg-primary/10"
-                          onClick={() => { setDetailExercise(currentExercise); setShowDetail(true); }}>
-                          <Info size={18} className="text-primary" />
-                        </Button>
+              <div className="workout-set-list" role="list" aria-label="Exercise sets">
+                {currentExercise.sets.map((set, setIdx) => (
+                  <motion.div role="listitem" key={`${currentIdx}-${setIdx}`}
+                    className={`workout-set-card ${set.completed ? "is-complete" : setIdx === nextSetIdx ? "is-current" : ""} ${showWeight ? "has-weight" : ""}`}
+                    initial={{ opacity: motionEnabled ? 0 : 1, y: motionEnabled ? 6 : 0 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: fadeDuration, delay: motionEnabled ? setIdx * 0.03 : 0 }}>
+                    <div className="workout-set-number"><span className="text-[10px] uppercase tracking-wider">Set</span><strong>{String(setIdx + 1).padStart(2, "0")}</strong></div>
+                    <div className="workout-value-field">
+                      <label htmlFor={`set-reps-${setIdx}`}>Reps</label>
+                      <div className="workout-stepper">
+                        <button type="button" aria-label={`Decrease reps for set ${setIdx + 1}`} onClick={() => updateSetField(setIdx, "reps", Math.max(1, set.reps - 1))} disabled={set.completed}><Minus size={15} /></button>
+                        <input id={`set-reps-${setIdx}`} aria-label={`Reps for set ${setIdx + 1}`} inputMode="numeric" type="number" min={1} step={1} value={set.reps}
+                          onChange={e => updateSetField(setIdx, "reps", Math.max(1, parseInt(e.target.value) || 1))} disabled={set.completed} />
+                        <button type="button" aria-label={`Increase reps for set ${setIdx + 1}`} onClick={() => updateSetField(setIdx, "reps", set.reps + 1)} disabled={set.completed}><Plus size={15} /></button>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Exercise Queue - desktop sidebar list */}
-                  <div className="glass-card rounded-2xl p-3 space-y-1 hidden lg:block">
-                    <p className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground px-2 mb-2 flex items-center gap-2">
-                      <ListOrdered size={14} className="text-primary" /> Exercise Queue
-                    </p>
-                    <div className="space-y-1 max-h-[300px] overflow-y-auto">
-                      {exercises.map((ex, idx) => {
-                        const done = ex.sets.filter(s => s.completed).length;
-                        const allDone = done === ex.sets.length;
-                        return (
-                          <button key={idx} onClick={() => setCurrentIdx(idx)}
-                            className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center gap-3 transition-all text-sm ${
-                              idx === currentIdx ? "bg-primary/20 border border-primary/30"
-                              : allDone ? "bg-success/10 border border-success/20"
-                              : "hover:bg-white/5 border border-transparent"
-                            }`}>
-                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                              allDone ? "bg-success/20 text-success" : idx === currentIdx ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground"
-                            }`}>{allDone ? <Check size={14} /> : idx + 1}</div>
-                            <div className="flex-1 min-w-0">
-                              <p className={`capitalize truncate ${idx === currentIdx ? "text-primary font-semibold" : ""}`}>{ex.name}</p>
-                              <p className="text-xs text-muted-foreground">{done}/{ex.sets.length} sets</p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Stats row - desktop only */}
-                  <div className="hidden lg:grid grid-cols-3 gap-2">
-                    {[
-                      { icon: Target, label: "Sets", value: `${totalSetsCompleted}/${totalSets}`, color: "text-primary" },
-                      { icon: Zap, label: "Calories", value: `~${calorieEstimate}`, color: "text-warning" },
-                      { icon: Timer, label: "Time", value: `${Math.floor(elapsedSeconds / 60)}m`, color: "text-success" },
-                    ].map((stat, i) => (
-                      <div key={i} className="glass-card p-3 rounded-xl text-center">
-                        <stat.icon size={14} className={`mx-auto mb-1 ${stat.color}`} />
-                        <p className="text-sm font-bold">{stat.value}</p>
-                        <p className="text-[10px] text-muted-foreground">{stat.label}</p>
+                    {showWeight && <div className="workout-value-field">
+                      <label htmlFor={`set-weight-${setIdx}`}>Weight <span className="font-normal">(kg)</span></label>
+                      <div className="workout-stepper">
+                        <button type="button" aria-label={`Decrease weight for set ${setIdx + 1}`} onClick={() => updateSetField(setIdx, "weight", Math.max(0, set.weight - 2.5))} disabled={set.completed}><Minus size={15} /></button>
+                        <input id={`set-weight-${setIdx}`} aria-label={`Weight for set ${setIdx + 1}`} inputMode="decimal" type="number" min={0} step="any" value={set.weight}
+                          onChange={e => updateSetField(setIdx, "weight", Math.max(0, parseFloat(e.target.value) || 0))} disabled={set.completed} />
+                        <button type="button" aria-label={`Increase weight for set ${setIdx + 1}`} onClick={() => updateSetField(setIdx, "weight", set.weight + 2.5)} disabled={set.completed}><Plus size={15} /></button>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* RIGHT: Set logging */}
-                <div className="space-y-4">
-                  {/* Mobile-only queue toggle */}
-                  <div className="lg:hidden glass-card rounded-2xl overflow-hidden">
-                    <details className="group">
-                      <summary className="px-4 py-3 flex items-center justify-between text-sm font-semibold cursor-pointer hover:bg-white/5 transition-colors list-none">
-                        <div className="flex items-center gap-2">
-                          <ListOrdered size={16} className="text-primary" />
-                          <span>Exercise Queue ({exercises.length})</span>
-                        </div>
-                        <ChevronDown size={16} className="group-open:rotate-180 transition-transform" />
-                      </summary>
-                      <div className="px-3 pb-3 space-y-1 max-h-48 overflow-y-auto">
-                        {exercises.map((ex, idx) => {
-                          const done = ex.sets.filter(s => s.completed).length;
-                          const allDone = done === ex.sets.length;
-                          return (
-                            <button key={idx} onClick={() => setCurrentIdx(idx)}
-                              className={`w-full text-left px-3 py-2 rounded-xl flex items-center gap-3 transition-all text-sm ${
-                                idx === currentIdx ? "bg-primary/20 border border-primary/30"
-                                : allDone ? "bg-success/10 border border-success/20"
-                                : "hover:bg-white/5 border border-transparent"
-                              }`}>
-                              <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                                allDone ? "bg-success/20 text-success" : idx === currentIdx ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground"
-                              }`}>{allDone ? <Check size={12} /> : idx + 1}</div>
-                              <p className={`capitalize truncate flex-1 ${idx === currentIdx ? "text-primary font-semibold" : ""}`}>{ex.name}</p>
-                              <span className="text-xs text-muted-foreground">{done}/{ex.sets.length}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </details>
-                  </div>
-
-                  {/* Toggle weight tracking */}
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-heading font-bold uppercase tracking-wider text-muted-foreground">
-                      Log Your Sets
-                    </h3>
-                    <button onClick={() => setShowWeight(!showWeight)}
-                      className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all ${showWeight ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
-                      <Dumbbell size={12} className="inline mr-1" /> {showWeight ? "Hide Weight" : "Track Weight"}
-                    </button>
-                  </div>
-
-                  {/* Set headers */}
-                  <div className="flex items-center text-xs text-muted-foreground px-3 gap-3">
-                    <span className="w-10">SET</span>
-                    <span className="flex-1 text-center">REPS</span>
-                    {showWeight && <span className="w-28 text-center">WEIGHT</span>}
-                    <span className="w-12"></span>
-                  </div>
-
-                  {/* Sets */}
-                  <div className="space-y-2">
-                    {currentExercise.sets.map((set, setIdx) => (
-                      <motion.div key={setIdx}
-                        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: setIdx * 0.05 }}
-                        className={`glass-card p-3 rounded-xl flex items-center gap-3 transition-all ${
-                          set.completed ? "border-success/30 bg-success/5 shadow-[0_0_15px_rgba(132,204,22,0.1)]" : ""
-                        }`}>
-                        <span className={`text-sm font-bold w-10 text-center ${set.completed ? "text-success" : "text-muted-foreground"}`}>
-                          {set.completed ? <Check size={16} className="text-success mx-auto" /> : setIdx + 1}
-                        </span>
-
-                        {/* Reps */}
-                        <div className="flex-1 flex items-center justify-center gap-1.5">
-                          <button onClick={() => updateSetField(setIdx, "reps", Math.max(1, set.reps - 1))}
-                            className="text-muted-foreground hover:text-foreground p-1.5 rounded-lg hover:bg-white/5 transition-colors" disabled={set.completed}>
-                            <Minus size={14} />
-                          </button>
-                          <input type="number" value={set.reps}
-                            onChange={e => updateSetField(setIdx, "reps", parseInt(e.target.value) || 1)}
-                            className="w-16 bg-secondary/80 rounded-xl px-2 py-2 text-center text-base font-bold text-foreground border border-white/10 focus:border-primary/50 focus:outline-none transition-colors"
-                            disabled={set.completed} />
-                          <button onClick={() => updateSetField(setIdx, "reps", set.reps + 1)}
-                            className="text-muted-foreground hover:text-foreground p-1.5 rounded-lg hover:bg-white/5 transition-colors" disabled={set.completed}>
-                            <Plus size={14} />
-                          </button>
-                        </div>
-
-                        {/* Optional weight */}
-                        {showWeight && (
-                          <div className="w-28 flex items-center justify-center gap-1">
-                            <button onClick={() => updateSetField(setIdx, "weight", Math.max(0, set.weight - 2.5))}
-                              className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-white/5" disabled={set.completed}>
-                              <Minus size={12} />
-                            </button>
-                            <input type="number" value={set.weight}
-                              onChange={e => updateSetField(setIdx, "weight", parseFloat(e.target.value) || 0)}
-                              className="w-14 bg-secondary/80 rounded-lg px-1 py-1.5 text-center text-sm text-foreground border border-white/10 focus:border-primary/50 focus:outline-none"
-                              disabled={set.completed} />
-                            <button onClick={() => updateSetField(setIdx, "weight", set.weight + 2.5)}
-                              className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-white/5" disabled={set.completed}>
-                              <Plus size={12} />
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Complete button */}
-                        {set.completed ? (
-                          <div className="w-12 h-12 rounded-xl bg-success/20 flex items-center justify-center">
-                            <Check size={20} className="text-success" />
-                          </div>
-                        ) : (
-                          <Button size="icon" aria-label={`Complete set ${setIdx + 1}`} onClick={() => logSet(setIdx)}
-                            className="w-12 h-12 gradient-bg text-primary-foreground rounded-xl hover:scale-95 active:scale-90 transition-transform">
-                            <Check size={20} />
-                          </Button>
-                        )}
-                      </motion.div>
-                    ))}
-                  </div>
-
-                  {/* Set actions */}
-                  <div className="flex gap-2 flex-wrap">
-                    <Button variant="outline" size="sm" onClick={addExtraSet} className="rounded-xl border-white/10 text-xs gap-1">
-                      <Plus size={14} /> Add Set
+                    </div>}
+                    <Button aria-label={set.completed ? `Edit completed set ${setIdx + 1}` : `Complete set ${setIdx + 1}`} title={set.completed ? "Reopen this set to correct it" : "Save this set"}
+                      onClick={() => set.completed ? reopenSet(setIdx) : logSet(setIdx)} className={`workout-log-button ${set.completed ? "is-logged" : ""}`}>
+                      <Check size={17} /><span>{set.completed ? "Logged" : "Log set"}</span>{set.completed && <RotateCcw size={12} className="ml-1" />}
                     </Button>
-                    {currentExercise.sets.length > 1 && (
-                      <Button variant="outline" size="sm" onClick={removeLastSet} className="rounded-xl border-white/10 text-xs gap-1">
-                        <Minus size={14} /> Remove
-                      </Button>
-                    )}
-                    <Button variant="outline" size="sm"
-                      onClick={() => { setRestTime(currentExercise.restSeconds); setRestTotal(currentExercise.restSeconds); setIsResting(true); }}
-                      className="rounded-xl border-white/10 text-xs gap-1">
-                      <Clock size={14} /> Rest ({currentExercise.restSeconds}s)
-                    </Button>
-                  </div>
-
-                  {/* Notes for this exercise */}
-                  <div className="glass-card rounded-xl p-3">
-                    <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
-                      <Notebook size={12} /> Session Notes
-                    </label>
-                    <textarea
-                      value={setNotes[currentExercise.name] || ""}
-                      onChange={e => setSetNotes(prev => ({ ...prev, [currentExercise.name]: e.target.value }))}
-                      placeholder="How did this feel? PR? Form notes..."
-                      className="w-full bg-secondary/50 rounded-xl px-3 py-2 text-sm text-foreground border border-white/10 focus:border-primary/50 focus:outline-none resize-none h-20 placeholder:text-muted-foreground/50"
-                    />
-                  </div>
-
-                  {/* Mobile stats */}
-                  <div className="lg:hidden grid grid-cols-3 gap-2">
-                    {[
-                      { icon: Target, label: "Sets", value: `${totalSetsCompleted}/${totalSets}`, color: "text-primary" },
-                      { icon: Zap, label: "Calories", value: `~${calorieEstimate}`, color: "text-warning" },
-                      { icon: Timer, label: "Time", value: `${Math.floor(elapsedSeconds / 60)}m`, color: "text-success" },
-                    ].map((stat, i) => (
-                      <div key={i} className="glass-card p-2.5 rounded-xl text-center">
-                        <stat.icon size={14} className={`mx-auto mb-1 ${stat.color}`} />
-                        <p className="text-sm font-bold">{stat.value}</p>
-                        <p className="text-[10px] text-muted-foreground">{stat.label}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                  </motion.div>
+                ))}
               </div>
-            </motion.div>
-          </AnimatePresence>
-        )}
-      </div>
 
-      {/* Bottom nav */}
-      <div className="relative z-10 border-t border-white/[0.08] p-4 bg-card/80 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <Button variant="outline" onClick={() => setCurrentIdx(i => Math.max(0, i - 1))} disabled={currentIdx === 0}
-            className="rounded-xl border-white/10 gap-1">
-            <ChevronLeft size={16} /> Prev
-          </Button>
-          <div className="flex items-center gap-2">
-            {exercises.map((_, idx) => (
-              <button key={idx} onClick={() => setCurrentIdx(idx)}
-                className={`w-2 h-2 rounded-full transition-all ${
-                  idx === currentIdx ? "w-6 gradient-bg"
-                  : exercises[idx].sets.every(s => s.completed) ? "bg-success" : "bg-secondary hover:bg-muted-foreground/30"
-                }`} />
-            ))}
+              <div className="workout-set-actions">
+                <Button variant="outline" size="sm" onClick={addExtraSet}><Plus size={14} />Add set</Button>
+                {currentExercise.sets.length > 1 && <Button variant="ghost" size="sm" aria-label="Remove last set" onClick={removeLastSet}><Minus size={14} />Remove last</Button>}
+                <Button variant="ghost" size="sm" disabled={currentExercise.restSeconds <= 0} aria-label="Start rest timer"
+                  onClick={() => { setRestTime(currentExercise.restSeconds); setRestTotal(currentExercise.restSeconds); setIsResting(true); }}><Clock size={14} />Rest · {currentExercise.restSeconds}s</Button>
+              </div>
+
+              {nextSetIdx < 0 && <div className="workout-exercise-done" role="status"><Check size={18} /><div><strong>That's this exercise done.</strong><p>{currentIdx < exercises.length - 1 ? "Move on when you're ready, or add another set." : "Finish your workout when you're ready, or add another set."}</p></div></div>}
+
+              <details className="workout-notes">
+                <summary><Notebook size={16} /><span>Exercise notes</span>{setNotes[currentExercise.name]?.trim() && <span className="workout-note-saved">Added</span>}<ChevronDown size={15} /></summary>
+                <div className="pt-3">
+                  <label htmlFor="workout-exercise-notes" className="text-xs text-muted-foreground block mb-2">How did this exercise feel?</label>
+                  <textarea id="workout-exercise-notes" value={setNotes[currentExercise.name] || ""} onChange={e => setSetNotes(prev => ({ ...prev, [currentExercise.name]: e.target.value }))}
+                    placeholder="Form cues, a personal best, or something for next time…" rows={3} className="workout-note-input" />
+                </div>
+              </details>
+            </section>
+
+            <aside className="workout-session-sidebar">
+              <section className="workout-progress-card" aria-labelledby="workout-progress-title">
+                <div className="workout-section-heading"><h2 id="workout-progress-title" className="text-sm font-semibold">Session progress</h2><span className="workout-small-count">{Math.round(progressPercent)}%</span></div>
+                <div className="workout-progress-overview">
+                  <div className="workout-progress-ring" role="progressbar" aria-label="Sets completed" aria-valuemin={0} aria-valuemax={totalSets} aria-valuenow={totalSetsCompleted}>
+                    <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="43" /><circle cx="50" cy="50" r="43" className="workout-progress-ring-value" strokeDasharray={2 * Math.PI * 43} strokeDashoffset={2 * Math.PI * 43 * (1 - progressPercent / 100)} /></svg>
+                    <div><strong>{totalSetsCompleted}<small>/{totalSets}</small></strong><span>sets logged</span></div>
+                  </div>
+                  <div className="workout-session-stats">
+                    <div data-tone="violet"><Dumbbell size={16} /><p><strong>{totalVolume.toLocaleString()} kg</strong><span>Volume logged</span></p></div>
+                    <div data-tone="amber"><Flame size={16} /><p><strong>~{calorieEstimate} kcal</strong><span>Estimated energy</span></p></div>
+                  </div>
+                </div>
+                <p className="workout-save-caption"><ShieldCheck size={13} />Your session autosaves on this device.</p>
+              </section>
+
+              <section className="workout-lineup-card" aria-labelledby="workout-lineup-title">
+                <div className="workout-section-heading"><h2 id="workout-lineup-title" className="text-sm font-semibold flex items-center gap-2"><ListOrdered size={16} className="text-primary" />Session lineup</h2><span className="text-xs text-muted-foreground">{exercises.length}</span></div>
+                <nav aria-label="Workout exercises" className="workout-lineup">
+                  {exercises.map((ex, idx) => {
+                    const done = ex.sets.filter(set => set.completed).length;
+                    const allDone = done === ex.sets.length;
+                    return <button key={idx} type="button" aria-current={idx === currentIdx ? "step" : undefined} aria-label={`Go to exercise ${idx + 1}: ${ex.name}`} onClick={() => setCurrentIdx(idx)}
+                      className={`workout-lineup-item ${idx === currentIdx ? "is-current" : ""} ${allDone ? "is-complete" : ""}`}>
+                      <span className="workout-lineup-index">{allDone ? <Check size={15} /> : String(idx + 1).padStart(2, "0")}</span>
+                      <span className="min-w-0 flex-1"><strong className="capitalize">{ex.name}</strong><small>{done} / {ex.sets.length} sets logged</small></span>
+                      {idx === currentIdx && <ChevronRight size={15} className="shrink-0" />}
+                    </button>;
+                  })}
+                </nav>
+              </section>
+            </aside>
           </div>
-          {currentIdx === exercises.length - 1 ? (
-            <Button aria-label="Finish workout" onClick={finishWorkout} className="gradient-bg text-primary-foreground rounded-xl gap-2 glow-pulse">
-              <Trophy size={16} /> Finish
-            </Button>
-          ) : (
-            <Button onClick={() => setCurrentIdx(i => Math.min(exercises.length - 1, i + 1))}
-              className="gradient-bg text-primary-foreground rounded-xl gap-1">
-              Next <ChevronRight size={16} />
-            </Button>
-          )}
-        </div>
-      </div>
+        </>}
+      </main>
 
+      <footer className="workout-footer">
+        <div className="workout-container workout-footer-inner">
+          <Button variant="outline" aria-label="Previous exercise" disabled={currentIdx === 0} onClick={() => setCurrentIdx(i => Math.max(0, i - 1))}><ChevronLeft size={17} /><span>Previous</span></Button>
+          <div className="workout-footer-progress"><strong>{totalSetsCompleted} of {totalSets} sets logged</strong><div><span style={{ width: `${progressPercent}%` }} /></div></div>
+          {currentIdx === exercises.length - 1
+            ? <Button aria-label="Finish workout" onClick={finishWorkout} className="workout-primary-button"><Trophy size={17} />Finish workout</Button>
+            : <Button aria-label="Next exercise" onClick={() => setCurrentIdx(i => Math.min(exercises.length - 1, i + 1))} className="workout-primary-button">Next exercise<ChevronRight size={17} /></Button>}
+        </div>
+      </footer>
+
+      <Dialog open={isPaused} onOpenChange={open => setIsPaused(open)}>
+        <DialogContent className="member-shell workout-pause-dialog">
+          <div className="workout-pause-icon"><Pause size={30} /></div>
+          <DialogHeader><DialogTitle className="text-2xl">Take your time.</DialogTitle><DialogDescription>The session timer{isResting ? " and rest countdown are" : " is"} paused at {formatTime(elapsedSeconds)}.</DialogDescription></DialogHeader>
+          <Button className="workout-primary-button mt-3" onClick={() => setIsPaused(false)}><Play size={16} />Resume workout</Button>
+        </DialogContent>
+      </Dialog>
       <ExerciseDetailModal exercise={detailExercise} open={showDetail} onClose={() => setShowDetail(false)} />
     </div>
   );
@@ -743,16 +564,18 @@ function CompletionScreen({
   planName: string; calories: number; formatTime: (s: number) => string;
   onDone: () => void; notes: Record<string, string>;
 }) {
+  const { motionEnabled, fadeDuration } = useSessionMotion();
   const [confettiPieces, setConfettiPieces] = useState<{ id: number; x: number; color: string; delay: number; size: number; shape: string }[]>([]);
 
   useEffect(() => {
+    if (!motionEnabled) { setConfettiPieces([]); return; }
     setConfettiPieces(Array.from({ length: 80 }, (_, i) => ({
       id: i, x: Math.random() * 100,
       color: ["#2563EB", "#06B6D4", "#84CC16", "#FACC15", "#F43F5E", "#8B5CF6", "#EC4899"][Math.floor(Math.random() * 7)],
       delay: Math.random() * 1, size: Math.random() * 10 + 4,
       shape: Math.random() > 0.5 ? "circle" : "rect",
     })));
-  }, []);
+  }, [motionEnabled]);
 
   const noteEntries = Object.entries(notes).filter(([_, v]) => v.trim());
 
@@ -775,27 +598,27 @@ function CompletionScreen({
           style={{ left: `${p.x}%`, width: p.size, height: p.shape === "circle" ? p.size : p.size * 0.4, backgroundColor: p.color, borderRadius: p.shape === "circle" ? "50%" : "2px" }}
         />
       ))}
-      <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.1, 0.2, 0.1] }} transition={{ duration: 3, repeat: Infinity }}
-        className="absolute w-[500px] h-[500px] rounded-full" style={{ background: "radial-gradient(circle, rgba(37,99,235,0.3), transparent 70%)" }} />
+      {motionEnabled && <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.1, 0.2, 0.1] }} transition={{ duration: 3, repeat: Infinity }}
+        className="absolute w-[500px] h-[500px] rounded-full" style={{ background: "radial-gradient(circle, hsl(var(--primary) / .3), transparent 70%)" }} />}
 
-      <motion.div initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: "spring", damping: 12, delay: 0.3 }}
+      <motion.div initial={{ scale: motionEnabled ? 0.9 : 1, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: fadeDuration }}
         className="glass-card p-8 rounded-3xl max-w-md w-full text-center relative z-10">
-        <motion.div initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }}
-          transition={{ type: "spring", damping: 8, delay: 0.5 }}
-          className="w-24 h-24 rounded-full gradient-bg mx-auto mb-6 flex items-center justify-center shadow-[0_0_40px_rgba(37,99,235,0.4)]">
+        <motion.div initial={{ scale: motionEnabled ? 0 : 1, rotate: motionEnabled ? -90 : 0 }} animate={{ scale: 1, rotate: 0 }}
+          transition={motionEnabled ? { type: "spring", damping: 12, delay: 0.2 } : { duration: fadeDuration }}
+          className="w-20 h-20 rounded-3xl gradient-bg mx-auto mb-6 flex items-center justify-center">
           <Trophy size={40} className="text-primary-foreground" />
         </motion.div>
-        <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
+        <motion.h1 initial={{ opacity: 0, y: motionEnabled ? 20 : 0 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: fadeDuration, delay: motionEnabled ? 0.3 : 0 }}
           className="text-2xl font-heading font-bold mb-1">Another session in the books.</motion.h1>
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: fadeDuration, delay: motionEnabled ? 0.4 : 0 }}
           className="text-muted-foreground text-sm mb-6">{planName}</motion.p>
         <div className="flex justify-center mb-5"><SyncStatus /></div>
 
         <div className={`grid ${stats.length > 4 ? "grid-cols-3" : "grid-cols-2"} gap-2.5 mb-6`}>
           {stats.map((stat, i) => (
-            <motion.div key={i} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.9 + i * 0.1 }} className="glass-card p-3 rounded-xl">
+            <motion.div key={i} initial={{ opacity: 0, scale: motionEnabled ? 0.8 : 1 }} animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: fadeDuration, delay: motionEnabled ? 0.45 + i * 0.08 : 0 }} className="glass-card p-3 rounded-xl">
               <stat.icon size={16} className={`mx-auto mb-1.5 ${stat.color}`} />
               <p className="text-lg font-bold">{stat.value}</p>
               <p className="text-[10px] text-muted-foreground">{stat.label}</p>
@@ -804,7 +627,7 @@ function CompletionScreen({
         </div>
 
         {noteEntries.length > 0 && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.3 }}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: fadeDuration, delay: motionEnabled ? 0.7 : 0 }}
             className="text-left mb-6">
             <p className="text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground mb-2">Session Notes</p>
             {noteEntries.map(([name, note], i) => (
@@ -816,7 +639,7 @@ function CompletionScreen({
           </motion.div>
         )}
 
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.5 }}>
+        <motion.div initial={{ opacity: 0, y: motionEnabled ? 10 : 0 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: fadeDuration, delay: motionEnabled ? 0.8 : 0 }}>
           <Button onClick={onDone} className="w-full gradient-bg text-primary-foreground rounded-xl text-base py-3 glow-pulse">
             Back to your training
           </Button>

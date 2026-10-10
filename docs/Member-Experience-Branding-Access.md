@@ -44,7 +44,7 @@ In **Platform settings → Feature access**, every tool can be **Free**, **Premi
 | Personal records | Achievements and challenges | None |
 | Calendar | Workout scheduling and events | None |
 | Rewards | Badges and member rewards | None |
-| Coach library | Published workout and meal templates | Related Training or Meal planner access also required |
+| Coach library | Published templates and private My coach programmes | Related Training, Nutrition or Meal planner access also required |
 
 For example, publishing **Nutrition → Disabled** hides Nutrition and its child tools from menus and blocks their direct routes and embedded tabs. Re-enabling Nutrition restores the saved data. If Nutrition becomes Premium, free members see the upgrade experience; a child cannot bypass the parent's plan requirement. Disabling any feature overrides all memberships and individual grants. Full administrators retain preview access; other team roles do not bypass member paywalls.
 
@@ -65,6 +65,8 @@ When an administrator publishes a premium restriction, the page switches to actu
 Prices and a checkout link do not charge a card or automatically grant membership. This release uses administrator-confirmed memberships. Automated subscription billing needs a payment-provider integration with a verified server webhook that updates the protected entitlement; a browser return URL is not proof of payment.
 
 ## Rollout
+
+The coach-to-member programme workflow and workout-session redesign are described in [Shared coaching and focused workouts](Coaching-Programmes-Workout-Focus.md). Shared programme sync requires the updated Firestore rules below.
 
 1. Retain a trusted `admin` document in the protected `admins/{uid}` registry.
 2. Publish `firestore.rules` and `storage.rules` to the existing Firebase project. This enables protected memberships, settings history, branded uploads and feature write enforcement.

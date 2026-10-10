@@ -135,8 +135,39 @@ service cloud.firestore {
     function assignmentAccess(id) {
       return fullAdmin() || (roleIn(['coach']) && get(/databases/$(database)/documents/coachAssignments/$(id)).data.coachId == request.auth.uid);
     }
+    function memberAssignmentAccess(id) {
+      let assignment = get(/databases/$(database)/documents/coachAssignments/$(id)).data;
+      return signedIn() && assignment.memberId == request.auth.uid && assignment.status == 'active';
+    }
+    function programmeFieldsValid() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['title', 'kind', 'details', 'exercises', 'durationMinutes', 'startsAt', 'meetingUrl', 'status', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 120
+        && data.kind in ['workout', 'class', 'nutrition']
+        && data.details is string && data.details.size() > 0 && data.details.size() <= 10000
+        && data.exercises is list && data.exercises.size() <= 20
+        && (data.kind != 'workout' || data.exercises.size() > 0)
+        && (data.kind != 'nutrition' || data.exercises.size() == 0)
+        && data.durationMinutes is int && data.durationMinutes >= 5 && data.durationMinutes <= 180
+        && data.startsAt is string && data.startsAt.size() <= 40 && (data.kind != 'class' || data.startsAt.size() > 0)
+        && data.meetingUrl is string && data.meetingUrl.size() <= 1000
+        && (data.meetingUrl == '' || data.meetingUrl.matches('^https://[^ ]+$'))
+        && data.createdBy == request.auth.uid && data.createdAt == request.time && data.updatedAt == request.time
+        && data.status == 'published';
+    }
+    function programmeResponseValid(assignmentId, programmeId) {
+      let data = request.resource.data;
+      let programme = get(/databases/$(database)/documents/coachAssignments/$(assignmentId)/programmes/$(programmeId)).data;
+      return memberAssignmentAccess(assignmentId) && activeOwner(request.auth.uid)
+        && programme.status == 'published' && featureEnabled('library')
+        && featureEnabled(programme.kind == 'nutrition' ? 'nutrition' : 'training')
+        && data.keys().hasOnly(['memberId', 'status', 'feedback', 'updatedAt'])
+        && data.memberId == request.auth.uid && data.status in ['seen', 'completed']
+        && data.feedback is string && data.feedback.size() <= 2000 && data.updatedAt == request.time;
+    }
     match /coachAssignments/{id} {
-      allow read: if fullAdmin() || (roleIn(['coach']) && resource.data.coachId == request.auth.uid);
+      allow read: if fullAdmin() || (roleIn(['coach']) && resource.data.coachId == request.auth.uid)
+        || (signedIn() && resource.data.memberId == request.auth.uid && resource.data.status == 'active');
       allow create, update: if fullAdmin()
         && request.resource.data.coachId is string && request.resource.data.memberId is string
         && request.resource.data.memberName is string && request.resource.data.goal is string
@@ -153,6 +184,21 @@ service cloud.firestore {
           && request.resource.data.createdAt == request.time
           && request.resource.data.body is string && request.resource.data.body.size() > 0 && request.resource.data.body.size() <= 4000;
         allow update, delete: if fullAdmin();
+      }
+      match /programmes/{programmeId} {
+        allow read: if assignmentAccess(id) || (memberAssignmentAccess(id) && resource.data.status == 'published');
+        allow create: if assignmentAccess(id)
+          && get(/databases/$(database)/documents/coachAssignments/$(id)).data.status == 'active' && programmeFieldsValid();
+        allow update: if assignmentAccess(id)
+          && get(/databases/$(database)/documents/coachAssignments/$(id)).data.status == 'active'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+          && request.resource.data.status in ['published', 'withdrawn'] && request.resource.data.updatedAt == request.time;
+        allow delete: if fullAdmin();
+      }
+      match /responses/{programmeId} {
+        allow read: if assignmentAccess(id) || memberAssignmentAccess(id);
+        allow create, update: if programmeResponseValid(id, programmeId);
+        allow delete: if fullAdmin();
       }
     }
     match /siteSettings/{id} { allow read: if true; allow write: if fullAdmin(); }

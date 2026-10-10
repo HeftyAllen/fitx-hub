@@ -59,7 +59,7 @@ export const SECTION_META: Record<
   coaching: {
     label: "My members",
     icon: Dumbbell,
-    desc: "Assignments and coaching check-ins",
+    desc: "Client programmes, classes and coaching check-ins",
   },
   content: {
     label: "Plan studio",

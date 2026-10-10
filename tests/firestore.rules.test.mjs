@@ -15,6 +15,7 @@ import {
   writeBatch,
   serverTimestamp,
   Timestamp,
+  collection, getDocs, query, where,
 } from "firebase/firestore";
 let env;
 before(async () => {
@@ -307,4 +308,75 @@ test("branding uploads are admin-only, size-limited raster assets", async () => 
   await assertFails(uploadBytes(ref(store, "public/branding/bad.svg"), new Uint8Array([1]), { contentType: "image/svg+xml" }));
   await assertFails(uploadBytes(ref(store, "public/branding/large.png"), new Uint8Array(2 * 1024 * 1024 + 1), { contentType: "image/png" }));
   await assertSucceeds(deleteObject(ref(store, path)));
+});
+
+function coachingProgramme(kind = "workout") {
+  return { title: "Home strength", kind, details: "Controlled reps and rest between sets.", exercises: kind === "nutrition" ? [] : [{ name: "Squat", sets: 2, reps: 10, restSeconds: 30 }], durationMinutes: 20,
+    startsAt: kind === "class" ? "2026-12-12T09:00:00.000Z" : "", meetingUrl: "", status: "published", createdBy: "coach", createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+}
+test("shared programmes reach only the assigned member and keep private check-ins private", async () => {
+  const coach = dbFor("coach"), member = dbFor("member");
+  await assertSucceeds(setDoc(doc(coach, "coachAssignments", "assigned", "programmes", "routine"), coachingProgramme()));
+  await assertSucceeds(getDoc(doc(member, "coachAssignments", "assigned")));
+  await assertSucceeds(getDocs(query(collection(member, "coachAssignments"), where("memberId", "==", "member"), where("status", "==", "active"))));
+  await assertSucceeds(getDocs(query(collection(member, "coachAssignments", "assigned", "programmes"), where("status", "==", "published"))));
+  await assertFails(getDoc(doc(dbFor("other"), "coachAssignments", "assigned", "programmes", "routine")));
+  await assertFails(getDocs(collection(member, "coachAssignments", "assigned", "checkIns")));
+  for (const uid of ["moderator", "staff", "readonly", "member"]) {
+    await assertFails(setDoc(doc(dbFor(uid), "coachAssignments", "assigned", "programmes", "injected"), { ...coachingProgramme(), createdBy: uid }));
+  }
+  await assertFails(setDoc(doc(coach, "coachAssignments", "foreign", "programmes", "injected"), coachingProgramme()));
+  const batch = writeBatch(coach);
+  batch.set(doc(coach, "coachAssignments", "assigned", "programmes", "class"), coachingProgramme("class"));
+  batch.set(doc(coach, "coachAssignments", "foreign", "programmes", "class"), coachingProgramme("class"));
+  await assertFails(batch.commit());
+  if ((await getDoc(doc(dbFor("admin"), "coachAssignments", "assigned", "programmes", "class"))).exists()) throw new Error("Partial group publication leaked through");
+});
+test("member feedback is truthful, scoped, and cannot alter coach content", async () => {
+  const coach = dbFor("coach"), member = dbFor("member");
+  await setDoc(doc(coach, "coachAssignments", "assigned", "programmes", "routine"), coachingProgramme());
+  const feedbackRef = doc(member, "coachAssignments", "assigned", "responses", "routine");
+  const feedback = { memberId: "member", status: "completed", feedback: "Good session.", updatedAt: serverTimestamp() };
+  await assertSucceeds(setDoc(feedbackRef, feedback));
+  await assertSucceeds(getDoc(doc(coach, "coachAssignments", "assigned", "responses", "routine")));
+  await assertFails(setDoc(feedbackRef, { ...feedback, memberId: "other" }));
+  await assertFails(setDoc(feedbackRef, { ...feedback, status: "published" }));
+  await assertFails(setDoc(feedbackRef, { ...feedback, feedback: "x".repeat(2001) }));
+  await assertFails(setDoc(doc(dbFor("other"), "coachAssignments", "assigned", "responses", "routine"), { ...feedback, memberId: "other" }));
+  await assertFails(setDoc(doc(coach, "coachAssignments", "assigned", "responses", "routine"), { ...feedback, memberId: "coach" }));
+  await assertFails(updateDoc(doc(member, "coachAssignments", "assigned", "programmes", "routine"), { title: "Rewritten by member" }));
+  await assertFails(setDoc(doc(member, "coachAssignments", "assigned", "responses", "missing"), feedback));
+});
+test("a coach can publish one class atomically to ten assigned clients", async () => {
+  await env.withSecurityRulesDisabled(async ctx => {
+    const batch = writeBatch(ctx.firestore());
+    for (let i = 0; i < 10; i++) {
+      batch.set(doc(ctx.firestore(), "users", `group-member-${i}`), { name: `Member ${i}` });
+      batch.set(doc(ctx.firestore(), "coachAssignments", `group-assignment-${i}`), { coachId: "coach", memberId: `group-member-${i}`, memberName: `Member ${i}`, goal: "Group class", status: "active" });
+    }
+    await batch.commit();
+  });
+  const coach = dbFor("coach");
+  const batch = writeBatch(coach);
+  for (let i = 0; i < 10; i++) batch.set(doc(coach, "coachAssignments", `group-assignment-${i}`, "programmes", "group-class"), coachingProgramme("class"));
+  await assertSucceeds(batch.commit());
+});
+test("withdrawal, archived assignments and feature policies stop coaching writes", async () => {
+  const coach = dbFor("coach"), member = dbFor("member"), admin = dbFor("admin");
+  await setDoc(doc(coach, "coachAssignments", "assigned", "programmes", "meals"), coachingProgramme("nutrition"));
+  const feedbackRef = doc(member, "coachAssignments", "assigned", "responses", "meals");
+  const feedback = { memberId: "member", status: "seen", feedback: "", updatedAt: serverTimestamp() };
+  await setDoc(doc(admin, "siteSettings", "access"), { features: { nutrition: { mode: "disabled" } } });
+  await assertFails(setDoc(feedbackRef, feedback));
+  await setDoc(doc(admin, "siteSettings", "access"), { features: { library: { mode: "premium", requiredPlan: "pro" } } });
+  await assertFails(setDoc(feedbackRef, feedback));
+  await setDoc(doc(admin, "siteSettings", "access"), { features: {} });
+  await assertSucceeds(setDoc(feedbackRef, feedback));
+  await assertSucceeds(updateDoc(doc(coach, "coachAssignments", "assigned", "programmes", "meals"), { status: "withdrawn", updatedAt: serverTimestamp() }));
+  await assertFails(setDoc(feedbackRef, feedback));
+  await assertFails(getDoc(doc(member, "coachAssignments", "assigned", "programmes", "meals")));
+  await updateDoc(doc(admin, "coachAssignments", "assigned"), { status: "archived" });
+  await assertFails(setDoc(doc(coach, "coachAssignments", "assigned", "programmes", "late"), coachingProgramme()));
+  await assertFails(getDoc(doc(member, "coachAssignments", "assigned")));
+  await assertFails(setDoc(feedbackRef, feedback));
 });

@@ -12,7 +12,7 @@ export const FEATURES = [
   { id: "records", label: "Personal records", description: "Achievements and training challenges", paths: ["/records"] },
   { id: "calendar", label: "Calendar", description: "Workout scheduling and personal events", paths: ["/calendar"] },
   { id: "rewards", label: "Rewards", description: "Badges and member rewards", paths: ["/rewards"] },
-  { id: "library", label: "Coach library", description: "Published workouts and meal plans", paths: ["/library"] },
+  { id: "library", label: "Coach library", description: "Published plans and private coach programmes", paths: ["/library", "/coaching"] },
 ] as const;
 export type FeatureId = typeof FEATURES[number]["id"];
 export type PlanId = "free" | "plus" | "pro";
@@ -30,7 +30,7 @@ const membershipSchema = z.object({
   proPrice: z.string().trim().min(1).max(50).catch("R149 / month").default("R149 / month"),
   showFuturePlans: z.boolean().catch(true).default(true),
   plusRoadmap: z.string().max(800).catch("").default("Advanced weekly progress insights\nAdaptive training recommendations\nDownloadable progress summaries"),
-  proRoadmap: z.string().max(800).catch("").default("Everything planned for Plus\nCoach-guided programmes and check-ins\nDeeper performance and nutrition reports"),
+  proRoadmap: z.string().max(800).catch("").default("Everything planned for Plus\nEnhanced coaching insights and follow-ups\nDeeper performance and nutrition reports"),
   paywallTitle: z.string().max(120).catch("Your journey. More possibilities.").default("Your journey. More possibilities."),
   paywallDescription: z.string().max(400).catch("").default("Explore your current access and see what is planned next."),
   upgradeUrl: z.string().trim().refine(safeExternalUrl).catch("").default(""),

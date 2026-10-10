@@ -7,7 +7,7 @@ export default function MemberPageHeader({ eyebrow, title, description, actions,
 }) {
   const { pathname } = useLocation();
   const { config } = useFeatureAccess();
-  const feature = featureForPath(pathname);
+  const feature = pathname === "/coaching" ? undefined : featureForPath(pathname);
   const displayTitle = feature ? config.features[feature].label || title : title;
   return <header className="member-page-header">
     <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5">
