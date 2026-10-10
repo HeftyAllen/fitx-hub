@@ -57,6 +57,12 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['suspended'])
         && request.resource.data.suspended is bool;
     }
+    function newSuspensionOnly(uid) {
+      return moderator() && exists(/databases/$(database)/documents/users/$(uid))
+        && !exists(/databases/$(database)/documents/admins/$(uid))
+        && request.resource.data.keys().hasOnly(['suspended'])
+        && request.resource.data.suspended is bool;
+    }
     match /users/{uid} {
       allow read: if owner(uid) || roleIn(['admin', 'moderator', 'readonly']);
       allow create: if (owner(uid) && noPrivilegeFields()) || fullAdmin();
@@ -64,7 +70,7 @@ service cloud.firestore {
       allow delete: if fullAdmin();
       match /profile/{id} {
         allow read: if owner(uid) || fullAdmin();
-        allow create: if (activeOwner(uid) && noPrivilegeFields()) || fullAdmin();
+        allow create: if (activeOwner(uid) && noPrivilegeFields()) || fullAdmin() || newSuspensionOnly(uid);
         allow update: if (activeOwner(uid) && privilegesUnchanged()) || fullAdmin() || suspensionOnly(uid);
         allow delete: if activeOwner(uid) || fullAdmin();
       }
@@ -78,7 +84,7 @@ service cloud.firestore {
       }
       match /adminInvites/{inviteId} {
         allow read, delete: if owner(uid) || fullAdmin();
-        allow create, update: if fullAdmin() && request.resource.data.role in ['admin', 'moderator', 'staff', 'coach'];
+        allow create, update: if fullAdmin() && request.resource.data.role in ['admin', 'moderator', 'staff', 'coach', 'readonly'];
       }
     }
     function validInvite(uid) {
@@ -126,7 +132,10 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if ticketAccess(id);
         allow create: if ticketAccess(id) && request.resource.data.authorId == request.auth.uid
-          && request.resource.data.body is string && request.resource.data.body.size() > 0
+          && request.resource.data.body is string
+          && (request.resource.data.body.size() > 0
+            || (request.resource.data.get('attachmentURL', '') is string
+              && request.resource.data.get('attachmentURL', '').matches('^https://[^ ]+$')))
           && ((request.resource.data.authorRole == 'admin' && support())
             || (request.resource.data.authorRole == 'user' && get(/databases/$(database)/documents/supportTickets/$(id)).data.userId == request.auth.uid));
         allow update, delete: if fullAdmin();
@@ -138,6 +147,13 @@ service cloud.firestore {
     function memberAssignmentAccess(id) {
       let assignment = get(/databases/$(database)/documents/coachAssignments/$(id)).data;
       return signedIn() && assignment.memberId == request.auth.uid && assignment.status == 'active';
+    }
+    function assignmentFieldsValid() {
+      return request.resource.data.coachId is string && request.resource.data.memberId is string
+        && request.resource.data.memberName is string && request.resource.data.goal is string
+        && request.resource.data.status in ['active', 'archived']
+        && get(/databases/$(database)/documents/admins/$(request.resource.data.coachId)).data.role == 'coach'
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.memberId));
     }
     function programmeFieldsValid() {
       let data = request.resource.data;
@@ -168,12 +184,11 @@ service cloud.firestore {
     match /coachAssignments/{id} {
       allow read: if fullAdmin() || (roleIn(['coach']) && resource.data.coachId == request.auth.uid)
         || (signedIn() && resource.data.memberId == request.auth.uid && resource.data.status == 'active');
-      allow create, update: if fullAdmin()
-        && request.resource.data.coachId is string && request.resource.data.memberId is string
-        && request.resource.data.memberName is string && request.resource.data.goal is string
-        && request.resource.data.status in ['active', 'archived']
-        && get(/databases/$(database)/documents/admins/$(request.resource.data.coachId)).data.role == 'coach'
-        && exists(/databases/$(database)/documents/users/$(request.resource.data.memberId));
+      allow create: if fullAdmin() && assignmentFieldsValid();
+      // An administrator can close an old assignment after its coach or member was removed.
+      allow update: if fullAdmin() && (assignmentFieldsValid()
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+          && request.resource.data.status == 'archived'));
       allow delete: if fullAdmin();
       match /checkIns/{id2} {
         allow read: if assignmentAccess(id);

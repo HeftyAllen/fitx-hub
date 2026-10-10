@@ -69,7 +69,7 @@ Build what members see in their Coach Library and recipe sections.
   recipes into each day. Save and publish.
 - Published plans appear for members under *Workout Planner → Coach Library* and
   in the recipe library; unpublished drafts stay hidden.
-- Available to Administrators and Coach/Staff.
+- Available to Administrators and Coaches. Support staff handle tickets and read announcements.
 
 ---
 

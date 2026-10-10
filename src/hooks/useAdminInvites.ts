@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
+import type { AdminRole } from "@/lib/permissions";
 
 export interface AdminInvite {
   id: string;
-  role: "admin" | "moderator" | "staff" | "coach";
+  role: AdminRole;
   invitedByEmail?: string | null;
   invitedAt?: any;
 }
