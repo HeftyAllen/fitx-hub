@@ -14,7 +14,8 @@ service cloud.firestore {
     function featurePolicy(id) {
       let features = exists(/databases/$(database)/documents/siteSettings/access)
         ? get(/databases/$(database)/documents/siteSettings/access).data.get('features', {}) : {};
-      return features.get(id, {'mode': 'free', 'requiredPlan': 'plus'});
+      // Community is opt-in; existing tools keep their previous Free default.
+      return features.get(id, {'mode': id == 'community' ? 'disabled' : 'free', 'requiredPlan': 'plus'});
     }
     function membershipGrants(id, requiredPlan) {
       let existsMember = exists(/databases/$(database)/documents/memberAccess/$(request.auth.uid));
@@ -229,10 +230,218 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['plan', 'features', 'expiresAt', 'updatedAt', 'updatedBy'])
         && request.resource.data.plan in ['free', 'plus', 'pro']
         && request.resource.data.features is list
-        && request.resource.data.features.hasOnly(['training', 'nutrition', 'recipes', 'mealPlanner', 'barcode', 'grocery', 'progress', 'records', 'calendar', 'rewards', 'library'])
+        && request.resource.data.features.hasOnly(['training', 'nutrition', 'recipes', 'mealPlanner', 'barcode', 'grocery', 'progress', 'records', 'calendar', 'rewards', 'library', 'community'])
         && (request.resource.data.expiresAt == null || request.resource.data.expiresAt is timestamp)
         && request.resource.data.updatedBy == request.auth.uid && request.resource.data.updatedAt == request.time;
       allow delete: if fullAdmin();
+    }
+    // Shared data lives outside users/{uid}, so personal owner grants cannot
+    // create group privileges or overwrite another member's enrolment.
+    function groupManager(groupId) {
+      return fullAdmin() || (roleIn(['coach'])
+        && get(/databases/$(database)/documents/communityGroups/$(groupId)).data.coachId == request.auth.uid);
+    }
+    function groupManagerAfter(groupId) {
+      return fullAdmin() || (roleIn(['coach'])
+        && getAfter(/databases/$(database)/documents/communityGroups/$(groupId)).data.coachId == request.auth.uid);
+    }
+    function activeGroup(groupId) {
+      return get(/databases/$(database)/documents/communityGroups/$(groupId)).data.status == 'active';
+    }
+    function assignedGroupMember(groupId) {
+      let member = get(/databases/$(database)/documents/communityGroups/$(groupId)/members/$(request.auth.uid)).data;
+      let assignment = get(/databases/$(database)/documents/coachAssignments/$(member.assignmentId)).data;
+      return member.uid == request.auth.uid && member.role == 'member' && member.status == 'active'
+        && assignment.memberId == request.auth.uid && assignment.status == 'active'
+        && assignment.coachId == get(/databases/$(database)/documents/communityGroups/$(groupId)).data.coachId;
+    }
+    function groupViewer(groupId) {
+      return signedIn() && (moderator() || groupManager(groupId)
+        || (featureEnabled('community') && activeOwner(request.auth.uid) && activeGroup(groupId) && assignedGroupMember(groupId)));
+    }
+    function groupWriter(groupId) { return groupViewer(groupId) && activeGroup(groupId); }
+    function memberMirror(groupId, uid, data) {
+      let mirror = getAfter(/databases/$(database)/documents/communityMemberships/$(uid)/groups/$(groupId)).data;
+      return mirror.uid == uid && mirror.groupId == groupId && mirror.status == data.status && mirror.joinedAt == data.joinedAt;
+    }
+    function enrolmentValid(groupId, uid) {
+      let data = request.resource.data;
+      let group = getAfter(/databases/$(database)/documents/communityGroups/$(groupId)).data;
+      return data.keys().hasOnly(['uid', 'name', 'role', 'assignmentId', 'status', 'joinedAt', 'lastReadAt', 'typingUntil'])
+        && data.uid == uid && data.name is string && data.name.size() > 0 && data.name.size() <= 80
+        && data.status in ['active', 'removed'] && data.joinedAt is timestamp && data.assignmentId is string
+        && ((data.role == 'coach' && uid == group.coachId && data.assignmentId == '')
+          || (data.role == 'member' && data.assignmentId.size() > 0
+            && get(/databases/$(database)/documents/coachAssignments/$(data.assignmentId)).data.coachId == group.coachId
+            && get(/databases/$(database)/documents/coachAssignments/$(data.assignmentId)).data.memberId == uid
+            && get(/databases/$(database)/documents/coachAssignments/$(data.assignmentId)).data.status == 'active'
+            && data.name == get(/databases/$(database)/documents/coachAssignments/$(data.assignmentId)).data.memberName))
+        && memberMirror(groupId, uid, data);
+    }
+    function removalOnly(groupId, uid) {
+      return moderator() && resource.data.role == 'member'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'removed' && memberMirror(groupId, uid, request.resource.data);
+    }
+    function presenceOnly(groupId, uid) {
+      let data = request.resource.data;
+      let changes = data.diff(resource.data).affectedKeys();
+      return owner(uid) && resource.data.status == 'active' && groupWriter(groupId)
+        && changes.hasOnly(['lastReadAt', 'typingUntil'])
+        && (!changes.hasAny(['lastReadAt']) || data.lastReadAt == request.time)
+        && (!changes.hasAny(['typingUntil']) || (data.typingUntil is timestamp
+          && data.typingUntil <= request.time + duration.value(15, 's')));
+    }
+    function groupFieldsValid() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['name', 'description', 'tone', 'coachId', 'status', 'createdBy', 'createdAt', 'updatedAt', 'lastMessageAt'])
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 80
+        && data.description is string && data.description.size() <= 500
+        && data.tone in ['mint', 'blue', 'violet', 'amber'] && data.status in ['active', 'archived']
+        && data.coachId is string && data.createdBy is string && data.createdAt is timestamp
+        && (!data.keys().hasAny(['lastMessageAt']) || data.lastMessageAt is timestamp)
+        && data.updatedAt == request.time;
+    }
+    match /communityGroups/{groupId} {
+      allow read: if signedIn() && (moderator() || (roleIn(['coach']) && resource.data.coachId == request.auth.uid)
+        // Retain a metadata listener so reopening a group restores its menu.
+        // Archived conversations, activities and responses stay closed below.
+        || (featureEnabled('community') && activeOwner(request.auth.uid) && assignedGroupMember(groupId)));
+      allow create: if contentAuthor() && groupFieldsValid() && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time && request.resource.data.status == 'active'
+        && (fullAdmin() || request.resource.data.coachId == request.auth.uid)
+        && get(/databases/$(database)/documents/admins/$(request.resource.data.coachId)).data.role == 'coach';
+      allow update: if (groupManager(groupId) && groupFieldsValid()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'tone', 'status', 'updatedAt']))
+        || (groupWriter(groupId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessageAt'])
+          && request.resource.data.lastMessageAt == request.time);
+      allow delete: if fullAdmin();
+      match /members/{uid} {
+        // Own membership metadata stays readable after removal, so clients can
+        // revoke cached group views without relying on query-rule invalidation.
+        allow get: if owner(uid) || groupViewer(groupId);
+        allow list: if groupViewer(groupId);
+        allow create: if groupManagerAfter(groupId) && enrolmentValid(groupId, uid);
+        allow update: if (groupManager(groupId) && enrolmentValid(groupId, uid)) || removalOnly(groupId, uid) || presenceOnly(groupId, uid);
+        allow delete: if false;
+      }
+      match /messages/{messageId} {
+        allow read: if groupViewer(groupId);
+        allow create: if groupWriter(groupId) && messageValid(groupId);
+        allow update: if (groupWriter(groupId) && (messageEdit() || messageReaction()))
+          || (groupViewer(groupId) && messageRemoval(groupId));
+        allow delete: if fullAdmin();
+      }
+      match /activities/{activityId} {
+        allow read: if groupViewer(groupId);
+        allow create: if groupWriter(groupId) && activityFieldsValid()
+          && request.resource.data.createdBy == request.auth.uid && request.resource.data.createdAt == request.time
+          && ((groupManager(groupId) && request.resource.data.status == 'published')
+            || (assignedGroupMember(groupId) && featureEnabled('training')
+              && request.resource.data.kind == 'workout' && request.resource.data.status == 'draft'));
+        allow update: if groupWriter(groupId) && activityFieldsValid()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'details', 'exercises', 'durationMinutes', 'startsAt', 'meetingUrl', 'status', 'updatedAt', 'updatedBy'])
+          && (groupManager(groupId) || (assignedGroupMember(groupId) && featureEnabled('training')
+            && resource.data.kind == 'workout' && resource.data.status == 'draft' && request.resource.data.status == 'draft'));
+        allow delete: if fullAdmin();
+      }
+      match /responses/{responseId} {
+        allow read: if groupViewer(groupId);
+        allow create, update: if groupWriter(groupId) && activityResponseValid(groupId, responseId);
+        allow delete: if fullAdmin();
+      }
+      match /reports/{reportId} {
+        allow read: if moderator();
+        allow create: if groupWriter(groupId)
+          && request.resource.data.keys().hasOnly(['messageId', 'reporterId', 'reason', 'status', 'createdAt'])
+          && request.resource.data.reporterId == request.auth.uid && request.resource.data.status == 'open'
+          && request.resource.data.reason is string && request.resource.data.reason.size() > 0 && request.resource.data.reason.size() <= 300
+          && request.resource.data.createdAt == request.time && request.resource.data.messageId is string
+          && exists(/databases/$(database)/documents/communityGroups/$(groupId)/messages/$(request.resource.data.messageId));
+        allow update: if moderator() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolvedBy', 'resolvedAt'])
+          && request.resource.data.status == 'resolved' && request.resource.data.resolvedBy == request.auth.uid
+          && request.resource.data.resolvedAt == request.time;
+        allow delete: if fullAdmin();
+      }
+    }
+    match /communityMemberships/{uid}/groups/{groupId} {
+      allow read: if owner(uid) || fullAdmin();
+      allow create, update: if membershipIndexValid(groupId, uid);
+      allow delete: if false;
+    }
+    function membershipIndexValid(groupId, uid) {
+      let member = getAfter(/databases/$(database)/documents/communityGroups/$(groupId)/members/$(uid)).data;
+      let data = request.resource.data;
+      return data.keys().hasOnly(['groupId', 'uid', 'status', 'joinedAt']) && data.groupId == groupId && data.uid == uid
+        && data.status in ['active', 'removed'] && data.status == member.status && member.uid == uid && data.joinedAt == member.joinedAt
+        && (groupManagerAfter(groupId) || (moderator() && member.role == 'member' && data.status == 'removed'));
+    }
+    function messageValid(groupId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['senderId', 'senderName', 'senderRole', 'text', 'replyTo', 'reactions', 'status', 'createdAt'])
+        && data.senderId == request.auth.uid && data.senderName is string && data.senderName.size() > 0 && data.senderName.size() <= 80
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 3000
+        && data.replyTo is string && data.replyTo.size() <= 128
+        && (data.replyTo == '' || (data.replyTo.matches('^[^/]+$') && exists(/databases/$(database)/documents/communityGroups/$(groupId)/messages/$(data.replyTo))))
+        && data.reactions is map && data.reactions.size() == 0 && data.status == 'visible' && data.createdAt == request.time
+        && ((data.senderRole == 'admin' && fullAdmin())
+          || (data.senderRole == 'moderator' && roleIn(['moderator']))
+          || (data.senderRole == 'coach' && roleIn(['coach']) && groupManager(groupId)
+            && data.senderName == get(/databases/$(database)/documents/communityGroups/$(groupId)/members/$(request.auth.uid)).data.name)
+          || (data.senderRole == 'member' && assignedGroupMember(groupId)
+            && data.senderName == get(/databases/$(database)/documents/communityGroups/$(groupId)/members/$(request.auth.uid)).data.name));
+    }
+    function messageEdit() {
+      return resource.data.senderId == request.auth.uid && resource.data.status == 'visible'
+        && request.time <= resource.data.createdAt + duration.value(15, 'm')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
+        && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 3000
+        && request.resource.data.editedAt == request.time;
+    }
+    function messageReaction() {
+      return resource.data.status == 'visible' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+        && request.resource.data.reactions is map
+        && request.resource.data.reactions.diff(resource.data.reactions).affectedKeys().hasOnly([request.auth.uid])
+        && (!request.resource.data.reactions.keys().hasAny([request.auth.uid])
+          || request.resource.data.reactions[request.auth.uid] in ['👍', '❤️', '😂', '🔥', '💪', '🎉', '👏', '😮']);
+    }
+    function messageRemoval(groupId) {
+      let data = request.resource.data;
+      return (resource.data.senderId == request.auth.uid || groupManager(groupId) || moderator())
+        && data.diff(resource.data).affectedKeys().hasOnly(['status', 'text', 'reactions', 'removedAt', 'removedBy'])
+        && data.status == 'removed' && data.text == '' && data.reactions is map && data.reactions.size() == 0
+        && data.removedBy == request.auth.uid && data.removedAt == request.time;
+    }
+    function activityFieldsValid() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['title', 'kind', 'details', 'exercises', 'durationMinutes', 'startsAt', 'meetingUrl', 'status', 'createdBy', 'createdAt', 'updatedAt', 'updatedBy'])
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 120
+        && data.kind in ['workout', 'class', 'nutrition', 'challenge', 'announcement']
+        && data.details is string && data.details.size() > 0 && data.details.size() <= 10000
+        && data.exercises is list && data.exercises.size() <= 20
+        && (data.kind != 'workout' || data.exercises.size() > 0)
+        && (!(data.kind in ['nutrition', 'challenge', 'announcement']) || data.exercises.size() == 0)
+        && data.durationMinutes is int && data.durationMinutes >= 5 && data.durationMinutes <= 180
+        && data.startsAt is string && data.startsAt.size() <= 40 && (data.kind != 'class' || data.startsAt.size() > 0)
+        && data.meetingUrl is string && data.meetingUrl.size() <= 1000 && (data.meetingUrl == '' || data.meetingUrl.matches('^https://[^ ]+$'))
+        && data.status in ['draft', 'published', 'withdrawn'] && data.createdBy is string && data.createdAt is timestamp
+        && data.updatedBy == request.auth.uid && data.updatedAt == request.time;
+    }
+    // Activity responses also require authoritative membership: even team users
+    // cannot post an RSVP on behalf of a client.
+    function activityResponseValid(groupId, responseId) {
+      let data = request.resource.data;
+      let activity = get(/databases/$(database)/documents/communityGroups/$(groupId)/activities/$(data.activityId)).data;
+      let member = get(/databases/$(database)/documents/communityGroups/$(groupId)/members/$(request.auth.uid)).data;
+      return data.keys().hasOnly(['activityId', 'userId', 'name', 'status', 'feedback', 'updatedAt'])
+        && data.activityId is string && responseId == data.activityId + '_' + request.auth.uid && data.userId == request.auth.uid
+        && member.status == 'active' && data.name == member.name && activity.status == 'published'
+        && (groupManager(groupId) || (activity.kind == 'announcement'
+          || (activity.kind == 'nutrition' ? featureEnabled('nutrition') : activity.kind == 'challenge' ? (featureEnabled('records') || featureEnabled('rewards')) : featureEnabled('training'))))
+        && (activity.kind == 'class' ? data.status in ['going', 'not_going', 'completed']
+          : activity.kind == 'challenge' ? data.status in ['joined', 'completed']
+          : activity.kind == 'announcement' ? data.status == 'seen' : data.status in ['seen', 'completed'])
+        && data.feedback is string && data.feedback.size() <= 2000 && data.updatedAt == request.time;
     }
     match /featureFlags/{id} { allow read: if true; allow write: if fullAdmin(); }
     match /{document=**} { allow read, write: if false; }

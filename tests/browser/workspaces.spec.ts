@@ -22,6 +22,7 @@ test.beforeAll(async () => {
     "coach",
     "readonly",
     "member",
+    "member2",
   ]) {
     const response = await fetch(
       "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key",
@@ -44,8 +45,8 @@ test.beforeAll(async () => {
     for (const [role, uid] of Object.entries(identities)) {
       const profile = {
         name:
-          role === "member"
-            ? "Alex Member"
+          role.startsWith("member")
+            ? role === "member" ? "Alex Member" : "Taylor Member"
             : `${role[0].toUpperCase()}${role.slice(1)} Team`,
         email: `${role}@fitx.test`,
         goalType: "strength",
@@ -53,7 +54,7 @@ test.beforeAll(async () => {
       };
       await setDoc(doc(db, "users", uid), { ...profile, uid });
       await setDoc(doc(db, "users", uid, "profile", "data"), profile);
-      if (role !== "member") await setDoc(doc(db, "admins", uid), { role });
+      if (!role.startsWith("member")) await setDoc(doc(db, "admins", uid), { role });
     }
     await setDoc(doc(db, "coachAssignments", "fixture-assignment"), {
       coachId: identities.coach,
@@ -62,6 +63,7 @@ test.beforeAll(async () => {
       goal: "Build a consistent training routine",
       status: "active",
     });
+    await setDoc(doc(db, "coachAssignments", "community-second-assignment"), { coachId: identities.coach, memberId: identities.member2, memberName: "Taylor Member", goal: "Shared training", status: "active" });
     await setDoc(doc(db, "supportTickets", "fixture-ticket"), {
       userId: identities.member,
       userEmail: "member@fitx.test",
@@ -108,7 +110,7 @@ async function login(page: Page, role: string) {
     .fill(`${role}@fitx.test`);
   await page.getByPlaceholder("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign In", exact: true }).click();
-  await expect(page).toHaveURL(role === "member" ? /\/dashboard$/ : /\/admin$/);
+  await expect(page).toHaveURL(role.startsWith("member") ? /\/dashboard$/ : /\/admin$/);
 }
 async function workoutLogCount() {
   let count = -1;
@@ -590,6 +592,7 @@ test("member names survive sign-in, preferred greetings sync and weekly targets 
   await page.goto("/dashboard");
   await expect(page.getByText("/ 5", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(page).toHaveURL(/\/(?:auth)?$/);
   await login(page, "member");
   await expect(page.getByRole("heading", { level: 1 })).toContainText(", Jamie.");
   await page.goto("/settings");
@@ -658,4 +661,241 @@ test("free plans show future prices, save interest live for admins and preserve 
   expect(await member.locator(".member-hero-ring").evaluate(element => getComputedStyle(element).animationName)).toBe("none");
   await member.screenshot({ path: "test-results/member-today-light.png", fullPage: true });
   await memberContext.close();
+});
+
+test("community groups sync chat, collaborative workouts, class bookings and moderation between accounts", async ({ page, browser }) => {
+  test.setTimeout(180000);
+  await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), "siteSettings", "access"), { features: { community: { mode: "free" } } }));
+  await login(page, "coach"); await page.goto("/admin/community");
+  await page.getByRole("button", { name: "Create group", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Group name", { exact: true }).fill("Momentum community");
+  await dialog.getByLabel("About this group", { exact: true }).fill("A little encouragement between sessions.");
+  await dialog.getByLabel("Alex Member", { exact: true }).check();
+  await dialog.getByLabel("Taylor Member", { exact: true }).check();
+  await dialog.getByRole("button", { name: "Create group", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Momentum community", exact: true })).toBeVisible();
+  const contexts = await Promise.all([browser.newContext(), browser.newContext(), browser.newContext()]);
+  const [member, second, mod] = await Promise.all(contexts.map(context => context.newPage()));
+  const errors: string[] = [];
+  [page, member, second, mod].forEach(surface => surface.on("pageerror", error => errors.push(error.message)));
+  try {
+    for (const [surface, role] of [[member, "member"], [second, "member2"]] as const) {
+      await login(surface, role); await surface.goto("/community");
+      await surface.getByRole("button", { name: /Momentum community/ }).click();
+      await expect(surface.getByRole("heading", { name: "Momentum community", exact: true })).toBeVisible();
+    }
+    await member.getByLabel("Message your group", { exact: true }).fill("Hello from Alex 💪");
+    await expect(page.getByText("Alex is typing…", { exact: true })).toBeVisible();
+    await member.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page.getByText("Hello from Alex 💪", { exact: true })).toBeVisible();
+    await expect(second.getByText("Hello from Alex 💪", { exact: true })).toBeVisible();
+    await expect(member.getByLabel(/Read by [12] participants?/).first()).toBeVisible();
+    await page.getByLabel("Message your group", { exact: true }).fill("Welcome to your group!");
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    const welcome = member.getByRole("article").filter({ has: member.locator(".community-message-text").filter({ hasText: /^Welcome to your group!$/ }) });
+    await expect(welcome).toBeVisible();
+    await welcome.locator("..").getByRole("button", { name: /Actions for message/ }).click();
+    await member.getByRole("button", { name: "React ❤️", exact: true }).click(); await member.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: /React ❤️ to message/ })).toBeVisible();
+    await welcome.locator("..").getByRole("button", { name: /Actions for message/ }).click();
+    await member.getByRole("button", { name: "Reply", exact: true }).click(); await member.keyboard.press("Escape");
+    await member.getByLabel("Message your group", { exact: true }).fill("Ready for our next class 😊");
+    await member.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page.getByText("Ready for our next class 😊", { exact: true })).toBeVisible();
+    await member.getByRole("button", { name: "Choose an emoji", exact: true }).click();
+    await member.getByRole("button", { name: "Insert 🎉", exact: true }).click(); await member.keyboard.press("Escape");
+    await member.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page.getByText("🎉", { exact: true })).toBeVisible();
+    await member.setViewportSize({ width: 375, height: 667 });
+    await member.getByRole("button", { name: "Switch to light mode" }).click();
+    expect(await member.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await member.evaluate(() => window.scrollTo(0, 0));
+    const composer = await member.getByLabel("Message your group", { exact: true }).boundingBox();
+    const bottomNav = await member.getByRole("navigation", { name: "Mobile member navigation", exact: true }).boundingBox();
+    expect((composer?.y || 0) + (composer?.height || 0)).toBeLessThanOrEqual(bottomNav?.y || 0);
+    await member.screenshot({ path: "test-results/community-chat-mobile.png", fullPage: true });
+    for (const surface of [member, second, page]) await surface.getByRole("navigation", { name: "Group sections", exact: true }).getByRole("button", { name: "Activities", exact: true }).click();
+    await member.getByRole("button", { name: "Create shared workout", exact: true }).click();
+    await member.getByLabel("Activity title", { exact: true }).fill("Our shared strength workout");
+    await member.getByLabel("Instructions or message", { exact: true }).fill("A steady session we build together.");
+    await member.getByLabel("Exercise 1", { exact: true }).fill("Bodyweight squat");
+    await member.getByRole("button", { name: "Share workout draft", exact: true }).click();
+    const shared = (surface: Page) => surface.getByRole("article").filter({ has: surface.getByRole("heading", { name: "Our shared strength workout", exact: true }) });
+    await expect(shared(second)).toBeVisible();
+    await expect(shared(member).getByRole("button", { name: "Start workout" })).toHaveCount(0);
+    await shared(second).getByRole("button", { name: "Improve draft", exact: true }).click();
+    await second.getByLabel("Instructions or message", { exact: true }).fill("A steady session. Taylor added a warm-up reminder.");
+    await second.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(shared(page).getByText("A steady session. Taylor added a warm-up reminder.", { exact: true })).toBeVisible();
+    await shared(page).getByRole("button", { name: "Approve & publish", exact: true }).click();
+    await expect(shared(member).getByRole("button", { name: "Start workout", exact: true })).toBeVisible();
+    await shared(member).getByRole("button", { name: "Save to training", exact: true }).click();
+    await expect(member.getByText("Added to your training plans.", { exact: true })).toBeVisible();
+    const today = new Date().toISOString().slice(0, 10);
+    async function share(kind: string, title: string, details: string) {
+      await page.getByRole("button", { name: "Share activity", exact: true }).click();
+      await page.getByLabel("Activity type", { exact: true }).selectOption(kind);
+      await page.getByLabel("Activity title", { exact: true }).fill(title);
+      await page.getByLabel("Instructions or message", { exact: true }).fill(details);
+      if (kind === "class") { await page.getByLabel("Class date and time", { exact: true }).fill(`${today}T18:30`); await page.getByLabel("Online class link (optional)", { exact: true }).fill("https://example.org/community-class"); }
+      await page.getByRole("button", { name: "Share with group", exact: true }).click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(member.getByRole("heading", { name: title, exact: true })).toBeVisible();
+    }
+    await share("class", "Home mobility together", "Bring your mat and water.");
+    const classCard = member.getByRole("article").filter({ has: member.getByRole("heading", { name: "Home mobility together", exact: true }) });
+    await classCard.getByRole("button", { name: "Book class", exact: true }).click();
+    await expect(page.getByText("1 booked · Alex Member", { exact: true })).toBeVisible();
+    await classCard.getByRole("button", { name: "Cancel booking", exact: true }).click();
+    await expect(page.getByText("0 booked · Be the first to join", { exact: true })).toBeVisible();
+    await classCard.getByRole("button", { name: "Book class", exact: true }).click();
+    await classCard.getByRole("button", { name: "Add to Calendar", exact: true }).click();
+    await expect(member.getByText("Class reminder added to Calendar. Check the group for schedule updates.", { exact: true })).toBeVisible();
+    await member.goto("/calendar");
+    await member.getByRole("button", { name: String(new Date().getDate()), exact: true }).click();
+    await expect(member.getByText("Home mobility together", { exact: true })).toBeVisible();
+    await member.getByRole("link", { name: "View class details", exact: true }).click();
+    await expect(member.getByRole("heading", { name: "Home mobility together", exact: true })).toBeVisible();
+    await share("nutrition", "Balanced plate guidance", "Include vegetables with lunch and dinner.");
+    await share("challenge", "Five days of movement", "Keep a daily movement habit this week.");
+    await member.getByRole("button", { name: "Join challenge", exact: true }).click();
+    await share("announcement", "Saturday schedule update", "This Saturday’s session starts at 10.");
+    await page.screenshot({ path: "test-results/community-activities-coach.png", fullPage: true });
+    await member.screenshot({ path: "test-results/community-activities-mobile.png", fullPage: true });
+    expect(await member.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await member.getByRole("navigation", { name: "Group sections" }).getByRole("button", { name: "Conversation", exact: true }).click();
+    await welcome.locator("..").getByRole("button", { name: /Actions for message/ }).click();
+    await member.getByRole("button", { name: "Report privately", exact: true }).click(); await member.keyboard.press("Escape");
+    await login(mod, "moderator"); await mod.goto("/admin/community");
+    await mod.getByRole("button", { name: /Momentum community/ }).click();
+    await mod.getByRole("navigation", { name: "Group sections" }).getByRole("button", { name: "Moderation", exact: true }).click();
+    await expect(mod.getByText("Welcome to your group!", { exact: true })).toBeVisible();
+    await mod.getByRole("button", { name: "Remove message & resolve", exact: true }).click();
+    await expect(member.getByText("This message was removed.", { exact: true })).toBeVisible();
+    await mod.getByRole("navigation", { name: "Group sections" }).getByRole("button", { name: "Members", exact: true }).click();
+    await mod.getByRole("button", { name: "Remove Taylor Member from group", exact: true }).click();
+    await expect(mod.getByText("Member removed from the group", { exact: true })).toBeVisible();
+    await expect(second.getByRole("heading", { name: "Momentum community", exact: true })).toHaveCount(0);
+    await expect(second.getByText("Your next chapter starts together.", { exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally { await Promise.all(contexts.map(context => context.close().catch(() => {}))); }
+});
+
+test("admin Community switch hides menus, blocks links and restores paid access live", async ({ page, browser }) => {
+  test.setTimeout(90000);
+  const context = await browser.newContext({ viewport: { width: 375, height: 667 } });
+  const member = await context.newPage();
+  try {
+    await login(member, "member");
+    await member.getByRole("button", { name: "More member features", exact: true }).click();
+    await expect(member.getByRole("dialog").getByRole("link", { name: "Community", exact: true })).toHaveCount(0); await member.keyboard.press("Escape");
+    await member.goto("/community");
+    await expect(member.getByRole("heading", { name: "Community is currently unavailable.", exact: true })).toBeVisible();
+    await login(page, "admin"); await page.goto("/admin/settings");
+    await page.getByRole("tab", { name: "Feature access", exact: true }).click();
+    await page.locator("#mode-community").selectOption("free");
+    await page.getByRole("button", { name: "Publish feature access", exact: true }).click();
+    await expect(member.getByRole("heading", { name: "Find your people. Keep your momentum.", exact: true })).toBeVisible();
+    await member.getByRole("button", { name: "More member features", exact: true }).click();
+    await expect(member.getByRole("dialog").getByRole("link", { name: "Community", exact: true })).toBeVisible(); await member.keyboard.press("Escape");
+    await page.locator("#mode-community").selectOption("premium"); await page.locator("#plan-community").selectOption("pro");
+    await page.getByRole("button", { name: "Publish feature access", exact: true }).click();
+    await expect(member.getByRole("link", { name: "View membership", exact: true })).toBeVisible();
+    await page.getByRole("tab", { name: "Memberships", exact: true }).click();
+    await page.getByRole("button", { name: /member@fitx.test/ }).click();
+    await page.getByLabel("Membership plan", { exact: true }).selectOption("pro");
+    await page.getByRole("button", { name: "Save membership", exact: true }).click();
+    await expect(member.getByRole("heading", { name: "Find your people. Keep your momentum.", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Revoke premium access", exact: true }).click();
+    await expect(member.getByRole("link", { name: "View membership", exact: true })).toBeVisible();
+  } finally { await context.close(); }
+});
+
+test("phone Account settings and meal-only Calendar stay within the viewport", async ({ page }) => {
+  await env.withSecurityRulesDisabled(async ctx => {
+    const { getDocs, collection, deleteDoc } = await import("firebase/firestore");
+    const entries = await getDocs(collection(ctx.firestore(), "users", identities.member, "calendarEntries"));
+    await Promise.all(entries.docs.map(item => deleteDoc(item.ref)));
+    const date = new Date().toISOString().slice(0, 10);
+    await setDoc(doc(ctx.firestore(), "users", identities.member, "mealPlanEntries", "overflow-meal"), { date, meals: [{ id: 333, title: "VegetableAndChickenMealWithAnExceptionallyLongUnbrokenNameForNarrowPhones", readyInMinutes: 25 }], nutrients: { calories: 123456, protein: 123456, carbohydrates: 123456, fat: 123456 } });
+  });
+  await login(page, "member");
+  for (const width of [320, 375, 390]) {
+    await env.withSecurityRulesDisabled(async ctx => { const { deleteDoc } = await import("firebase/firestore"); await deleteDoc(doc(ctx.firestore(), "users", identities.member, "calendarEntries", "overflow-with-workout")); });
+    await page.setViewportSize({ width, height: 667 }); await page.goto("/settings");
+    await page.getByRole("button", { name: "Account", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Send link", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: /Change password/ }).click();
+    await page.getByRole("button", { name: /Delete account/ }).click();
+    await expect(page.getByPlaceholder("Current password", { exact: true })).toBeVisible();
+    await expect(page.getByPlaceholder("Type DELETE to confirm", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `Account at ${width}px`).toBe(true);
+    const securityButtons = page.getByRole("button", { name: /Send link|Update password|Delete forever/ });
+    for (const button of await securityButtons.all()) { const box = await button.boundingBox(); expect(box?.x).toBeGreaterThanOrEqual(0); expect((box?.x || 0) + (box?.width || 0)).toBeLessThanOrEqual(width); }
+    if (width === 375) await page.screenshot({ path: "test-results/account-settings-mobile.png", fullPage: true });
+    await page.goto("/calendar");
+    await page.getByRole("button", { name: String(new Date().getDate()), exact: true }).click();
+    await expect(page.getByText("VegetableAndChickenMealWithAnExceptionallyLongUnbrokenNameForNarrowPhones", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `Meal-only Calendar at ${width}px`).toBe(true);
+    if (width === 375) await page.screenshot({ path: "test-results/meal-calendar-mobile.png", fullPage: true });
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), "users", identities.member, "calendarEntries", "overflow-with-workout"), { date: new Date().toISOString().slice(0, 10), planId: "fixture-plan", planName: "Workout with a meal", completed: false }));
+    await page.reload(); await page.getByRole("button", { name: String(new Date().getDate()), exact: true }).click();
+    await expect(page.getByText("Workout with a meal", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `Workout and meal Calendar at ${width}px`).toBe(true);
+    await expect(page.getByRole("button", { name: "Open member menu" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "More member features", exact: true })).toHaveCount(1);
+  }
+});
+
+test("earlier conversation history stays live and offline drafts survive reconnect", async ({ page, context }) => {
+  test.setTimeout(90000);
+  const groupId = "history-community";
+  await env.withSecurityRulesDisabled(async ctx => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, "siteSettings", "access"), { features: { community: { mode: "free" } } });
+    await setDoc(doc(db, "communityGroups", groupId), { name: "Conversation history", description: "History and reconnection", tone: "blue", coachId: identities.coach, status: "active", createdBy: identities.coach, createdAt: Timestamp.now(), updatedAt: Timestamp.now() });
+    await setDoc(doc(db, "communityGroups", groupId, "members", identities.member), { uid: identities.member, name: "Alex Member", role: "member", assignmentId: "fixture-assignment", status: "active", joinedAt: Timestamp.now() });
+    await setDoc(doc(db, "communityGroups", groupId, "members", identities.coach), { uid: identities.coach, name: "Coach", role: "coach", assignmentId: "", status: "active", joinedAt: Timestamp.now() });
+    await setDoc(doc(db, "communityMemberships", identities.member, "groups", groupId), { uid: identities.member, groupId, status: "active", joinedAt: Timestamp.now() });
+    for (let i = 0; i < 100; i++) await setDoc(doc(db, "communityGroups", groupId, "messages", `history-${i}`), { senderId: identities.coach, senderName: "Coach", senderRole: "coach", text: `History message ${String(i).padStart(3, "0")}`, replyTo: "", reactions: {}, status: "visible", createdAt: Timestamp.fromMillis(Date.now() - 3600000 + i * 1000) });
+  });
+  await login(page, "member"); await page.goto("/community");
+  await page.getByRole("button", { name: /Conversation history/ }).click();
+  await expect(page.getByText("History message 099", { exact: true })).toBeVisible();
+  await expect(page.getByText("History message 000", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Load earlier messages", exact: true }).click();
+  await expect(page.getByText("History message 000", { exact: true })).toBeVisible();
+  const { updateDoc, serverTimestamp, writeBatch } = await import("firebase/firestore");
+  await updateDoc(doc(env.authenticatedContext(identities.moderator).firestore(), "communityGroups", groupId, "messages", "history-0"), { status: "removed", text: "", reactions: {}, removedBy: identities.moderator, removedAt: serverTimestamp() });
+  await expect(page.getByText("History message 000", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("This message was removed.", { exact: true })).toBeVisible();
+  await page.getByLabel("Message your group", { exact: true }).fill("A draft I can keep 😊");
+  await page.reload(); await expect(page.getByLabel("Message your group", { exact: true })).toHaveValue("A draft I can keep 😊");
+  await context.setOffline(true);
+  await expect(page.locator(".community-chat-toolbar")).toContainText("Offline");
+  await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
+  const coachDb = env.authenticatedContext(identities.coach).firestore();
+  const message = writeBatch(coachDb);
+  message.set(doc(coachDb, "communityGroups", groupId, "messages", "reconnect"), { senderId: identities.coach, senderName: "Coach", senderRole: "coach", text: "Catch up when you return", replyTo: "", reactions: {}, status: "visible", createdAt: serverTimestamp() });
+  message.update(doc(coachDb, "communityGroups", groupId), { lastMessageAt: serverTimestamp() });
+  await message.commit();
+  await context.setOffline(false);
+  await expect(page.getByText("Catch up when you return", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Message your group", { exact: true })).toHaveValue("A draft I can keep 😊");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect(page.getByRole("log", { name: "Group conversation", exact: true }).getByText("A draft I can keep 😊", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Message your group", { exact: true })).toHaveValue("");
+  const adminDb = env.authenticatedContext(identities.admin).firestore();
+  await updateDoc(doc(adminDb, "coachAssignments", "fixture-assignment"), { status: "archived" });
+  await expect(page.getByRole("heading", { name: "Conversation history", exact: true })).toHaveCount(0);
+  await updateDoc(doc(adminDb, "coachAssignments", "fixture-assignment"), { status: "active" });
+  await expect(page.getByRole("button", { name: /Conversation history/ })).toBeVisible();
+  await page.getByRole("button", { name: /Conversation history/ }).click();
+  await expect(page.getByRole("heading", { name: "Conversation history", exact: true })).toBeVisible();
+  await updateDoc(doc(coachDb, "communityGroups", groupId), { status: "archived", updatedAt: serverTimestamp() });
+  await expect(page.getByRole("heading", { name: "Conversation history", exact: true })).toHaveCount(0);
+  await updateDoc(doc(coachDb, "communityGroups", groupId), { status: "active", updatedAt: serverTimestamp() });
+  await expect(page.getByRole("button", { name: /Conversation history/ })).toBeVisible();
 });

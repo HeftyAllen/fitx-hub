@@ -4,6 +4,7 @@ export type AdminSection =
   | "users"
   | "content"
   | "coaching"
+  | "community"
   | "activity"
   | "announcements"
   | "support"
@@ -23,6 +24,7 @@ export const ROLE_SECTIONS: Record<AdminRole, AdminSection[]> = {
     "overview",
     "users",
     "coaching",
+    "community",
     "content",
     "activity",
     "announcements",
@@ -30,9 +32,9 @@ export const ROLE_SECTIONS: Record<AdminRole, AdminSection[]> = {
     "reports",
     "settings",
   ],
-  moderator: ["overview", "users", "activity", "support"],
+  moderator: ["overview", "users", "activity", "support", "community"],
   staff: ["overview", "support", "announcements"],
-  coach: ["overview", "coaching", "content"],
+  coach: ["overview", "coaching", "content", "community"],
   readonly: ["overview", "activity", "reports"],
 };
 const ROLE_CAPABILITIES: Record<AdminRole, Capability[]> = {
@@ -116,6 +118,7 @@ export const SECTION_PATH: Record<AdminSection, string> = {
   users: "/admin/users",
   content: "/admin/content",
   coaching: "/admin/coaching",
+  community: "/admin/community",
   activity: "/admin/activity",
   announcements: "/admin/announcements",
   support: "/admin/support",

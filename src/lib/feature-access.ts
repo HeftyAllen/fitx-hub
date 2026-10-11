@@ -13,6 +13,7 @@ export const FEATURES = [
   { id: "calendar", label: "Calendar", description: "Workout scheduling and personal events", paths: ["/calendar"] },
   { id: "rewards", label: "Rewards", description: "Badges and member rewards", paths: ["/rewards"] },
   { id: "library", label: "Coach library", description: "Published plans and private coach programmes", paths: ["/library", "/coaching"] },
+  { id: "community", label: "Community", description: "Coach groups, live conversations, classes and shared challenges", paths: ["/community"] },
 ] as const;
 export type FeatureId = typeof FEATURES[number]["id"];
 export type PlanId = "free" | "plus" | "pro";
@@ -43,7 +44,7 @@ export function normalizeAccessConfig(raw: unknown): AccessConfig {
   const features = data.features && typeof data.features === "object" ? data.features as Record<string, unknown> : {};
   return {
     features: Object.fromEntries(FEATURES.map(feature => {
-      const result = policySchema.safeParse(features[feature.id] ?? {});
+      const result = policySchema.safeParse(features[feature.id] ?? (feature.id === "community" ? { mode: "disabled" } : {}));
       return [feature.id, result.success ? result.data : { ...defaultPolicy(), mode: "disabled" }];
     })) as Record<FeatureId, FeaturePolicy>,
     membership: membershipSchema.parse(data.membership && typeof data.membership === "object" ? data.membership : {}),

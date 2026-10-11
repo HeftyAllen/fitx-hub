@@ -33,6 +33,9 @@ interface CalendarEntry {
   planName: string;
   completed?: boolean;
   notes?: string;
+  kind?: "class";
+  startsAt?: string;
+  communityGroupId?: string;
 }
 
 const DAY_COLORS = [
@@ -154,7 +157,7 @@ export default function CalendarView() {
       <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-5">
         <MemberPageHeader eyebrow="A routine worth keeping" title="Your fitness calendar" description="Make space for training and recovery. Schedule your next session and revisit your workout history." actions={<span className="member-action secondary"><span aria-hidden="true">🔥</span>{streak} day training streak</span>} />
 
-        <div className="grid md:grid-cols-[1fr_320px] gap-5">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)_320px] gap-5">
           {/* Calendar */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5 rounded-2xl">
             {/* Month nav */}
@@ -234,9 +237,9 @@ export default function CalendarView() {
           </motion.div>
 
           {/* Sidebar */}
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {/* Selected day detail */}
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="glass-card p-5 rounded-2xl">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5 rounded-2xl">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-heading font-bold text-sm">
                   {selectedDate ? format(selectedDate, "EEEE, MMM d") : "Select a day"}
@@ -279,7 +282,7 @@ export default function CalendarView() {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{entry.planName}</p>
                             <p className="text-[10px] text-muted-foreground">
-                              {plan ? `${plan.exercises?.length || 0} exercises` : "Plan"}
+                              {entry.kind === "class" ? `Community class${entry.startsAt ? ` · ${new Date(entry.startsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}` : plan ? `${plan.exercises?.length || 0} exercises` : "Plan"}
                             </p>
                           </div>
                           <div className="flex items-center gap-1">
@@ -297,6 +300,7 @@ export default function CalendarView() {
                             </button>
                           </div>
                         </div>
+                        {entry.kind === "class" && entry.communityGroupId && <Link className="text-xs text-primary block mt-2" to={`/community?group=${encodeURIComponent(entry.communityGroupId)}&tab=activities`}>View class details</Link>}
                         {trainingAllowed && plan && !entry.completed && (
                           <Button size="sm" onClick={() => navigate("/workout-session", { state: { plan } })}
                             className="w-full gradient-bg text-primary-foreground rounded-lg text-xs gap-1 h-7 mt-1">
@@ -312,7 +316,7 @@ export default function CalendarView() {
 
             {/* Selected day MEALS */}
             {selectedDate && selectedMeals.length > 0 && (
-              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 className="glass-card p-5 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="font-heading font-bold text-sm flex items-center gap-2">
@@ -323,10 +327,10 @@ export default function CalendarView() {
                 {selectedMeals.map(me => (
                   <div key={me.id} className="space-y-2">
                     {me.meals.map((m, i) => (
-                      <div key={`${m.id}-${i}`} className="flex items-center gap-2 p-2 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                      <div key={`${m.id}-${i}`} className="flex min-w-0 items-center gap-2 p-2 rounded-xl bg-amber-500/5 border border-amber-500/20">
                         {m.image
-                          ? <img src={`https://spoonacular.com/recipeImages/${m.id}-90x90.jpg`} alt="" className="w-9 h-9 rounded-lg object-cover" />
-                          : <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center text-base">🍽️</div>}
+                          ? <img src={`https://spoonacular.com/recipeImages/${m.id}-90x90.jpg`} alt="" className="w-9 h-9 shrink-0 rounded-lg object-cover" />
+                          : <div className="w-9 h-9 shrink-0 rounded-lg bg-secondary flex items-center justify-center text-base">🍽️</div>}
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-bold truncate">{m.title}</p>
                           {m.readyInMinutes && (
@@ -336,7 +340,7 @@ export default function CalendarView() {
                       </div>
                     ))}
                     {me.nutrients && (
-                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-1">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground pt-1">
                         <span><strong className="text-foreground">{Math.round(me.nutrients.calories || 0)}</strong> cal</span>
                         <span><strong className="text-foreground">{Math.round(me.nutrients.protein || 0)}g</strong> P</span>
                         <span><strong className="text-foreground">{Math.round(me.nutrients.carbohydrates || 0)}g</strong> C</span>

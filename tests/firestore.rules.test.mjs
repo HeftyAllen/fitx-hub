@@ -15,7 +15,7 @@ import {
   writeBatch,
   serverTimestamp,
   Timestamp,
-  collection, getDocs, query, where, orderBy,
+  collection, getDocs, query, where, orderBy, FieldPath, deleteField,
 } from "firebase/firestore";
 let env;
 before(async () => {
@@ -495,4 +495,218 @@ test("withdrawal, archived assignments and feature policies stop coaching writes
   await assertFails(setDoc(doc(coach, "coachAssignments", "assigned", "programmes", "late"), coachingProgramme()));
   await assertFails(getDoc(doc(member, "coachAssignments", "assigned")));
   await assertFails(setDoc(feedbackRef, feedback));
+});
+
+// Community fixtures exercise the same atomic enrolment and chat writes as the UI.
+const groupRef = (db, ...parts) => doc(db, "communityGroups", "club", ...parts);
+async function enableCommunity(mode = "free", requiredPlan = "plus") {
+  await setDoc(doc(dbFor("admin"), "siteSettings", "access"), { features: { community: { mode, requiredPlan } } });
+}
+async function makeGroup() {
+  const db = dbFor("coach"), batch = writeBatch(db);
+  batch.set(groupRef(db), { name: "Strength club", description: "Train together", tone: "mint", coachId: "coach", createdBy: "coach", createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: "active" });
+  batch.set(groupRef(db, "members", "coach"), { uid: "coach", name: "Coach", role: "coach", assignmentId: "", status: "active", joinedAt: serverTimestamp() });
+  batch.set(doc(db, "communityMemberships", "coach", "groups", "club"), { groupId: "club", uid: "coach", status: "active", joinedAt: serverTimestamp() });
+  await assertSucceeds(batch.commit());
+}
+function enrolBatch(db, uid = "member", assignmentId = "assigned", name = "Member", status = "active") {
+  const batch = writeBatch(db);
+  batch.set(groupRef(db, "members", uid), { uid, name, role: "member", assignmentId, status, joinedAt: serverTimestamp() }, { merge: true });
+  batch.set(doc(db, "communityMemberships", uid, "groups", "club"), { groupId: "club", uid, status, joinedAt: serverTimestamp() });
+  return batch;
+}
+async function communityFixture() {
+  await enableCommunity(); await makeGroup(); await assertSucceeds(enrolBatch(dbFor("coach")).commit());
+}
+function chatData(uid = "member", senderName = "Member", senderRole = "member") {
+  return { senderId: uid, senderName, senderRole, text: "Hello team 💪", replyTo: "", reactions: {}, status: "visible", createdAt: serverTimestamp() };
+}
+function activityData(kind = "workout", status = "published", createdBy = "coach") {
+  return { title: "Shared session", kind, details: "Move at your own pace", exercises: kind === "workout" ? [{ name: "Squat", sets: 3, reps: 10, restSeconds: 60, equipment: "body weight", bodyPart: "legs", target: "quads" }] : [], durationMinutes: 30, startsAt: kind === "class" ? "2026-10-20T12:00:00Z" : "", meetingUrl: "", status, createdBy, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: createdBy };
+}
+function responseData(activityId, status, userId = "member", name = "Member") {
+  return { activityId, userId, name, status, feedback: "Feeling good", updatedAt: serverTimestamp() };
+}
+test("community is opt-in and preserves team preparation while member routes are disabled", async () => {
+  await makeGroup(); await assertSucceeds(enrolBatch(dbFor("coach")).commit());
+  await assertFails(getDoc(groupRef(dbFor("member"))));
+  await assertSucceeds(getDoc(groupRef(dbFor("coach"))));
+  await assertSucceeds(getDoc(groupRef(dbFor("moderator"))));
+  await enableCommunity(); await assertSucceeds(getDoc(groupRef(dbFor("member"))));
+});
+test("coach groups, rosters, history and responses are private to assigned participants", async () => {
+  await communityFixture();
+  for (const uid of ["other", "staff", "readonly"]) {
+    await assertFails(getDoc(groupRef(dbFor(uid))));
+    await assertFails(getDocs(collection(dbFor(uid), "communityGroups", "club", "messages")));
+    await assertFails(getDocs(collection(dbFor(uid), "communityGroups", "club", "members")));
+  }
+  const member = dbFor("member");
+  await assertSucceeds(getDocs(query(collection(member, "communityMemberships", "member", "groups"), where("status", "==", "active"))));
+  await assertFails(getDocs(collection(member, "communityGroups")));
+  await assertSucceeds(getDocs(collection(member, "communityGroups", "club", "members")));
+  await assertSucceeds(getDocs(query(collection(dbFor("coach"), "communityGroups"), where("coachId", "==", "coach"))));
+  await assertSucceeds(getDocs(collection(dbFor("moderator"), "communityGroups")));
+  await assertFails(getDoc(doc(member, "communityMemberships", "other", "groups", "club")));
+});
+test("clients cannot self-enrol, forge host privileges or reinstate removed membership", async () => {
+  await communityFixture();
+  const member = dbFor("member"), coach = dbFor("coach");
+  await assertFails(enrolBatch(dbFor("other"), "other", "foreign", "Other").commit());
+  await assertFails(updateDoc(groupRef(member, "members", "member"), { role: "coach" }));
+  await assertFails(updateDoc(groupRef(member), { coachId: "member", updatedAt: serverTimestamp() }));
+  await assertFails(setDoc(doc(member, "communityMemberships", "other", "groups", "club"), { groupId: "club", uid: "other", status: "active", joinedAt: serverTimestamp() }));
+  await assertFails(enrolBatch(coach, "other", "foreign", "Other").commit());
+  await assertFails(updateDoc(groupRef(coach, "members", "member"), { status: "removed" })); // mirror required
+  await assertSucceeds(enrolBatch(coach, "member", "assigned", "Member", "removed").commit());
+  await assertFails(getDoc(groupRef(member)));
+  const ownMembership = await assertSucceeds(getDoc(groupRef(member, "members", "member")));
+  if (ownMembership.data().status !== "removed") throw new Error("Removal did not sync to its owner");
+  await assertFails(getDoc(groupRef(member, "members", "coach")));
+  await assertFails(enrolBatch(member).commit());
+  await assertSucceeds(enrolBatch(coach).commit());
+  await assertSucceeds(getDoc(groupRef(member)));
+});
+test("a coach can enrol forty clients in four-client atomic chunks within rule limits", async () => {
+  await makeGroup();
+  await env.withSecurityRulesDisabled(async ctx => {
+    for (let i = 0; i < 40; i++) await setDoc(doc(ctx.firestore(), "coachAssignments", `client-${i}`), { coachId: "coach", memberId: `client-${i}`, memberName: `Client ${i}`, status: "active" });
+  });
+  const coach = dbFor("coach");
+  for (let offset = 0; offset < 40; offset += 4) {
+    const batch = writeBatch(coach);
+    for (let i = offset; i < offset + 4; i++) {
+      batch.set(groupRef(coach, "members", `client-${i}`), { uid: `client-${i}`, name: `Client ${i}`, role: "member", assignmentId: `client-${i}`, status: "active", joinedAt: serverTimestamp() });
+      batch.set(doc(coach, "communityMemberships", `client-${i}`, "groups", "club"), { groupId: "club", uid: `client-${i}`, status: "active", joinedAt: serverTimestamp() });
+    }
+    await assertSucceeds(batch.commit());
+  }
+  const roster = await assertSucceeds(getDocs(collection(coach, "communityGroups", "club", "members")));
+  if (roster.size !== 41) throw new Error("A client did not enrol");
+});
+test("live chat validates authors, roles, timestamps, replies and bounded text", async () => {
+  await communityFixture();
+  const member = dbFor("member"), coach = dbFor("coach");
+  const batch = writeBatch(member);
+  batch.set(groupRef(member, "messages", "hello"), chatData());
+  batch.update(groupRef(member), { lastMessageAt: serverTimestamp() });
+  await assertSucceeds(batch.commit());
+  await assertSucceeds(setDoc(groupRef(coach, "messages", "reply"), { ...chatData("coach", "Coach", "coach"), replyTo: "hello" }));
+  await assertSucceeds(getDocs(query(collection(member, "communityGroups", "club", "messages"), orderBy("createdAt", "desc"))));
+  for (const data of [{ ...chatData(), senderId: "coach" }, { ...chatData(), senderRole: "admin" }, { ...chatData(), senderName: "Fake Coach" }, { ...chatData(), createdAt: Timestamp.fromMillis(1) }, { ...chatData(), text: "x".repeat(3001) }, { ...chatData(), replyTo: "missing" }, { ...chatData(), reactions: { other: "👍" } }]) await assertFails(setDoc(groupRef(member, "messages", "bad"), data));
+});
+test("edits, reactions and presence cannot overwrite another person's fields", async () => {
+  await communityFixture();
+  const member = dbFor("member"), coach = dbFor("coach"), message = groupRef(member, "messages", "hello");
+  await setDoc(message, chatData());
+  await assertSucceeds(updateDoc(message, { text: "Edited hello", editedAt: serverTimestamp() }));
+  await assertFails(updateDoc(groupRef(coach, "messages", "hello"), { text: "Impersonation", editedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(message, new FieldPath("reactions", "member"), "❤️"));
+  await assertSucceeds(updateDoc(groupRef(coach, "messages", "hello"), new FieldPath("reactions", "coach"), "💪"));
+  await assertFails(updateDoc(message, new FieldPath("reactions", "coach"), "😂"));
+  await assertFails(updateDoc(message, new FieldPath("reactions", "member"), "invalid"));
+  await assertFails(updateDoc(message, new FieldPath("reactions", "member"), ""));
+  await assertSucceeds(updateDoc(message, new FieldPath("reactions", "member"), deleteField()));
+  const presence = groupRef(member, "members", "member");
+  await assertSucceeds(updateDoc(presence, { lastReadAt: serverTimestamp(), typingUntil: Timestamp.fromMillis(Date.now() + 7000) }));
+  await assertFails(updateDoc(presence, { lastReadAt: Timestamp.fromMillis(Date.now() + 60000) }));
+  await assertFails(updateDoc(presence, { typingUntil: Timestamp.fromMillis(Date.now() + 60000) }));
+  await assertFails(updateDoc(groupRef(member, "members", "coach"), { lastReadAt: serverTimestamp() }));
+  await env.withSecurityRulesDisabled(ctx => updateDoc(groupRef(ctx.firestore(), "messages", "hello"), { createdAt: Timestamp.fromMillis(Date.now() - 16 * 60000) }));
+  await assertFails(updateDoc(message, { text: "Too late", editedAt: serverTimestamp() }));
+});
+test("shared workout drafts are collaborative but only their coach can publish", async () => {
+  await communityFixture();
+  const member = dbFor("member"), coach = dbFor("coach"), ref = groupRef(member, "activities", "draft");
+  await assertSucceeds(setDoc(ref, activityData("workout", "draft", "member")));
+  await assertSucceeds(updateDoc(ref, { title: "Together stronger", updatedAt: serverTimestamp(), updatedBy: "member" }));
+  await assertFails(updateDoc(ref, { status: "published", updatedAt: serverTimestamp(), updatedBy: "member" }));
+  await assertFails(setDoc(groupRef(member, "activities", "class"), activityData("class", "published", "member")));
+  await assertFails(setDoc(groupRef(member, "responses", "draft_member"), responseData("draft", "completed")));
+  await assertSucceeds(updateDoc(groupRef(coach, "activities", "draft"), { status: "published", updatedAt: serverTimestamp(), updatedBy: "coach" }));
+  await assertFails(updateDoc(ref, { title: "Changed after approval", updatedAt: serverTimestamp(), updatedBy: "member" }));
+  await assertSucceeds(setDoc(groupRef(member, "responses", "draft_member"), responseData("draft", "completed")));
+  await assertFails(updateDoc(groupRef(coach, "activities", "draft"), { createdBy: "coach", updatedAt: serverTimestamp(), updatedBy: "coach" }));
+});
+test("class bookings and feedback have truthful owners and activity-specific statuses", async () => {
+  await communityFixture();
+  const coach = dbFor("coach"), member = dbFor("member");
+  for (const kind of ["class", "nutrition", "challenge", "announcement"]) await assertSucceeds(setDoc(groupRef(coach, "activities", kind), activityData(kind)));
+  await assertSucceeds(setDoc(groupRef(member, "responses", "class_member"), responseData("class", "going")));
+  await assertSucceeds(setDoc(groupRef(member, "responses", "class_member"), responseData("class", "not_going")));
+  await assertFails(setDoc(groupRef(member, "responses", "class_member"), responseData("class", "joined")));
+  await assertFails(setDoc(groupRef(member, "responses", "class_other"), responseData("class", "going", "other", "Other")));
+  await assertFails(setDoc(groupRef(member, "responses", "class_member"), responseData("class", "going", "member", "False name")));
+  await assertSucceeds(setDoc(groupRef(member, "responses", "nutrition_member"), responseData("nutrition", "completed")));
+  await assertSucceeds(setDoc(groupRef(member, "responses", "challenge_member"), responseData("challenge", "joined")));
+  await assertSucceeds(setDoc(groupRef(member, "responses", "announcement_member"), responseData("announcement", "seen")));
+  await assertFails(setDoc(groupRef(member, "responses", "announcement_member"), responseData("announcement", "completed")));
+  await updateDoc(groupRef(coach, "activities", "class"), { status: "withdrawn", updatedAt: serverTimestamp(), updatedBy: "coach" });
+  await assertFails(setDoc(groupRef(member, "responses", "class_member"), responseData("class", "going")));
+});
+test("community disabled, paid, expired and child-feature gates are enforced in Firestore", async () => {
+  await communityFixture();
+  const member = dbFor("member"), admin = dbFor("admin"), coach = dbFor("coach");
+  await enableCommunity("premium", "pro");
+  await assertFails(getDoc(groupRef(member)));
+  const grant = { plan: "free", features: ["community"], expiresAt: null, updatedAt: serverTimestamp(), updatedBy: "admin" };
+  await assertSucceeds(setDoc(doc(admin, "memberAccess", "member"), grant));
+  await assertSucceeds(getDoc(groupRef(member)));
+  await assertFails(setDoc(doc(member, "memberAccess", "member"), { ...grant, plan: "pro" }));
+  await setDoc(doc(admin, "memberAccess", "member"), { ...grant, expiresAt: Timestamp.fromMillis(1) });
+  await assertFails(getDoc(groupRef(member)));
+  await setDoc(doc(admin, "memberAccess", "member"), { ...grant, plan: "pro" });
+  await enableCommunity("disabled");
+  await assertFails(getDoc(groupRef(member)));
+  await assertFails(setDoc(groupRef(member, "messages", "disabled"), chatData()));
+  await setDoc(doc(admin, "siteSettings", "access"), { features: { community: { mode: "free" }, nutrition: { mode: "disabled" }, training: { mode: "disabled" }, records: { mode: "disabled" }, rewards: { mode: "disabled" } } });
+  await setDoc(groupRef(coach, "activities", "nutrition"), activityData("nutrition"));
+  await assertFails(setDoc(groupRef(member, "responses", "nutrition_member"), responseData("nutrition", "seen")));
+  await assertFails(setDoc(groupRef(member, "activities", "draft"), activityData("workout", "draft", "member")));
+  await assertSucceeds(setDoc(groupRef(member, "messages", "still-chat"), chatData()));
+});
+test("reports are private and moderators remove content without gaining coaching or billing powers", async () => {
+  await communityFixture();
+  const member = dbFor("member"), moderator = dbFor("moderator"), coach = dbFor("coach");
+  await setDoc(groupRef(coach, "messages", "hello"), chatData("coach", "Coach", "coach"));
+  const report = { messageId: "hello", reporterId: "member", reason: "Please review", status: "open", createdAt: serverTimestamp() };
+  await assertSucceeds(setDoc(groupRef(member, "reports", "report"), report));
+  await assertFails(setDoc(groupRef(member, "reports", "forged"), { ...report, reporterId: "other" }));
+  for (const uid of ["member", "coach", "staff", "readonly"]) await assertFails(getDoc(groupRef(dbFor(uid), "reports", "report")));
+  await assertSucceeds(getDocs(collection(moderator, "communityGroups", "club", "reports")));
+  const removal = { status: "removed", text: "", reactions: {}, removedBy: "moderator", removedAt: serverTimestamp() };
+  await assertFails(updateDoc(groupRef(member, "messages", "hello"), { ...removal, removedBy: "member" }));
+  const batch = writeBatch(moderator);
+  batch.update(groupRef(moderator, "messages", "hello"), removal);
+  batch.update(groupRef(moderator, "reports", "report"), { status: "resolved", resolvedBy: "moderator", resolvedAt: serverTimestamp() });
+  await assertSucceeds(batch.commit());
+  await assertFails(setDoc(groupRef(moderator, "activities", "class"), activityData("class", "published", "moderator")));
+  await assertFails(updateDoc(groupRef(moderator), { status: "archived", updatedAt: serverTimestamp() }));
+  const primary = await getDoc(groupRef(coach, "members", "member"));
+  const removeMember = writeBatch(moderator);
+  removeMember.update(groupRef(moderator, "members", "member"), { status: "removed" });
+  removeMember.update(doc(moderator, "communityMemberships", "member", "groups", "club"), { status: "removed" });
+  await assertSucceeds(removeMember.commit());
+  const removed = await getDoc(groupRef(coach, "members", "member"));
+  if (!removed.data().joinedAt.isEqual(primary.data().joinedAt)) throw new Error("Removal changed membership metadata");
+  await assertFails(enrolBatch(moderator).commit());
+});
+test("archiving assignments or suspending clients revokes live group access immediately", async () => {
+  await communityFixture();
+  const member = dbFor("member"), admin = dbFor("admin"), coach = dbFor("coach");
+  await updateDoc(doc(admin, "coachAssignments", "assigned"), { status: "archived" });
+  await assertFails(getDoc(groupRef(member)));
+  await assertFails(setDoc(groupRef(member, "messages", "late"), chatData()));
+  await updateDoc(doc(admin, "coachAssignments", "assigned"), { status: "active" });
+  await assertSucceeds(getDoc(groupRef(member)));
+  await updateDoc(doc(admin, "users", "member"), { suspended: true });
+  await assertFails(getDoc(groupRef(member)));
+  await updateDoc(doc(admin, "users", "member"), { suspended: false });
+  await updateDoc(groupRef(coach), { status: "archived", updatedAt: serverTimestamp() });
+  const archived = await assertSucceeds(getDoc(groupRef(member)));
+  if (archived.data().status !== "archived") throw new Error("Archive metadata did not sync");
+  await assertFails(getDocs(collection(member, "communityGroups", "club", "messages")));
+  await assertFails(getDocs(collection(member, "communityGroups", "club", "activities")));
+  await assertSucceeds(getDoc(groupRef(coach)));
+  await assertFails(setDoc(groupRef(coach, "messages", "late"), chatData("coach", "Coach", "coach")));
 });

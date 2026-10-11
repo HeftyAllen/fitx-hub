@@ -303,7 +303,7 @@ export default function Settings() {
           <div className="member-card p-4 flex items-center gap-3"><span className="member-avatar !w-12 !h-12">{userProfile?.photoURL ? <img src={userProfile.photoURL} alt="" /> : (userProfile?.name || "A")[0].toUpperCase()}</span><div className="min-w-0 flex-1"><p className="font-semibold text-sm truncate">{userProfile?.name || user?.displayName || "Your profile"}</p><p className="text-xs text-muted-foreground truncate mt-1">{user?.email}</p></div><span className="hidden sm:inline-flex text-[10px] text-primary rounded-full bg-primary/10 px-3 py-1.5">Personal workspace</span></div>
         </MemberPageHeader></div>
 
-        <div className="grid md:grid-cols-[220px_1fr] gap-5 md:gap-8 items-start">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] gap-5 md:gap-8 items-start">
           {/* SECTION RAIL */}
           <nav aria-label="Profile sections" className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible md:sticky md:top-24 -mx-1 px-1 pb-1">
             {SECTIONS.map(s => {
@@ -328,7 +328,7 @@ export default function Settings() {
           </nav>
 
           {/* PANEL */}
-          <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+          <motion.div className="min-w-0" key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
             {tab === "profile" && (
               <section>
                 <SectionHeader label="Profile" desc={`Your public identity across ${brand.name}`} />

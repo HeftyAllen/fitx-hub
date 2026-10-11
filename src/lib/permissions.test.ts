@@ -4,6 +4,10 @@ describe('role workspace boundaries', () => {
   it('separates coaching and support', () => {
     expect(canAccess('coach', 'coaching')).toBe(true);
     expect(canAccess('staff', 'coaching')).toBe(false);
+    expect(canAccess('coach', 'community')).toBe(true);
+    expect(canAccess('moderator', 'community')).toBe(true);
+    expect(canAccess('staff', 'community')).toBe(false);
+    expect(canAccess('readonly', 'community')).toBe(false);
     expect(canPerform('coach', 'reply-support')).toBe(false);
     expect(canPerform('staff', 'publish-content')).toBe(false);
   });

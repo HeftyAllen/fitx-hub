@@ -33,6 +33,7 @@ const groups: { label: string; links: NavItem[] }[] = [
     { to: "/rewards", label: "Rewards", icon: Award },
     { to: "/library", label: "Coach library", icon: Library },
     { to: "/coaching", label: "My coach", icon: Users },
+    { to: "/community", label: "Community", icon: Users },
   ] },
   { label: "Essentials", links: [
     { to: "/settings", label: "Profile & settings", icon: Settings },
@@ -100,7 +101,6 @@ export default function MemberNavigation() {
     </aside>
     <header className="member-topbar">
       <div className="flex items-center gap-3 min-w-0">
-        <button className="member-icon-button lg:hidden" aria-label="Open member menu" onClick={() => setMenuOpen(true)}><Menu size={21} /></button>
         <div className="min-w-0"><p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground hidden sm:block">Personal workspace</p><p className="font-semibold text-sm truncate">{section}</p></div>
       </div>
       <div className="flex items-center gap-1 sm:gap-3">
@@ -112,7 +112,7 @@ export default function MemberNavigation() {
     </header>
     <nav aria-label="Mobile member navigation" className="member-bottom-nav lg:hidden">
       {groups[0].links.filter(visible).map(item => <Link key={item.to} to={destination(item)} aria-current={active(item) ? "page" : undefined} className={active(item) ? "is-active" : ""}><item.icon size={20} /><span>{label(item)}{premium(item) && <LockKeyhole size={10} className="inline ml-1" aria-label="Premium feature" />}</span></Link>)}
-      <button onClick={() => setMenuOpen(true)} aria-label="More member features"><Menu size={20} /><span>More</span></button>
+      <button onClick={() => setMenuOpen(true)} aria-label="More member features" aria-expanded={menuOpen} aria-haspopup="dialog" className={!groups[0].links.some(active) ? "is-active" : ""}><Menu size={20} /><span>More</span></button>
     </nav>
     <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
       <SheetContent side="left" className="member-shell !w-[min(90vw,340px)] overflow-y-auto p-6">

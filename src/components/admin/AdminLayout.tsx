@@ -61,6 +61,11 @@ export const SECTION_META: Record<
     icon: Dumbbell,
     desc: "Client programmes, classes and coaching check-ins",
   },
+  community: {
+    label: "Community",
+    icon: Users,
+    desc: "Coach groups, conversations and shared activities",
+  },
   content: {
     label: "Plan studio",
     icon: FileText,

@@ -51,6 +51,7 @@ const GroceryList = lazy(() => import("./pages/GroceryList"));
 const Membership = lazy(() => import("./pages/Membership"));
 const AdminCoaching = lazy(() => import("./pages/admin/AdminCoaching"));
 const MyCoach = lazy(() => import("./pages/MyCoach"));
+const Community = lazy(() => import("./pages/Community"));
 import { OfflineProvider } from "@/contexts/OfflineContext";
 
 const queryClient = new QueryClient();
@@ -150,6 +151,7 @@ function AppRoutes() {
           }
         />
         <Route path="/coaching" element={<ProtectedRoute><MyCoach /></ProtectedRoute>} />
+        <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
         <Route
           path="/nutrition"
           element={
@@ -282,6 +284,7 @@ function AppRoutes() {
               </AdminRoute>
             }
           />
+          <Route path="community" element={<AdminRoute section="community"><Community team /></AdminRoute>} />
           <Route
             path="activity"
             element={

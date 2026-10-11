@@ -4,7 +4,9 @@ import { decodeFirestoreFields, serverFeatureAllowed } from "../../supabase/func
 describe("feature access", () => {
   const free = normalizeMemberAccess({});
   it("keeps every existing section available when no feature settings have been published", () => {
-    for (const feature of FEATURES) expect(resolveFeatureAccess(feature.id, normalizeAccessConfig({}), free).state).toBe("allowed");
+    for (const feature of FEATURES.filter(feature => feature.id !== "community")) expect(resolveFeatureAccess(feature.id, normalizeAccessConfig({}), free).state).toBe("allowed");
+    expect(resolveFeatureAccess("community", normalizeAccessConfig({}), free).state).toBe("disabled");
+    expect(featureForPath("/community")).toBe("community");
     expect(featureForPath("/grocery-list")).toBe("grocery");
     expect(featureForPath("/grocery")).toBe("grocery");
     for (const path of ["/nutrition/", "/NUTRITION", "/n%75trition", "/nutrition///"]) expect(featureForPath(path)).toBe("nutrition");
