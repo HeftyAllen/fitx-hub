@@ -982,6 +982,13 @@ test("new members complete onboarding with comma decimals and recover answers af
   await page.getByRole("button", { name: "Sign Up", exact: true }).click();
   await expect(page).toHaveURL(/\/onboarding$/);
   await fillOnboardingBasics(page);
+  await page.getByRole("button", { name: /^Height unit: cm/ }).click();
+  await page.getByLabel("Height", { exact: true }).fill("169,5");
+  await expect(page.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
+  await expect(page.getByRole("alert")).toContainText("switch to cm");
+  await page.getByRole("button", { name: /^Height unit: ft/ }).click();
+  await expect(page.getByLabel("Height", { exact: true })).toHaveValue("169,5");
+  await expect(page.getByRole("button", { name: "Next", exact: true })).toBeEnabled();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Basic Profile", exact: true })).toBeVisible();
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("New Friend");

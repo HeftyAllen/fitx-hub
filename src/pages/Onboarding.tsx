@@ -51,12 +51,13 @@ export default function Onboarding() {
   const switchUnit = (field: "height" | "weight") => {
     setProfile(p => {
       const value = parseMeasurement(p[field]);
+      const invalidCurrentUnit = !!basicProfileErrors(p)[field];
       if (field === "height") {
         const heightUnit = p.heightUnit === "cm" ? "ft" : "cm";
-        return { ...p, heightUnit, height: value === null ? p.height : String(Math.round(value * (heightUnit === "ft" ? 1 / 30.48 : 30.48) * 100) / 100) };
+        return { ...p, heightUnit, height: value === null || invalidCurrentUnit ? p.height : String(Math.round(value * (heightUnit === "ft" ? 1 / 30.48 : 30.48) * 100) / 100) };
       }
       const weightUnit = p.weightUnit === "kg" ? "lbs" : "kg";
-      return { ...p, weightUnit, weight: value === null ? p.weight : String(Math.round(value * (weightUnit === "lbs" ? 1 / 0.453592 : 0.453592) * 100) / 100) };
+      return { ...p, weightUnit, weight: value === null || invalidCurrentUnit ? p.weight : String(Math.round(value * (weightUnit === "lbs" ? 1 / 0.453592 : 0.453592) * 100) / 100) };
     });
   };
   const toggleArray = (field: "dietaryPrefs" | "equipmentAccess", val: string) => {

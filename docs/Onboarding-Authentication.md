@@ -5,7 +5,7 @@ A successful Firebase sign-in means authentication completed. It does not mean t
 ## Member flow
 
 - Height and weight accept decimal dots and commas, including `169,5`. Values are normalised before calculating targets and saving the profile.
-- Unit buttons convert an entered measurement rather than reinterpret the same number as feet or pounds. Invalid measurements and dates show guidance beside the blocked step.
+- Unit buttons convert measurements that fit the selected unit. Correcting an invalid unit retains the typed number, including a centimetre value accidentally entered as feet. Invalid measurements and dates show guidance beside the blocked step.
 - Google sign-in pre-fills the member's name. Unfinished answers and the current step survive reloads in the same tab, stored separately for each authenticated UID. The local draft is cleared after completion.
 - The signed-in account is visible during setup. **Switch account** signs out without erasing the original account's draft.
 - Completion uses a Firestore transaction for the profile, member directory, and missing starter XP/streak documents. Existing progress and original join timestamps are preserved. A failed save leaves the form and draft available for retry.
