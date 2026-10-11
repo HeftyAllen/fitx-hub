@@ -6,6 +6,7 @@ import { useBrand, useSiteSettings } from "@/contexts/SiteSettingsContext";
 import logo from "@/assets/logo.png";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { logActivity } from "@/lib/activity";
+import { authErrorMessage } from "@/lib/auth-errors";
 
 export default function Auth() {
   const brand = useBrand(logo);
@@ -30,14 +31,14 @@ export default function Auth() {
     try {
       if (isSignUp) {
         if (!settings.signupEnabled) throw new Error("Registration is currently paused. Existing members can sign in.");
-        await signUp(email, password);
+        await signUp(email.trim(), password);
         logActivity("auth.signup", { email });
       } else {
-        await signIn(email, password);
+        await signIn(email.trim(), password);
         logActivity("auth.login", { email });
       }
     } catch (err: any) {
-      setError(err.message || "Something went wrong");
+      setError(authErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -62,7 +63,7 @@ export default function Auth() {
       } else if (code === "auth/too-many-requests") {
         setError("Too many attempts — please wait a few minutes and try again");
       } else {
-        setError(err?.message || "Couldn't send the reset email");
+        setError(authErrorMessage(err, "We couldn't send the reset email. Check your connection and try again."));
       }
     } finally {
       setLoading(false);
@@ -78,12 +79,13 @@ export default function Auth() {
       logActivity("auth.login", { method: "google" });
     } catch (err: any) {
       const code = err?.code || "";
+      console.warn("[auth] Google sign-in failed", code);
       if (code === "auth/unauthorized-domain") {
         setError(`This domain (${window.location.hostname}) isn't authorised in Firebase Auth settings yet.`);
       } else if (code === "auth/account-exists-with-different-credential") {
-        setError("An account with this email already exists — sign in with your email and password instead.");
+        setError(authErrorMessage(err));
       } else {
-        setError(err?.message || "Google sign in failed");
+        setError(authErrorMessage(err, "We couldn't complete Google sign-in. Please try again."));
       }
     } finally {
       setLoading(false);
@@ -119,6 +121,8 @@ export default function Auth() {
             <div>
               <input
                 type="email"
+                aria-label="Email"
+                autoComplete="email"
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -130,6 +134,8 @@ export default function Auth() {
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
+                  aria-label="Password"
+                  autoComplete={isSignUp ? "new-password" : "current-password"}
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -162,7 +168,7 @@ export default function Auth() {
 
             {isSignUp && !settings.signupEnabled && mode === "credentials" && <p role="status" className="text-sm text-muted-foreground text-center">Registration is currently paused. Existing members can sign in.</p>}
             {error && (
-              <p className="text-destructive text-sm text-center">{error}</p>
+              <p role="alert" className="text-destructive text-sm text-center">{error}</p>
             )}
             {notice && (
               <p className="text-sm text-center text-primary">{notice}</p>
@@ -212,6 +218,7 @@ export default function Auth() {
                 Continue with Google
               </button>
 
+              {!isSignUp && <p className="text-center text-xs text-muted-foreground">Use the same sign-in method you used to create your account.</p>}
               <p className="text-center text-sm text-muted-foreground">
                 {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
                 <button

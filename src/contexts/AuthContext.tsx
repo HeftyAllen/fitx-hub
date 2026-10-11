@@ -16,7 +16,7 @@ import {
   reauthenticateWithPopup,
   EmailAuthProvider,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, runTransaction } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
 import { unregisterPushBeforeSignOut } from "@/lib/pushNotifications";
 import { appRouteUrl } from "@/lib/app-paths";
@@ -26,6 +26,8 @@ interface AuthContextType {
   loading: boolean;
   userProfile: any | null;
   needsOnboarding: boolean;
+  profileError: string | null;
+  retryProfile: () => void;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<User>;
   signInWithGoogle: () => Promise<void>;
@@ -57,27 +59,23 @@ async function syncUserDoc(user: User) {
   try {
     const profRef = doc(db, "users", user.uid, "profile", "data");
     const indexRef = doc(db, "users", user.uid);
-    const [profSnap, indexSnap] = await Promise.all([getDoc(profRef), getDoc(indexRef)]);
-    // The member profile is authoritative; a stale directory entry must not
-    // replace a name or photo saved in Settings during the next sign-in.
-    const existing = { ...(indexSnap.data() ?? {}), ...(profSnap.data() ?? {}) };
-
-    const summary: any = {
-      email: user.email ?? null,
-      // never clobber a name/photo the member set themselves in Settings
-      name: existing.name ?? user.displayName ?? null,
-      photoURL: existing.photoURL ?? user.photoURL ?? null,
-      providerId: user.providerData?.[0]?.providerId ?? "password",
-      lastLoginAt: serverTimestamp(),
-      uid: user.uid,
-      memberCode: existing.memberCode ?? makeMemberCode(user.uid),
-    };
-    if (!profSnap.exists()) summary.createdAt = serverTimestamp();
-
-    await Promise.all([
-      setDoc(profRef, summary, { merge: true }),
-      setDoc(indexRef, summary, { merge: true }),
-    ]);
+    await runTransaction(db, async transaction => {
+      const [profSnap, indexSnap] = await Promise.all([transaction.get(profRef), transaction.get(indexRef)]);
+      // Retry against the current profile if onboarding or Settings saved while
+      // sign-in was syncing. An older directory name must not overwrite it.
+      const existing = { ...(indexSnap.data() ?? {}), ...(profSnap.data() ?? {}) };
+      const summary: Record<string, unknown> = {
+        email: user.email ?? null,
+        name: existing.name ?? user.displayName ?? null,
+        photoURL: existing.photoURL ?? user.photoURL ?? null,
+        providerId: user.providerData?.[0]?.providerId ?? "password",
+        lastLoginAt: serverTimestamp(), uid: user.uid,
+        memberCode: existing.memberCode ?? makeMemberCode(user.uid),
+      };
+      if (!profSnap.data()?.createdAt) summary.createdAt = existing.createdAt ?? serverTimestamp();
+      transaction.set(profRef, summary, { merge: true });
+      transaction.set(indexRef, { ...summary, onboardingCompleted: !!profSnap.data()?.goalType }, { merge: true });
+    });
   } catch (e) {
     console.warn("[auth] syncUserDoc failed", e);
   }
@@ -88,19 +86,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileAttempt, setProfileAttempt] = useState(0);
 
   const fetchProfile = async (uid: string) => {
     const snap = await getDoc(doc(db, "users", uid, "profile", "data"));
-    if (snap.exists()) setUserProfile(snap.data());
-    else setUserProfile(null);
+    if (auth.currentUser?.uid !== uid) return;
+    setUserProfile(snap.exists() ? snap.data() : null);
+    setProfileError(null);
   };
 
   useEffect(() => {
     // Completes a Google redirect sign-in (used when popups are blocked, e.g. in the preview iframe).
-    getRedirectResult(auth)
-      .then((cred) => { if (cred?.user) syncUserDoc(cred.user); })
-      .catch((e) => console.warn("[auth] redirect result", e));
+    getRedirectResult(auth).catch((e) => console.warn("[auth] redirect result", e));
+  }, []);
 
+  useEffect(() => {
     let stopProfile = () => {};
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       stopProfile();
@@ -109,30 +110,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(!!user);
       setUser(user);
       setUserProfile(null);
+      setProfileError(null);
       if (user) {
         // Do not wait for a server-acknowledged write during offline startup.
         if (navigator.onLine) void syncUserDoc(user);
         stopProfile = onSnapshot(doc(db, "users", user.uid, "profile", "data"), { includeMetadataChanges: true }, snap => {
+          if (auth.currentUser?.uid !== user.uid) return;
           if (snap.metadata.fromCache && !snap.exists() && navigator.onLine) return;
           setUserProfile(snap.exists() ? snap.data() : null);
+          setProfileError(null);
           setLoading(false);
-        }, () => { setLoading(false); });
+        }, error => {
+          if (auth.currentUser?.uid !== user.uid) return;
+          console.warn("[auth] profile read failed", error.code);
+          setProfileError(error.code === "permission-denied"
+            ? "You're signed in, but access to your profile was denied. Ask the app administrator to check your account and Firebase permissions, then retry."
+            : "You're signed in, but we couldn't load your profile. Check your connection and try again.");
+          setLoading(false);
+        });
       } else {
         setUserProfile(null);
         setLoading(false);
       }
     });
     return () => { unsubscribe(); stopProfile(); };
-  }, []);
+  }, [profileAttempt]);
 
   const signIn = async (email: string, password: string) => {
-    const cred = await signInWithEmailAndPassword(auth, email, password);
-    await syncUserDoc(cred.user);
+    await signInWithEmailAndPassword(auth, email.trim(), password);
   };
 
   const signUp = async (email: string, password: string) => {
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    await syncUserDoc(cred.user);
+    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
     // Kick off email verification so members can confirm their address.
     try {
       await sendEmailVerification(cred.user, { url: appRouteUrl("/dashboard") });
@@ -146,8 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async () => {
     googleProvider.setCustomParameters({ prompt: "select_account" });
     try {
-      const cred = await signInWithPopup(auth, googleProvider);
-      await syncUserDoc(cred.user);
+      await signInWithPopup(auth, googleProvider);
     } catch (e: any) {
       const code = e?.code || "";
       // Popups are commonly blocked inside iframes / strict browsers — fall back to a full redirect.
@@ -222,11 +230,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Onboarding considered complete when profile has a goalType.
-  const needsOnboarding = !!user && (!userProfile || !userProfile.goalType);
+  const needsOnboarding = !!user && !profileError && (!userProfile || !userProfile.goalType);
 
   return (
     <AuthContext.Provider value={{
-      user, loading, userProfile, needsOnboarding,
+      user, loading, userProfile, needsOnboarding, profileError, retryProfile: () => setProfileAttempt(value => value + 1),
       signIn, signUp, signInWithGoogle, logout, refreshProfile,
       sendReset, sendVerification, changePassword, deleteAccount,
     }}>

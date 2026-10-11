@@ -2,6 +2,8 @@ import { test, expect, type Page } from "@playwright/test";
 import { initializeTestEnvironment } from "@firebase/rules-unit-testing";
 import { doc, setDoc, getDoc, deleteField, Timestamp } from "firebase/firestore";
 import type { RulesTestEnvironment } from "@firebase/rules-unit-testing";
+import { readFile } from "node:fs/promises";
+import { computeTargets } from "../../src/lib/nutrition";
 let env: RulesTestEnvironment;
 const identities: Record<string, string> = {};
 const password = "FitxTestOnly123!";
@@ -93,6 +95,76 @@ test.beforeAll(async () => {
   });
 });
 test.afterAll(async () => env?.cleanup());
+
+async function fillOnboardingBasics(page: Page, name = "New Friend") {
+  await page.getByRole("button", { name: "Get Started", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Basic Profile", exact: true })).toBeVisible();
+  await page.getByLabel("Full Name", { exact: true }).fill(name);
+  await page.getByLabel("Date of birth", { exact: true }).fill("2003-09-23");
+  await page.getByRole("button", { name: "Female", exact: true }).click();
+  await page.getByLabel("Height", { exact: true }).fill("169,5");
+  await page.getByLabel("Weight", { exact: true }).fill("72,25");
+  await expect(page.getByRole("button", { name: "Next", exact: true })).toBeEnabled();
+}
+
+async function finishOnboardingSteps(page: Page) {
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Fitness Goal", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /Lose Weight/ }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Weight Goal Pace", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Experience Level", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Beginner", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Dietary Preferences", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Equipment Access", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Full Gym", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Your personalised plan", exact: true })).toBeVisible();
+}
+
+async function passwordLoginToOnboarding(page: Page, email: string) {
+  await page.goto("/auth");
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await expect(page).toHaveURL(/\/onboarding$/);
+}
+
+async function restoreEmulatorGoogleSession(page: Page, email: string) {
+  // Google's popup helper downloads apis.google.com, unavailable in this
+  // isolated runtime. Use the real Auth SDK/emulator to issue a Google session
+  // and restore its normal browser persistence; no production auth is bypassed.
+  const { initializeApp, deleteApp } = await import("firebase/app");
+  const { getAuth, connectAuthEmulator, signInWithCredential, GoogleAuthProvider } = await import("firebase/auth");
+  const config = await readFile("src/lib/firebase.ts", "utf8");
+  const apiKey = config.match(/apiKey: "([^"]+)"/)![1];
+  const app = initializeApp({ apiKey, projectId: "demo-fitx-workspaces" }, `google-onboarding-${Date.now()}`);
+  try {
+    const auth = getAuth(app);
+    connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+    const token = JSON.stringify({ sub: email, email, name: "Google Friend", email_verified: true });
+    const credential = await signInWithCredential(auth, GoogleAuthProvider.credential(token));
+    const user = { ...credential.user.toJSON(), appName: "[DEFAULT]" };
+    await page.evaluate(async ({ apiKey, user }) => {
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open("firebaseLocalStorageDb", 1);
+        request.onupgradeneeded = () => request.result.createObjectStore("firebaseLocalStorage", { keyPath: "fbase_key" });
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction("firebaseLocalStorage", "readwrite");
+          transaction.objectStore("firebaseLocalStorage").put({ fbase_key: `firebase:authUser:${apiKey}:[DEFAULT]`, value: user });
+          transaction.oncomplete = () => { database.close(); resolve(); };
+          transaction.onerror = () => { database.close(); reject(transaction.error); };
+        };
+      });
+    }, { apiKey, user });
+  } finally { await deleteApp(app); }
+  await page.reload();
+}
 test.beforeEach(async () => env.withSecurityRulesDisabled(async ctx => {
   await setDoc(doc(ctx.firestore(), "siteSettings", "branding"), {});
   await setDoc(doc(ctx.firestore(), "siteSettings", "access"), { features: {}, membership: {} });
@@ -898,4 +970,161 @@ test("earlier conversation history stays live and offline drafts survive reconne
   await expect(page.getByRole("heading", { name: "Conversation history", exact: true })).toHaveCount(0);
   await updateDoc(doc(coachDb, "communityGroups", groupId), { status: "active", updatedAt: serverTimestamp() });
   await expect(page.getByRole("button", { name: /Conversation history/ })).toBeVisible();
+});
+
+test("new members complete onboarding with comma decimals and recover answers after reload", async ({ page }) => {
+  test.setTimeout(90000);
+  await page.setViewportSize({ width: 375, height: 812 });
+  const email = "onboarding-friend@fitx.test";
+  await page.goto("/auth?signup=true");
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign Up", exact: true }).click();
+  await expect(page).toHaveURL(/\/onboarding$/);
+  await fillOnboardingBasics(page);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Basic Profile", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("New Friend");
+  await expect(page.getByLabel("Height", { exact: true })).toHaveValue("169,5");
+  await expect(page.getByLabel("Weight", { exact: true })).toHaveValue("72,25");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  let uid = "";
+  const { collection, getDocs } = await import("firebase/firestore");
+  await expect.poll(async () => {
+    await env.withSecurityRulesDisabled(async ctx => {
+      const users = await getDocs(collection(ctx.firestore(), "users"));
+      uid = users.docs.find(row => row.data().email === email)?.id ?? "";
+    });
+    return uid;
+  }).not.toBe("");
+  const admin = await page.context().browser()!.newPage();
+  try {
+    await login(admin, "admin");
+    await admin.goto("/admin/users");
+    await admin.getByPlaceholder("Search name, email or UID…").fill(email);
+    await expect(admin.getByText("Setup incomplete", { exact: true }).first()).toBeVisible();
+    await finishOnboardingSteps(page);
+    await page.getByRole("button", { name: "Enter Dashboard", exact: true }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("New Friend");
+    await expect(admin.getByText("Setup incomplete", { exact: true })).toHaveCount(0);
+    let saved: Record<string, unknown> = {};
+    await env.withSecurityRulesDisabled(async ctx => {
+      saved = (await getDoc(doc(ctx.firestore(), "users", uid, "profile", "data"))).data()!;
+      const root = (await getDoc(doc(ctx.firestore(), "users", uid))).data()!;
+      expect(root.onboardingCompleted).toBe(true);
+      expect(root.name).toBe("New Friend");
+      expect((await getDoc(doc(ctx.firestore(), "users", uid, "xp", "data"))).data()).toEqual({ total: 0, level: 1 });
+      expect((await getDoc(doc(ctx.firestore(), "users", uid, "streaks", "data"))).data()).toEqual({ current: 0, best: 0, lastActiveDate: null });
+    });
+    expect(saved).toMatchObject({ height: "169.5", weight: "72.25", goalType: "lose", experienceLevel: "Beginner", ...computeTargets({ gender: "Female", dob: "2003-09-23", height: 169.5, weight: 72.25, daysPerWeek: 3, weeklyPace: 0 }) });
+    expect(await page.evaluate(uid => sessionStorage.getItem(`fitx:onboarding:${uid}`), uid)).toBeNull();
+    await page.getByRole("button", { name: "More member features", exact: true }).click();
+    await page.getByRole("button", { name: "Log out", exact: true }).click();
+    await expect(page).toHaveURL(/\/(?:auth)?$/);
+    await page.goto("/auth");
+    await page.getByLabel("Email", { exact: true }).fill(email);
+    await page.getByLabel("Password", { exact: true }).fill(password);
+    await page.getByRole("button", { name: "Sign In", exact: true }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("New Friend");
+  } finally { await admin.close(); }
+});
+
+test("onboarding save denial is retryable and preserves existing progress and join date", async ({ page }) => {
+  test.setTimeout(90000);
+  const email = "onboarding-retry@fitx.test";
+  const account = await (await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, returnSecureToken: true }),
+  })).json();
+  const uid = account.localId;
+  expect(uid).toBeTruthy();
+  const joined = Timestamp.fromDate(new Date("2026-08-01T12:00:00Z"));
+  await env.withSecurityRulesDisabled(async ctx => {
+    await setDoc(doc(ctx.firestore(), "users", uid), { uid, email, createdAt: joined, onboardingCompleted: false });
+    await setDoc(doc(ctx.firestore(), "users", uid, "xp", "data"), { total: 420, level: 3 });
+    await setDoc(doc(ctx.firestore(), "users", uid, "streaks", "data"), { current: 6, best: 9, lastActiveDate: "2026-10-10" });
+  });
+  await passwordLoginToOnboarding(page, email);
+  await fillOnboardingBasics(page, "Retry Friend");
+  await page.getByRole("button", { name: /^Height unit: cm/ }).click();
+  await expect(page.getByLabel("Height", { exact: true })).toHaveValue("5.56");
+  await page.getByRole("button", { name: /^Height unit: ft/ }).click();
+  await expect(page.getByLabel("Height", { exact: true })).toHaveValue("169.47");
+  await finishOnboardingSteps(page);
+  await env.withSecurityRulesDisabled(async ctx => { await setDoc(doc(ctx.firestore(), "users", uid), { suspended: true }, { merge: true }); });
+  await page.getByRole("button", { name: "Enter Dashboard", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("access was denied");
+  await expect(page).toHaveURL(/\/onboarding$/);
+  await env.withSecurityRulesDisabled(async ctx => {
+    expect((await getDoc(doc(ctx.firestore(), "users", uid, "profile", "data"))).data()?.goalType).toBeUndefined();
+    expect((await getDoc(doc(ctx.firestore(), "users", uid))).data()?.onboardingCompleted).toBe(false);
+  });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Your personalised plan", exact: true })).toBeVisible();
+  await env.withSecurityRulesDisabled(async ctx => { await setDoc(doc(ctx.firestore(), "users", uid), { suspended: false }, { merge: true }); });
+  await page.getByRole("button", { name: "Enter Dashboard", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await env.withSecurityRulesDisabled(async ctx => {
+    expect((await getDoc(doc(ctx.firestore(), "users", uid, "xp", "data"))).data()).toEqual({ total: 420, level: 3 });
+    expect((await getDoc(doc(ctx.firestore(), "users", uid, "streaks", "data"))).data()).toEqual({ current: 6, best: 9, lastActiveDate: "2026-10-10" });
+    const root = (await getDoc(doc(ctx.firestore(), "users", uid))).data()!;
+    expect(root.createdAt.toMillis()).toBe(joined.toMillis());
+    expect(root.onboardingCompleted).toBe(true);
+    expect((await getDoc(doc(ctx.firestore(), "users", uid, "profile", "data"))).data()!.createdAt.toMillis()).toBe(joined.toMillis());
+  });
+});
+
+test("Google members complete onboarding and get correct guidance for password sign-in", async ({ page }) => {
+  test.setTimeout(90000);
+  const email = "google-onboarding@fitx.test";
+  await page.goto("/auth");
+  await restoreEmulatorGoogleSession(page, email);
+  await expect(page).toHaveURL(/\/onboarding$/);
+  await page.getByRole("button", { name: "Get Started", exact: true }).click();
+  await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Google Friend");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await fillOnboardingBasics(page, "Google Friend");
+  await finishOnboardingSteps(page);
+  await page.getByRole("button", { name: "Enter Dashboard", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Google Friend");
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(page).toHaveURL(/\/(?:auth)?$/);
+  await page.goto("/auth");
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("use Continue with Google");
+  await expect(page.getByRole("alert")).not.toContainText("Firebase:");
+  await restoreEmulatorGoogleSession(page, email);
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Google Friend");
+});
+
+test("a denied profile read shows recovery instead of restarting onboarding", async ({ page }) => {
+  test.setTimeout(90000);
+  const rules = await readFile("firestore.rules", "utf8");
+  const denied = rules.replace("allow read: if owner(uid) || fullAdmin();", "allow read: if false;");
+  expect(denied).not.toBe(rules);
+  let temporary: RulesTestEnvironment | undefined;
+  let restored: RulesTestEnvironment | undefined;
+  try {
+    temporary = await initializeTestEnvironment({ projectId: "demo-fitx-workspaces", firestore: { host: "127.0.0.1", port: 8085, rules: denied } });
+    await page.goto("/auth");
+    await page.getByLabel("Email", { exact: true }).fill("member@fitx.test");
+    await page.getByLabel("Password", { exact: true }).fill(password);
+    await page.getByRole("button", { name: "Sign In", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Let's reconnect your profile", exact: true })).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText("access to your profile was denied");
+    await expect(page.getByRole("heading", { name: "Basic Profile", exact: true })).toHaveCount(0);
+    restored = await initializeTestEnvironment({ projectId: "demo-fitx-workspaces", firestore: { host: "127.0.0.1", port: 8085, rules } });
+    await page.getByRole("button", { name: "Try again", exact: true }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Alex Member");
+  } finally {
+    if (!restored) restored = await initializeTestEnvironment({ projectId: "demo-fitx-workspaces", firestore: { host: "127.0.0.1", port: 8085, rules } });
+    await restored?.cleanup();
+    await temporary?.cleanup();
+  }
 });

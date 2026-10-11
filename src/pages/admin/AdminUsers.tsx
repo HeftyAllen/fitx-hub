@@ -45,6 +45,7 @@ interface UserRow {
   suspended?: boolean;
   photoURL?: string;
   memberCode?: string;
+  onboardingCompleted?: boolean;
   role?: string; // from admins/{uid}
 }
 
@@ -177,6 +178,7 @@ export default function AdminUsers() {
             suspended: !!data.suspended,
             photoURL: data.photoURL,
             memberCode: data.memberCode,
+            onboardingCompleted: typeof data.onboardingCompleted === "boolean" ? data.onboardingCompleted : undefined,
           };
         });
         out.sort((a, b) => {
@@ -492,6 +494,7 @@ export default function AdminUsers() {
                           <div className="truncate font-semibold">{r.name || r.email?.split("@")[0] || r.uid.slice(0, 8)}</div>
                           <div className="truncate text-xs text-muted-foreground">{r.email ?? r.uid}</div>
                           <div className="mt-0.5 font-mono text-[10px] text-muted-foreground/70">{r.memberCode ?? r.uid.slice(0, 10)}</div>
+                          {r.onboardingCompleted === false && !r.role && <Badge variant="outline" className="mt-1 text-amber-600">Setup incomplete</Badge>}
                         </div>
                       </div>
                     </td>
@@ -561,6 +564,7 @@ export default function AdminUsers() {
                   <div className="truncate text-xs text-muted-foreground">{r.email ?? r.uid}</div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <RoleChip role={r.role} />
+                    {r.onboardingCompleted === false && !r.role && <Badge variant="outline" className="text-amber-600">Setup incomplete</Badge>}
                     {r.suspended
                       ? <Badge variant="destructive" className="gap-1"><Ban size={10} /> Suspended</Badge>
                       : <Badge className="gap-1 border border-success/25 bg-success/15 text-success">Active</Badge>}
@@ -634,6 +638,7 @@ export default function AdminUsers() {
                 ["Email", profileFor?.email ?? "—"],
                 ["Access", profileFor?.role ? (ROLE_META[profileFor.role as AdminRole]?.label ?? profileFor.role) : "Member"],
                 ["Status", profileFor?.suspended ? "Suspended" : "Active"],
+                ["Setup", profileFor?.onboardingCompleted === true ? "Completed" : profileFor?.onboardingCompleted === false ? "Incomplete" : "Not recorded"],
                 ["Joined", fmtDate(profileFor?.createdAt)],
                 ["Last seen", fmtRelative(profileFor?.lastLoginAt)],
                 ["Goal", profileData?.goal ?? profileData?.goalType ?? "—"],

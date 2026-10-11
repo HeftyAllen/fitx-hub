@@ -1,13 +1,13 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { doc, setDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBrand } from "@/contexts/SiteSettingsContext";
 import logo from "@/assets/logo.png";
 import { ChevronRight, ChevronLeft, Check, Flame, Beef, Wheat, Droplets } from "lucide-react";
-import { computeTargets, PACE_OPTIONS, type WeeklyPace, type NutritionPreference } from "@/lib/nutrition";
+import { computeTargets, PACE_OPTIONS } from "@/lib/nutrition";
+import { basicProfileErrors, firstIncompleteStep, onboardingDraftKey, onboardingSaveError, parseMeasurement, readOnboardingDraft, type OnboardingProfile } from "@/lib/onboarding";
+import { saveOnboardingProfile } from "@/lib/onboarding-save";
 
 const GOALS = [
   { id: "muscle", label: "Build Muscle", icon: "🏋️", kind: "gain" as const },
@@ -18,7 +18,7 @@ const GOALS = [
   { id: "general", label: "General Fitness", icon: "💪", kind: "maintain" as const },
 ];
 
-const NUTRITION_PREFS: { id: NutritionPreference; label: string; sub: string }[] = [
+const NUTRITION_PREFS: { id: OnboardingProfile["nutritionPreference"]; label: string; sub: string }[] = [
   { id: "balanced",     label: "Balanced",      sub: "30P / 40C / 30F" },
   { id: "high-protein", label: "High Protein",  sub: "40P / 35C / 25F" },
   { id: "low-carb",     label: "Low Carb",      sub: "35P / 20C / 45F" },
@@ -30,24 +30,36 @@ const DIETS = ["None", "Vegetarian", "Vegan", "Keto", "Paleo", "Gluten-Free", "D
 const EQUIPMENT = ["Full Gym", "Home Gym", "Dumbbells Only", "Resistance Bands", "Bodyweight Only", "Outdoor"];
 
 export default function Onboarding() {
-  const [step, setStep] = useState(0);
-  const [profile, setProfile] = useState({
-    name: "", dob: "", gender: "", height: "", weight: "",
-    heightUnit: "cm" as "cm" | "ft", weightUnit: "kg" as "kg" | "lbs",
-    goalType: "",
-    weeklyPace: 0 as WeeklyPace,
-    nutritionPreference: "balanced" as NutritionPreference,
-    experienceLevel: "", daysPerWeek: 3, workoutDuration: 30,
-    dietaryPrefs: [] as string[], equipmentAccess: [] as string[],
-  });
-  const { user, refreshProfile } = useAuth();
+  const { user, userProfile, refreshProfile } = useAuth();
+  const [draft] = useState(() => readOnboardingDraft(user!.uid, userProfile?.name || user?.displayName || ""));
+  const [step, setStep] = useState(draft.step);
+  const [profile, setProfile] = useState(draft.profile);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const finishing = useRef(false);
   const brand = useBrand(logo);
   const navigate = useNavigate();
   const totalSteps = 8;
 
-  const update = (field: string, value: any) => setProfile((p) => ({ ...p, [field]: value }));
-  const toggleArray = (field: string, val: string) => {
-    const arr = (profile as any)[field] as string[];
+  useEffect(() => {
+    if (!user) return;
+    try { sessionStorage.setItem(onboardingDraftKey(user.uid), JSON.stringify({ version: 1, step, profile })); } catch { /* Storage may be blocked; keep the current form usable. */ }
+  }, [user, step, profile]);
+
+  const update = <K extends keyof OnboardingProfile>(field: K, value: OnboardingProfile[K]) => { setSaveError(""); setProfile((p) => ({ ...p, [field]: value })); };
+  const switchUnit = (field: "height" | "weight") => {
+    setProfile(p => {
+      const value = parseMeasurement(p[field]);
+      if (field === "height") {
+        const heightUnit = p.heightUnit === "cm" ? "ft" : "cm";
+        return { ...p, heightUnit, height: value === null ? p.height : String(Math.round(value * (heightUnit === "ft" ? 1 / 30.48 : 30.48) * 100) / 100) };
+      }
+      const weightUnit = p.weightUnit === "kg" ? "lbs" : "kg";
+      return { ...p, weightUnit, weight: value === null ? p.weight : String(Math.round(value * (weightUnit === "lbs" ? 1 / 0.453592 : 0.453592) * 100) / 100) };
+    });
+  };
+  const toggleArray = (field: "dietaryPrefs" | "equipmentAccess", val: string) => {
+    const arr = profile[field];
     update(field, arr.includes(val) ? arr.filter((v: string) => v !== val) : [...arr, val]);
   };
 
@@ -59,40 +71,37 @@ export default function Onboarding() {
     d.setFullYear(d.getFullYear() - 16);
     return d.toISOString().split("T")[0];
   }, []);
-  const age = useMemo(() => {
-    if (!profile.dob) return null;
-    const b = new Date(profile.dob);
-    if (isNaN(b.getTime())) return null;
-    const now = new Date();
-    let a = now.getFullYear() - b.getFullYear();
-    const m = now.getMonth() - b.getMonth();
-    if (m < 0 || (m === 0 && now.getDate() < b.getDate())) a--;
-    return a;
-  }, [profile.dob]);
-  const ageValid = age === null ? false : age >= 16;
+  const basicErrors = useMemo(() => basicProfileErrors(profile), [profile]);
 
   const canNext = () => {
-    if (step === 1) return !!(profile.name && profile.dob && profile.gender && profile.height && profile.weight) && ageValid;
+    if (step === 1) return Object.keys(basicErrors).length === 0;
     if (step === 2) return !!profile.goalType;
     if (step === 4) return !!profile.experienceLevel;
     return true;
   };
 
-  const targets = useMemo(() => computeTargets(profile as any), [profile]);
+  const targets = useMemo(() => computeTargets({ ...profile, height: parseMeasurement(profile.height) ?? undefined, weight: parseMeasurement(profile.weight) ?? undefined }), [profile]);
 
   const handleFinish = async () => {
-    if (!user) return;
-    await setDoc(doc(db, "users", user.uid, "profile", "data"), {
-      ...profile,
-      ...targets,
-      createdAt: new Date().toISOString(),
-    }, { merge: true });
-    await setDoc(doc(db, "users", user.uid, "streaks", "data"), {
-      current: 0, best: 0, lastActiveDate: null,
-    });
-    await setDoc(doc(db, "users", user.uid, "xp", "data"), { total: 0, level: 1 });
-    await refreshProfile();
-    navigate("/dashboard", { replace: true });
+    if (finishing.current) return;
+    if (!user) { setSaveError("Sign in again with the same account to continue setup."); return; }
+    const incomplete = firstIncompleteStep(profile);
+    if (incomplete !== null) { setStep(incomplete); setSaveError("Complete your profile, goal and experience before finishing setup."); return; }
+    if (!navigator.onLine) { setSaveError("You're offline. Reconnect and try again. Your answers are still here."); return; }
+    finishing.current = true;
+    setSaving(true);
+    setSaveError("");
+    try {
+      await saveOnboardingProfile(user, profile);
+      await refreshProfile();
+      try { sessionStorage.removeItem(onboardingDraftKey(user.uid)); } catch { /* Optional local draft. */ }
+      navigate("/dashboard", { replace: true });
+    } catch (error) {
+      setSaveError(onboardingSaveError(error));
+    } finally {
+      finishing.current = false;
+      setSaving(false);
+    }
   };
 
   const slideVariants = {
@@ -112,7 +121,7 @@ export default function Onboarding() {
           />
         </div>
 
-        <div className="glass-card p-8">
+        <div className="glass-card min-w-0 p-5 sm:p-8">
           <AnimatePresence mode="wait">
             <motion.div key={step} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.25 }}>
               {step === 0 && (
@@ -126,29 +135,33 @@ export default function Onboarding() {
               {step === 1 && (
                 <div className="space-y-4">
                   <h2 className="text-xl font-heading font-bold">Basic Profile</h2>
-                  <input placeholder="Full Name" value={profile.name} onChange={(e) => update("name", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <input aria-label="Full Name" autoComplete="name" maxLength={100} placeholder="Full Name" value={profile.name} onChange={(e) => update("name", e.target.value)} className="w-full min-w-0 px-4 py-3 rounded-xl bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
                   <div>
                     <label className="text-xs text-muted-foreground ml-1">Date of birth (16+)</label>
-                    <input type="date" max={maxDob} value={profile.dob} onChange={(e) => update("dob", e.target.value)} className="w-full mt-1 px-4 py-3 rounded-xl bg-secondary border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
-                    {profile.dob && !ageValid && (
-                      <p className="text-xs text-destructive mt-1 ml-1">You must be at least 16 years old to use {brand.name}.</p>
+                    <input aria-label="Date of birth" type="date" max={maxDob} value={profile.dob} onChange={(e) => update("dob", e.target.value)} className="w-full min-w-0 mt-1 px-4 py-3 rounded-xl bg-secondary border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
+                    {profile.dob && basicErrors.dob && (
+                      <p className="text-xs text-destructive mt-1 ml-1">{basicErrors.dob}</p>
                     )}
                   </div>
                   <div className="flex gap-2">
                     {["Male", "Female", "Other"].map((g) => (
-                      <button key={g} onClick={() => update("gender", g)} className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all ${profile.gender === g ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>{g}</button>
+                      <button key={g} aria-pressed={profile.gender === g} onClick={() => update("gender", g)} className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all ${profile.gender === g ? "gradient-bg text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>{g}</button>
                     ))}
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="relative">
-                      <input placeholder="Height" type="number" value={profile.height} onChange={(e) => update("height", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary pr-12" />
-                      <button onClick={() => update("heightUnit", profile.heightUnit === "cm" ? "ft" : "cm")} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary font-medium">{profile.heightUnit}</button>
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+                    <div className="relative min-w-0">
+                      <input aria-label="Height" inputMode="decimal" placeholder="Height" type="text" value={profile.height} onChange={(e) => update("height", e.target.value)} className="w-full min-w-0 px-4 py-3 rounded-xl bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary pr-12" />
+                      <button aria-label={`Height unit: ${profile.heightUnit}. Switch to ${profile.heightUnit === "cm" ? "feet" : "centimetres"}`} onClick={() => switchUnit("height")} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary font-medium">{profile.heightUnit}</button>
                     </div>
-                    <div className="relative">
-                      <input placeholder="Weight" type="number" value={profile.weight} onChange={(e) => update("weight", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary pr-12" />
-                      <button onClick={() => update("weightUnit", profile.weightUnit === "kg" ? "lbs" : "kg")} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary font-medium">{profile.weightUnit}</button>
+                    <div className="relative min-w-0">
+                      <input aria-label="Weight" inputMode="decimal" placeholder="Weight" type="text" value={profile.weight} onChange={(e) => update("weight", e.target.value)} className="w-full min-w-0 px-4 py-3 rounded-xl bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary pr-12" />
+                      <button aria-label={`Weight unit: ${profile.weightUnit}. Switch to ${profile.weightUnit === "kg" ? "pounds" : "kilograms"}`} onClick={() => switchUnit("weight")} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary font-medium">{profile.weightUnit}</button>
                     </div>
                   </div>
+                  <p className="text-xs text-muted-foreground">Height in {profile.heightUnit}; weight in {profile.weightUnit}. Use a dot or comma for decimals.</p>
+                  {profile.height && basicErrors.height && <p role="alert" className="text-xs text-destructive">{basicErrors.height}</p>}
+                  {profile.weight && basicErrors.weight && <p role="alert" className="text-xs text-destructive">{basicErrors.weight}</p>}
+                  {Object.keys(basicErrors).length > 0 && <p role="status" className="text-xs text-muted-foreground">Add a valid name, date of birth, gender, height and weight to continue.</p>}
                 </div>
               )}
 
@@ -291,9 +304,11 @@ export default function Onboarding() {
             </motion.div>
           </AnimatePresence>
 
+          {saveError && <p role="alert" className="mt-5 text-sm text-destructive break-words">{saveError}</p>}
+
           <div className="flex justify-between mt-8">
             {step > 0 ? (
-              <button onClick={() => setStep(step - 1)} className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <button disabled={saving} onClick={() => setStep(step - 1)} className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
                 <ChevronLeft size={16} /> Back
               </button>
             ) : <div />}
@@ -302,8 +317,8 @@ export default function Onboarding() {
                 {step === 0 ? "Get Started" : "Next"} <ChevronRight size={16} />
               </button>
             ) : (
-              <button onClick={handleFinish} className="px-6 py-2 rounded-xl gradient-bg text-primary-foreground text-sm font-medium hover:scale-[0.98] active:scale-[0.96] transition-transform glow-pulse">
-                Enter Dashboard
+              <button disabled={saving} aria-busy={saving} onClick={handleFinish} className="px-6 py-2 rounded-xl gradient-bg text-primary-foreground text-sm font-medium hover:scale-[0.98] active:scale-[0.96] transition-transform glow-pulse disabled:opacity-50">
+                {saving ? "Saving your profile..." : "Enter Dashboard"}
               </button>
             )}
           </div>

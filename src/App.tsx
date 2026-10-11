@@ -53,6 +53,7 @@ const AdminCoaching = lazy(() => import("./pages/admin/AdminCoaching"));
 const MyCoach = lazy(() => import("./pages/MyCoach"));
 const Community = lazy(() => import("./pages/Community"));
 import { OfflineProvider } from "@/contexts/OfflineContext";
+import ProfileRecovery from "@/components/auth/ProfileRecovery";
 
 const queryClient = new QueryClient();
 
@@ -69,10 +70,11 @@ function ProtectedRoute({
   children: React.ReactNode;
   allowOnboarding?: boolean;
 }) {
-  const { user, loading, needsOnboarding } = useAuth();
+  const { user, loading, needsOnboarding, profileError } = useAuth();
   const { pathname } = useLocation();
   if (loading) return <Spinner />;
   if (!user) return <Navigate to="/" replace />;
+  if (profileError) return <ProfileRecovery />;
   if (needsOnboarding && !allowOnboarding)
     return <Navigate to="/onboarding" replace />;
   const feature = featureForPath(pathname);
@@ -88,17 +90,19 @@ function DashboardGate() {
 }
 
 function RootRedirect() {
-  const { user, loading, needsOnboarding } = useAuth();
+  const { user, loading, needsOnboarding, profileError } = useAuth();
   if (loading) return <Spinner />;
   if (!user) return <Landing />;
+  if (profileError) return <ProfileRecovery />;
   if (needsOnboarding) return <Navigate to="/onboarding" replace />;
   return <Navigate to="/dashboard" replace />;
 }
 
 function AuthRedirect() {
-  const { user, loading, needsOnboarding } = useAuth();
+  const { user, loading, needsOnboarding, profileError } = useAuth();
   if (loading) return <Spinner />;
   if (!user) return <Auth />;
+  if (profileError) return <ProfileRecovery />;
   return (
     <Navigate to={needsOnboarding ? "/onboarding" : "/dashboard"} replace />
   );
