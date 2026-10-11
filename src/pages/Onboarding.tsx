@@ -30,11 +30,12 @@ const DIETS = ["None", "Vegetarian", "Vegan", "Keto", "Paleo", "Gluten-Free", "D
 const EQUIPMENT = ["Full Gym", "Home Gym", "Dumbbells Only", "Resistance Bands", "Bodyweight Only", "Outdoor"];
 
 export default function Onboarding() {
-  const { user, userProfile, refreshProfile } = useAuth();
+  const { user, userProfile, refreshProfile, logout } = useAuth();
   const [draft] = useState(() => readOnboardingDraft(user!.uid, userProfile?.name || user?.displayName || ""));
   const [step, setStep] = useState(draft.step);
   const [profile, setProfile] = useState(draft.profile);
   const [saving, setSaving] = useState(false);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
   const [saveError, setSaveError] = useState("");
   const finishing = useRef(false);
   const brand = useBrand(logo);
@@ -83,7 +84,7 @@ export default function Onboarding() {
   const targets = useMemo(() => computeTargets({ ...profile, height: parseMeasurement(profile.height) ?? undefined, weight: parseMeasurement(profile.weight) ?? undefined }), [profile]);
 
   const handleFinish = async () => {
-    if (finishing.current) return;
+    if (finishing.current || switchingAccount) return;
     if (!user) { setSaveError("Sign in again with the same account to continue setup."); return; }
     const incomplete = firstIncompleteStep(profile);
     if (incomplete !== null) { setStep(incomplete); setSaveError("Complete your profile, goal and experience before finishing setup."); return; }
@@ -108,6 +109,15 @@ export default function Onboarding() {
     enter: { x: 50, opacity: 0 },
     center: { x: 0, opacity: 1 },
     exit: { x: -50, opacity: 0 },
+  };
+
+  const switchAccount = async () => {
+    if (saving || switchingAccount) return;
+    setSwitchingAccount(true);
+    setSaveError("");
+    try { await logout(); }
+    catch { setSaveError("We couldn't sign you out. Check your connection and try again."); }
+    finally { setSwitchingAccount(false); }
   };
 
   return (
@@ -308,19 +318,23 @@ export default function Onboarding() {
 
           <div className="flex justify-between mt-8">
             {step > 0 ? (
-              <button disabled={saving} onClick={() => setStep(step - 1)} className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
+              <button disabled={saving || switchingAccount} onClick={() => setStep(step - 1)} className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
                 <ChevronLeft size={16} /> Back
               </button>
             ) : <div />}
             {step < totalSteps - 1 ? (
-              <button onClick={() => setStep(step + 1)} disabled={!canNext()} className="flex items-center gap-1 px-6 py-2 rounded-xl gradient-bg text-primary-foreground text-sm font-medium hover:scale-[0.98] active:scale-[0.96] transition-transform disabled:opacity-50">
+              <button onClick={() => setStep(step + 1)} disabled={switchingAccount || !canNext()} className="flex items-center gap-1 px-6 py-2 rounded-xl gradient-bg text-primary-foreground text-sm font-medium hover:scale-[0.98] active:scale-[0.96] transition-transform disabled:opacity-50">
                 {step === 0 ? "Get Started" : "Next"} <ChevronRight size={16} />
               </button>
             ) : (
-              <button disabled={saving} aria-busy={saving} onClick={handleFinish} className="px-6 py-2 rounded-xl gradient-bg text-primary-foreground text-sm font-medium hover:scale-[0.98] active:scale-[0.96] transition-transform glow-pulse disabled:opacity-50">
+              <button disabled={saving || switchingAccount} aria-busy={saving} onClick={handleFinish} className="px-6 py-2 rounded-xl gradient-bg text-primary-foreground text-sm font-medium hover:scale-[0.98] active:scale-[0.96] transition-transform glow-pulse disabled:opacity-50">
                 {saving ? "Saving your profile..." : "Enter Dashboard"}
               </button>
             )}
+          </div>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 text-xs text-muted-foreground">
+            <p className="min-w-0 break-all">Signed in as {user?.email || "your account"}</p>
+            <button disabled={saving || switchingAccount} onClick={switchAccount} className="shrink-0 font-medium text-primary hover:underline disabled:opacity-50">{switchingAccount ? "Signing out..." : "Switch account"}</button>
           </div>
         </div>
       </div>

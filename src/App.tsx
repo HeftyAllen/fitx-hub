@@ -108,6 +108,11 @@ function AuthRedirect() {
   );
 }
 
+function OnboardingSession() {
+  const { user } = useAuth();
+  return <Onboarding key={user?.uid} />;
+}
+
 function AppRoutes() {
   return (
     <AnimatePresence mode="wait">
@@ -118,7 +123,7 @@ function AppRoutes() {
           path="/onboarding"
           element={
             <ProtectedRoute allowOnboarding>
-              <Onboarding />
+              <OnboardingSession />
             </ProtectedRoute>
           }
         />

@@ -988,6 +988,11 @@ test("new members complete onboarding with comma decimals and recover answers af
   await expect(page.getByLabel("Height", { exact: true })).toHaveValue("169,5");
   await expect(page.getByLabel("Weight", { exact: true })).toHaveValue("72,25");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "Switch account", exact: true }).click();
+  await expect(page).toHaveURL(/\/(?:auth)?$/);
+  await passwordLoginToOnboarding(page, email);
+  await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("New Friend");
+  await expect(page.getByLabel("Height", { exact: true })).toHaveValue("169,5");
   let uid = "";
   const { collection, getDocs } = await import("firebase/firestore");
   await expect.poll(async () => {
